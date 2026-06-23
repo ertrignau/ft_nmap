@@ -6,13 +6,7 @@
 /*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:54 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/11 14:47:32 by ertrigna         ###   ########.fr       */
+/*   Updated: 2026/06/10 15:59:55 by ertrigna         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "../inc/nmap.h"
-
-int	main(int ac, char *av[])
-{
-	
-}
