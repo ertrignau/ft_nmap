@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   nmap.h                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:45:51 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/23 16:58:39 by ertrigna         ###   ########.fr       */
+/*   Updated: 2026/06/24 17:02:09 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -101,6 +101,11 @@ int		create_raw_socket(int protocol);
 int		init_socket(t_scan *scan);
 void	close_socket(t_scan *scan);
 
+/*RESOLVE DNS*/
+int		resolve_host(t_target *target);
+
+/*PACKET*/
+void	build_tcp_packet(struct tcphdr *tcp, uint16_t src_port, uint16_t dst_port, t_scan_type type);
 /*SCANNER*/
 
 #endif

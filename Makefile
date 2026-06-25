@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+         #
+#    By: eric <eric@student.42.fr>                  +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/06/23 16:00:00 by ertrigna          #+#    #+#              #
-#    Updated: 2026/06/23 17:06:24 by ertrigna         ###   ########.fr        #
+#    Updated: 2026/06/24 16:47:29 by eric             ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -29,6 +29,7 @@ SRCS		:= init.c \
 			   scan_udp.c \
 			   socket.c \
 			   threads.c \
+			   resolve.c \
 			   utils.c
 
 OBJS		:= $(addprefix $(OBJ_DIR)/, $(SRCS:.c=.o))

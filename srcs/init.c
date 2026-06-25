@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   init.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/23 15:49:41 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/23 16:48:28 by ertrigna         ###   ########.fr       */
+/*   Updated: 2026/06/24 16:40:39 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,6 +26,7 @@ void	init_target(t_target *target)
 	if (!target)
 		return;
 	memset(target, 0, sizeof(t_target));
+	target->hostname = NULL;
 	target->addr.sin_family = AF_INET;
 }
 

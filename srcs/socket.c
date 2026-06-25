@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   socket.c                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:39 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/23 17:00:04 by ertrigna         ###   ########.fr       */
+/*   Updated: 2026/06/24 12:03:15 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,7 @@ int	create_raw_socket(int protocol)
 	sock = socket(AF_INET, SOCK_RAW, protocol);
 	if (sock < 0)
 	{
-		fprintf("You must have sudo permission\n");
+		fprintf(stderr, "You must have sudo permission\n");
 		exit (1);
 	}
 	if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP)
@@ -36,14 +36,14 @@ int	create_raw_socket(int protocol)
 
 int	init_socket(t_scan *scan)
 {
-	scan->socket.tcp = create_raw_socket(IPPROTO_TCP)
+	scan->socket.tcp = create_raw_socket(IPPROTO_TCP);
 	if (scan->socket.tcp < 0)
 		return (-1);
-	scan->socket.udp = create_raw_socket(IPPROTO_UDP)
-	if (scan->socket.upd < 0)
+	scan->socket.udp = create_raw_socket(IPPROTO_UDP);
+	if (scan->socket.udp < 0)
 		return (-1);
-	scan->socket.icmp = create_raw_socket(IPPROTO_ICMP)
-	if (scam->socket.icmp < 0)
+	scan->socket.icmp = create_raw_socket(IPPROTO_ICMP);
+	if (scan->socket.icmp < 0)
 		return (-1);
 	return (0);
 }

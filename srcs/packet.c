@@ -3,10 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   packet.c                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:49 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/10 15:59:50 by ertrigna         ###   ########.fr       */
+/*   Updated: 2026/06/24 17:01:53 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
+#include "nmap.h"
+
+void	build_tcp_packet(struct tcphdr *tcp, uint16_t src_port, uint16_t dst_port, t_scan_type type);
+{
+	
+}
