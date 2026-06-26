@@ -10,41 +10,88 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "nmap.h"
+#include "ft_nmap.h"
+#include "debug/debug.h"
 
-// static void	print_usage()
-// {
-// 	printf("./ft_nmap: [Options]\n");
-// 	printf("-help Print this help screen\n");
-// 	printf("--ports ports to scan (eg: 1-10 or 1,2,3 or 1,5-15)\n");
-// 	printf("-ip ip addresses to scan in dot format\n");
-// 	printf("--file File name containing IP addresses to scan,\n");
-// 	printf("--speedup [250 max] number of parallel threads to use\n")
-// 	printf("--scan SYN/NULL/FIN/XMAS/ACK/UDP\n")
-// }
+#include <string.h>
 
-int	main(int ac, char **av)
+int	main(void)
 {
-	t_scan	scan;
+	t_nmap_config	config;
+	int				exit_status;
 
-	if (ac != 2)
-		return (printf("Usage: %s <host>\n", av[0]), 1);
+	exit_status = 0;
+	memset(&config, 0, sizeof(config));
 
-	init_scan(&scan);
-	scan.target.hostname = strdup(av[1]);
-	if (!scan.target.hostname)
+	//preparation du handler de signal
+	if (!nmap_signal_setup(&exit_status))
+		return (exit_status);
+
+	//parsing des arguments
+	//TODO : UNCOMMENT : quand le parsing sera prêt
+	// if (!nmap_parse_cli(&config, &exit_status))
+	// 	return (exit_status);
+	// DEBUG_PARSING(&config);
+
+	//preparation de la cible
+	//TODO : UNCOMMENT : quand le resolve sera prêt
+	// if (!nmap_prepare_target(&config, &exit_status))
+	// 	return (exit_status);
+	// DEBUG_TARGET(&config);
+
+	//preparation de l'interface et de l'IP source
+	//TODO : UNCOMMENT : quand la detection de route sera prête
+	// if (!nmap_prepare_route(&config, &exit_status))
+	// 	return (exit_status);
+	// DEBUG_ROUTE(&config);
+
+	//TODO : DELETE : bypass temporaire du parsing + resolve + route
+	if (!nmap_load_hardcoded_dev_config(&config))
 		return (1);
+	DEBUG_DEV_CONFIG(&config);
 
-	if (resolve_host(&scan.target) < 0)
+	//ouverture de la raw socket d'envoi
+	if (!nmap_prepare_send_socket(&config, &exit_status))
+		goto cleanup;
+	DEBUG_SOCKET(&config);
+
+	//mise en place de pcap AVANT le premier send
+	if (!nmap_prepare_pcap(&config, &exit_status))
+		goto cleanup;
+	DEBUG_PCAP(&config);
+
+	//initialisation des structures runtime
+	if (!nmap_prepare_runtime(&config, &exit_status))
+		goto cleanup;
+	DEBUG_RUNTIME(&config);
+
+	//boucle principale
+	while (!nmap_signal_stop_requested()
+		&& !nmap_runtime_is_finished(&config))
 	{
-		printf("resolve_host failed\n");
-		free(scan.target.hostname);
-		return (1);
+		//lire les reponses deja disponibles via pcap
+		if (!nmap_runtime_drain_replies(&config, &exit_status))
+			break;
+
+		//marquer les probes expirees
+		nmap_runtime_expire_probes(&config);
+
+		//envoyer les probes autorisees par le scheduler
+		if (!nmap_runtime_send_ready(&config, &exit_status))
+			break;
+
+		//attendre le prochain evenement utile
+		if (!nmap_runtime_wait(&config, &exit_status))
+			break;
 	}
 
-	printf("hostname : %s\n", scan.target.hostname);
-	printf("ip       : %s\n", scan.target.ip);
+	if (nmap_signal_stop_requested())
+		exit_status = 130;
 
-	free(scan.target.hostname);
-	return (0);
+	nmap_print_report(&config);
+
+cleanup:
+	//free toutes les ressources et close les sockets / pcap
+	nmap_cleanup_config(&config);
+	return (exit_status);
 }

@@ -10,50 +10,41 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "nmap.h"
+#include "config.h"
 
-int	create_raw_socket(int protocol)
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+int	nmap_prepare_send_socket(t_nmap_config *config, int *exit_status)
 {
-	int	sock;
 	int	on;
 
-	sock = socket(AF_INET, SOCK_RAW, protocol);
-	if (sock < 0)
+	if (!config)
 	{
-		fprintf(stderr, "You must have sudo permission\n");
-		exit (1);
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
 	}
-	if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP)
+	config->socket.send_fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+	if (config->socket.send_fd < 0)
 	{
-		if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on)) < 0)
-		{
-			close(sock);
-			return (-1);
-		}
+		perror("ft_nmap: socket");
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
 	}
-	return (sock);	
-}
-
-int	init_socket(t_scan *scan)
-{
-	scan->socket.tcp = create_raw_socket(IPPROTO_TCP);
-	if (scan->socket.tcp < 0)
-		return (-1);
-	scan->socket.udp = create_raw_socket(IPPROTO_UDP);
-	if (scan->socket.udp < 0)
-		return (-1);
-	scan->socket.icmp = create_raw_socket(IPPROTO_ICMP);
-	if (scan->socket.icmp < 0)
-		return (-1);
-	return (0);
-}
-
-void	close_socket(t_scan *scan)
-{
-	if (scan->socket.tcp >= 0)
-		close(scan->socket.tcp);
-	if (scan->socket.udp >= 0)
-		close(scan->socket.udp);
-	if (scan->socket.icmp >= 0)
-		close(scan->socket.icmp);
+	on = 1;
+	if (setsockopt(config->socket.send_fd, IPPROTO_IP,
+			IP_HDRINCL, &on, sizeof(on)) < 0)
+	{
+		perror("ft_nmap: setsockopt(IP_HDRINCL)");
+		close(config->socket.send_fd);
+		config->socket.send_fd = -1;
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
 }

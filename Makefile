@@ -1,70 +1,109 @@
+.DEFAULT_GOAL := all
+
 # **************************************************************************** #
-#                                                                              #
-#                                                         :::      ::::::::    #
-#    Makefile                                           :+:      :+:    :+:    #
-#                                                     +:+ +:+         +:+      #
-#    By: eric <eric@student.42.fr>                  +#+  +:+       +#+         #
-#                                                 +#+#+#+#+#+   +#+            #
-#    Created: 2026/06/23 16:00:00 by ertrigna          #+#    #+#              #
-#    Updated: 2026/06/24 16:47:29 by eric             ###   ########.fr        #
-#                                                                              #
+#                                  PROGRAM                                     #
 # **************************************************************************** #
 
-NAME		:= ft_nmap
+NAME := ft_nmap
 
-CC			:= gcc
-CFLAGS		:= -Wall -Wextra -Werror -Iinc
-LDFLAGS		:= -lpcap -pthread
+# **************************************************************************** #
+#                                  COMPILER                                    #
+# **************************************************************************** #
 
-SRC_DIR		:= srcs
-OBJ_DIR		:= objs
-INC_DIR		:= inc
+CC := cc
+CFLAGS := -Wall -Wextra -Werror
+CPPFLAGS := -Iinc -Isrcs
+DEPFLAGS := -MMD -MP
+RM := rm -rf
 
-SRCS		:= init.c \
-			   main.c \
-			   nmap.c \
-			   packet.c \
-			   parser.c \
-			   scan_tcp.c \
-			   scan_udp.c \
-			   socket.c \
-			   threads.c \
-			   resolve.c \
-			   utils.c
+# **************************************************************************** #
+#                                  LIBRARIES                                   #
+# **************************************************************************** #
 
-OBJS		:= $(addprefix $(OBJ_DIR)/, $(SRCS:.c=.o))
+LDLIBS := -lpcap -pthread
 
-GREEN		:= \033[0;32m
-YELLOW		:= \033[0;33m
-RED			:= \033[0;31m
-BLUE		:= \033[0;34m
-RESET		:= \033[0m
+# **************************************************************************** #
+#                                DIRECTORIES                                   #
+# **************************************************************************** #
+
+OBJS_DIR := objs
+DEBUG_OBJS_DIR := objs_debug
+
+# **************************************************************************** #
+#                                  SOURCES                                     #
+# **************************************************************************** #
+
+SRCS :=	srcs/main.c \
+		srcs/dev_config.c \
+		srcs/cleanup/cleanup.c \
+		srcs/signal/signal.c \
+		srcs/net/socket.c \
+		srcs/net/pcap.c \
+		srcs/packet/tcp.c \
+		srcs/packet/checksum.c \
+		srcs/runtime/init.c \
+		srcs/runtime/send.c \
+		srcs/runtime/recv.c \
+		srcs/runtime/expire.c \
+		srcs/runtime/wait.c \
+		srcs/runtime/classify.c \
+		srcs/output/report.c \
+		srcs/packet/udp.c \
+		srcs/packet/parse.c
+
+DEBUG_SRCS :=	$(SRCS) \
+				srcs/debug/debug.c
+
+# **************************************************************************** #
+#                                  OBJECTS                                     #
+# **************************************************************************** #
+
+OBJS := $(patsubst %.c,$(OBJS_DIR)/%.o,$(SRCS))
+DEBUG_OBJS := $(patsubst %.c,$(DEBUG_OBJS_DIR)/%.o,$(DEBUG_SRCS))
+
+DEPS := $(OBJS:.o=.d)
+DEBUG_DEPS := $(DEBUG_OBJS:.o=.d)
+
+# **************************************************************************** #
+#                                   RULES                                      #
+# **************************************************************************** #
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	@$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $(NAME)
-	@printf "$(GREEN)✅ $(NAME) compiled successfully$(RESET)\n"
+	$(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INC_DIR)/nmap.h
-	@mkdir -p $(OBJ_DIR)
-	@printf "$(BLUE)Compiling $<...$(RESET)\n"
-	@$(CC) $(CFLAGS) -c $< -o $@
+debug: $(DEBUG_OBJS)
+	$(CC) $(CFLAGS) -DDEBUG $(DEBUG_OBJS) $(LDLIBS) -o $(NAME)
+
+$(OBJS_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+
+$(DEBUG_OBJS_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DDEBUG $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
 
 clean:
-	@rm -rf $(OBJ_DIR)
-	@printf "$(YELLOW)🧹 Object files removed$(RESET)\n"
+	$(RM) $(OBJS_DIR)
+	$(RM) $(DEBUG_OBJS_DIR)
 
 fclean: clean
-	@rm -f $(NAME)
-	@printf "$(RED)🗑️  $(NAME) removed$(RESET)\n"
+	$(RM) $(NAME)
 
 re: fclean all
 
-debug: CFLAGS += -g3 -DDEBUG
-debug: re
-
 run: all
-	@sudo ./$(NAME)
+	sudo ./$(NAME)
 
-.PHONY: all clean fclean re debug run
+debug-run: debug
+	sudo ./$(NAME)
+
+# **************************************************************************** #
+#                                DEPENDENCIES                                  #
+# **************************************************************************** #
+
+-include $(DEPS)
+-include $(DEBUG_DEPS)
+
+.PHONY: all debug clean fclean re run debug-run
