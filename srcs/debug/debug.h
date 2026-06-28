@@ -3,6 +3,65 @@
 
 # include "config.h"
 # include <stddef.h>
+# include <stdint.h>
+
+# ifndef NMAP_PROFILING_SECTION
+#  define NMAP_PROFILING_SECTION
+
+typedef enum e_nmap_prof_event
+{
+	NMAP_PROF_SELECT_REQUESTED = 0,
+	NMAP_PROF_SELECT_WAIT,
+	NMAP_PROF_PCAP_NEXT_EX,
+	NMAP_PROF_PACKET_PARSE_TOTAL,
+	NMAP_PROF_LINK_OFFSET,
+	NMAP_PROF_IPV4_PARSE,
+	NMAP_PROF_TCP_PARSE,
+	NMAP_PROF_UDP_PARSE,
+	NMAP_PROF_ICMP_PARSE,
+	NMAP_PROF_MATCH_PROBE,
+	NMAP_PROF_CLASSIFY,
+	NMAP_PROF_EXPIRE,
+	NMAP_PROF_SEND_BUILD,
+	NMAP_PROF_SEND_SENDTO,
+
+	NMAP_PROF_PACKET_SEEN,
+	NMAP_PROF_PACKET_PARSED,
+	NMAP_PROF_PACKET_IGNORED,
+	NMAP_PROF_PACKET_MATCHED,
+	NMAP_PROF_PACKET_TIMEOUT,
+	NMAP_PROF_PROBE_SENT,
+
+	NMAP_PROF_EVENT_COUNT
+}	t_nmap_prof_event;
+
+#  ifdef PROFILE
+
+uint64_t	nmap_prof_now_us(void);
+void		nmap_prof_add(t_nmap_prof_event event, uint64_t start_us);
+void		nmap_prof_add_value(t_nmap_prof_event event, uint64_t elapsed_us);
+void		nmap_prof_count(t_nmap_prof_event event);
+void		nmap_prof_report(void);
+
+#   define PROF_START() nmap_prof_now_us()
+#   define PROF_ADD(event, start_us) nmap_prof_add((event), (start_us))
+#   define PROF_ADD_VALUE(event, elapsed_us) \
+	nmap_prof_add_value((event), (elapsed_us))
+#   define PROF_COUNT(event) nmap_prof_count((event))
+#   define PROF_REPORT() nmap_prof_report()
+
+#  else
+
+#   define PROF_START() ((uint64_t)0)
+#   define PROF_ADD(event, start_us) ((void)(event), (void)(start_us))
+#   define PROF_ADD_VALUE(event, elapsed_us) \
+	((void)(event), (void)(elapsed_us))
+#   define PROF_COUNT(event) ((void)(event))
+#   define PROF_REPORT() ((void)0)
+
+#  endif
+
+# endif
 
 # ifdef DEBUG
 

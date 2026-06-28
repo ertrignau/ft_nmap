@@ -1,0 +1,21 @@
+
+[profile] ===== ft_nmap profiling report =====
+[profile] select requested     calls=14       total=  7805.000 ms avg=557500.000 us min=1000     max=997000  
+[profile] select wait          calls=14       total=  1010.401 ms avg= 72171.500 us min=7        max=947078  
+[profile] pcap_next_ex         calls=5036     total=     0.232 ms avg=     0.046 us min=0        max=3       
+[profile] packet parse total   calls=5021     total=     0.629 ms avg=     0.125 us min=0        max=2       
+[profile] link offset          calls=5021     total=     0.106 ms avg=     0.021 us min=0        max=1       
+[profile] ipv4 parse           calls=5021     total=     0.079 ms avg=     0.016 us min=0        max=1       
+[profile] tcp parse            calls=5015     total=     0.101 ms avg=     0.020 us min=0        max=1       
+[profile] icmp parse           calls=6        total=     0.000 ms avg=     0.000 us min=0        max=0       
+[profile] match probe          calls=5021     total=    19.067 ms avg=     3.797 us min=0        max=77      
+[profile] classify             calls=5021     total=     0.146 ms avg=     0.029 us min=0        max=1       
+[profile] expire               calls=15       total=     0.127 ms avg=     8.467 us min=5        max=17      
+[profile] send build           calls=5120     total=     0.478 ms avg=     0.093 us min=0        max=1       
+[profile] sendto               calls=5120     total=    18.985 ms avg=     3.708 us min=1        max=124     
+[profile] packets seen         count=5021
+[profile] packets parsed       count=5021
+[profile] packets matched      count=5021
+[profile] probe timeouts       count=99
+[profile] probes sent          count=5120
+[profile] ====================================

@@ -86,7 +86,7 @@ int	nmap_load_hardcoded_dev_config(t_nmap_config *config)
 	config->scan.scan_mask = (NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK);
 	config->scan.src_port_base = 40000;
 	config->scan.timeout_ms = 1000;
-	config->scan.max_in_flight = 50;
+	config->scan.max_in_flight = 1000;
 
 	return (1);
 }

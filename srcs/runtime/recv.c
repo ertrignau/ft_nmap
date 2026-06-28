@@ -139,16 +139,36 @@ static int	handle_captured_packet(t_nmap_config *config,
 	t_nmap_reply	reply;
 	t_probe			*probe;
 	t_scan_result	result;
+	uint64_t		prof_start;
+	int				parsed;
 
 	DEBUG_RECV_PACKET(packet, len);
-	if (!nmap_parse_pcap_packet(config, packet, len, &reply))
+	prof_start = PROF_START();
+	parsed = nmap_parse_pcap_packet(config, packet, len, &reply);
+	PROF_ADD(NMAP_PROF_PACKET_PARSE_TOTAL, prof_start);
+	if (!parsed)
+	{
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
 		return (0);
+	}
+	PROF_COUNT(NMAP_PROF_PACKET_PARSED);
+	prof_start = PROF_START();
 	probe = find_matching_probe(config, &reply);
+	PROF_ADD(NMAP_PROF_MATCH_PROBE, prof_start);
 	if (!probe)
+	{
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
 		return (0);
+	}
+	prof_start = PROF_START();
 	result = nmap_classify_reply(probe, &reply);
+	PROF_ADD(NMAP_PROF_CLASSIFY, prof_start);
 	if (result == SCAN_RESULT_UNKNOWN)
+	{
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
 		return (0);
+	}
+	PROF_COUNT(NMAP_PROF_PACKET_MATCHED);
 	mark_probe_done(config, probe, result);
 	return (1);
 }
@@ -169,6 +189,7 @@ int	nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status)
 	struct pcap_pkthdr	*header;
 	const unsigned char	*packet;
 	int					ret;
+	uint64_t			prof_start;
 
 	if (!config || !config->capture.handle)
 	{
@@ -178,9 +199,14 @@ int	nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status)
 	}
 	while (1)
 	{
+		prof_start = PROF_START();
 		ret = pcap_next_ex(config->capture.handle, &header, &packet);
+		PROF_ADD(NMAP_PROF_PCAP_NEXT_EX, prof_start);
 		if (ret == 1)
+		{
+			PROF_COUNT(NMAP_PROF_PACKET_SEEN);
 			handle_captured_packet(config, packet, header->caplen);
+		}
 		else if (ret == 0)
 			return (1);
 		else if (ret == PCAP_ERROR_BREAK)

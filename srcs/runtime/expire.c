@@ -79,6 +79,7 @@ static void	expire_probe(t_nmap_config *config, t_probe *probe)
 	config->runtime.done_count++;
 	DEBUG_PROBE_TIMEOUT(probe);
 	DEBUG_PROBE_RESULT(probe, "timeout");
+	PROF_COUNT(NMAP_PROF_PACKET_TIMEOUT);
 }
 
 /**
@@ -93,9 +94,11 @@ void	nmap_runtime_expire_probes(t_nmap_config *config)
 {
 	size_t		i;
 	uint64_t	now_ms;
+	uint64_t	prof_start;
 
 	if (!config || !config->runtime.probes)
 		return ;
+	prof_start = PROF_START();
 	now_ms = get_time_ms();
 	i = 0;
 	while (i < config->runtime.probe_count)
@@ -105,4 +108,5 @@ void	nmap_runtime_expire_probes(t_nmap_config *config)
 			expire_probe(config, &config->runtime.probes[i]);
 		i++;
 	}
+	PROF_ADD(NMAP_PROF_EXPIRE, prof_start);
 }

@@ -1,4 +1,5 @@
 #include "config.h"
+#include "debug/debug.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -6,16 +7,16 @@
 #include <sys/time.h>
 
 /**
- * @brief Return current time in milliseconds.
+ * @brief Return current time in microseconds.
  *
- * @return Current timestamp in milliseconds.
+ * @return Current timestamp in microseconds.
  */
-static uint64_t	get_time_ms(void)
+static uint64_t	get_time_us(void)
 {
 	struct timeval	tv;
 
 	gettimeofday(&tv, NULL);
-	return ((uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000);
+	return ((uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec);
 }
 
 /**
@@ -59,17 +60,22 @@ static uint64_t	get_probe_remaining_ms(t_probe *probe,
  *
  * @param config Global nmap configuration.
  * @param wait_ms Destination wait duration in milliseconds.
+ * @param now_us Output timestamp used to compute this wait.
  *
  * @return 1 if an in-flight timeout exists, 0 otherwise.
  */
-static int	get_next_timeout_ms(t_nmap_config *config, uint64_t *wait_ms)
+static int	get_next_timeout_ms(t_nmap_config *config,
+		uint64_t *wait_ms, uint64_t *now_us)
 {
 	size_t		i;
 	uint64_t	now_ms;
 	uint64_t	remaining_ms;
 	int			found;
 
-	now_ms = get_time_ms();
+	if (!now_us)
+		return (0);
+	*now_us = get_time_us();
+	now_ms = *now_us / 1000;
 	found = 0;
 	i = 0;
 	while (i < config->runtime.probe_count)
@@ -103,6 +109,8 @@ int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 	fd_set			readfds;
 	struct timeval	timeout;
 	uint64_t		wait_ms;
+	uint64_t		now_us;
+	uint64_t		after_us;
 	int				ret;
 
 	if (!config || config->capture.fd < 0)
@@ -111,12 +119,15 @@ int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!get_next_timeout_ms(config, &wait_ms))
+	if (!get_next_timeout_ms(config, &wait_ms, &now_us))
 		return (1);
 	FD_ZERO(&readfds);
 	FD_SET(config->capture.fd, &readfds);
 	set_timeout_ms(wait_ms, &timeout);
 	ret = select(config->capture.fd + 1, &readfds, NULL, NULL, &timeout);
+	after_us = get_time_us();
+	PROF_ADD_VALUE(NMAP_PROF_SELECT_REQUESTED, wait_ms * 1000ULL);
+	PROF_ADD_VALUE(NMAP_PROF_SELECT_WAIT, after_us - now_us);
 	if (ret < 0)
 	{
 		if (errno == EINTR)

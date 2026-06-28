@@ -89,6 +89,7 @@ int	main(void)
 		exit_status = 130;
 
 	nmap_print_report(&config);
+	PROF_REPORT();
 
 cleanup:
 	//free toutes les ressources et close les sockets / pcap
