@@ -59,6 +59,8 @@ static const char	*probe_state_name(t_probe_state state)
 {
 	if (state == PROBE_PENDING)
 		return ("pending");
+	if (state == PROBE_QUEUED)
+		return ("queued");
 	if (state == PROBE_IN_FLIGHT)
 		return ("in-flight");
 	if (state == PROBE_DONE)
@@ -284,9 +286,10 @@ void	nmap_print_report(t_nmap_config *config)
 		return ;
 	printf("Scan report for %s (%s)\n", config->cli.target,
 		config->target.ip);
-	printf("Probes: %zu total, %zu done, %zu in flight\n\n",
+	printf("Probes: %zu total, %zu done, %zu queued, %zu in flight\n\n",
 		config->runtime.probe_count,
 		config->runtime.done_count,
+		config->runtime.queued_count,
 		config->runtime.in_flight_count);
 	print_report_header(config);
 	i = 0;

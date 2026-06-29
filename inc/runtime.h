@@ -7,6 +7,7 @@
 typedef enum e_probe_state
 {
 	PROBE_PENDING = 0,
+	PROBE_QUEUED,
 	PROBE_IN_FLIGHT,
 	PROBE_DONE
 }	t_probe_state;
@@ -33,16 +34,22 @@ typedef struct s_probe
 
 	t_probe_state	state;
 	t_scan_result	result;
+	int		sender_id;
 }	t_probe;
 
 typedef struct s_nmap_runtime
 {
-	t_probe	*probes;
-	size_t	probe_count;
+	t_probe		*probes;
+	t_probe		**probe_by_src_port;
+	size_t		probe_count;
 
-	size_t	next_to_send;
-	size_t	done_count;
-	size_t	in_flight_count;
+	size_t		next_to_send;
+	size_t		done_count;
+	size_t		queued_count;
+	size_t		in_flight_count;
+	size_t		udp_queued_count;
+	size_t		udp_in_flight_count;
+	uint64_t	last_udp_dispatch_ms;
 }	t_nmap_runtime;
 
 typedef enum e_nmap_reply_type

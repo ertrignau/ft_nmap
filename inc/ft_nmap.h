@@ -16,8 +16,11 @@ int		nmap_prepare_runtime(t_nmap_config *config, int *exit_status);
 int		nmap_runtime_is_finished(t_nmap_config *config);
 int		nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status);
 void	nmap_runtime_expire_probes(t_nmap_config *config);
-int		nmap_runtime_send_ready(t_nmap_config *config, int *exit_status);
+int		nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status);
 int		nmap_runtime_wait(t_nmap_config *config, int *exit_status);
+int		nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status);
+void	nmap_stop_sender_pool(t_nmap_config *config);
+int		nmap_sender_pool_has_error(t_nmap_config *config);
 
 /* output */
 void	nmap_print_report(t_nmap_config *config);

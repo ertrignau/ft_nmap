@@ -14,7 +14,7 @@ add_file() {
 
 add_file "./Makefile"
 
-find ./includes ./srcs -type f \( -name "*.c" -o -name "*.h" -o -name "*.mk" \) \
+find ./inc ./srcs -type f \( -name "*.c" -o -name "*.h" -o -name "*.mk" \) \
 	| sort \
 	| while IFS= read -r file; do
 		add_file "$file"

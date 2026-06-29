@@ -1,1 +1,0 @@
-sudo: ./ft_nmap : commande introuvable

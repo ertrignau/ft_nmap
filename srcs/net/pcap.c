@@ -6,7 +6,7 @@
 
 #define NMAP_PCAP_SNAPLEN 65535
 #define NMAP_PCAP_TIMEOUT_MS 1
-#define NMAP_PCAP_FILTER_SIZE 256
+#define NMAP_PCAP_FILTER_SIZE 512
 
 /**
  * @brief Build the BPF filter used by pcap.
@@ -17,8 +17,9 @@
  *
  * @return 1 on success, 0 if the filter does not fit.
  *
- * @note The filter accepts TCP and ICMP replies. TCP covers SYN, NULL, FIN,
- *       XMAS and ACK scans. ICMP covers network-level filtered errors.
+ * @note TCP covers SYN, NULL, FIN, XMAS and ACK scans. UDP direct replies
+ *       cover services that answer with UDP payloads. ICMP covers filtered
+ *       errors and UDP port-unreachable replies.
  */
 static int	build_pcap_filter(t_nmap_config *config,
 		char *filter, size_t filter_size)
@@ -27,7 +28,10 @@ static int	build_pcap_filter(t_nmap_config *config,
 
 	ret = snprintf(filter, filter_size,
 			"((tcp and src host %s and dst host %s)"
+			" or (udp and src host %s and dst host %s)"
 			" or (icmp and dst host %s))",
+			config->target.ip,
+			config->route.src_ip,
 			config->target.ip,
 			config->route.src_ip,
 			config->route.src_ip);

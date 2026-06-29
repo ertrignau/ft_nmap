@@ -1,11 +1,12 @@
-#ifndef NMAP_CONFIG_H
-# define NMAP_CONFIG_H
+#ifndef CONFIG_H
+# define CONFIG_H
 
 # include <arpa/inet.h>
 # include <netinet/in.h>
 # include <pcap/pcap.h>
 # include <stdint.h>
 # include <stddef.h>
+# include <pthread.h>
 
 # include "runtime.h"
 
@@ -27,6 +28,25 @@ typedef enum e_nmap_socket_error
 	NMAP_SOCKET_RAW,
 	NMAP_SOCKET_HDRINCL
 }	t_nmap_socket_error;
+
+typedef struct s_nmap_worker		t_nmap_worker;
+
+/**
+ * @brief Sender pool state.
+ *
+ * @note The main thread still owns pcap, classification and expiration. Workers
+ *       only build and send packets.
+ */
+typedef struct s_nmap_sender_pool
+{
+	t_nmap_worker	*workers;
+	int				worker_count;
+
+	pthread_mutex_t	runtime_lock;
+	int				initialized;
+	int				stop_requested;
+	int				send_error;
+}	t_nmap_sender_pool;
 
 typedef struct s_nmap_cli
 {
@@ -93,7 +113,15 @@ typedef struct s_nmap_scan
 	uint16_t			src_port_base;
 
 	int					timeout_ms;
+	int					tcp_timeout_ms;
+	int					udp_timeout_ms;
+
 	int					max_in_flight;
+	int					max_outstanding_per_worker;
+	int					udp_max_in_flight;
+
+	int					tcp_send_gap_ms;
+	int					udp_dispatch_gap_ms;
 }	t_nmap_scan;
 
 typedef struct s_nmap_config
@@ -105,6 +133,7 @@ typedef struct s_nmap_config
 	t_nmap_capture		capture;
 	t_nmap_scan			scan;
 	t_nmap_runtime		runtime;
+	t_nmap_sender_pool		sender_pool;
 }	t_nmap_config;
 
 #endif

@@ -25,7 +25,8 @@ static size_t	count_scan_types(uint32_t scan_mask)
 		count++;
 	if (scan_mask & NMAP_SCAN_ACK)
 		count++;
-	/* UDP intentionally disabled for the current TCP-only engine step. */
+	if (scan_mask & NMAP_SCAN_UDP)
+		count++;
 	return (count);
 }
 
@@ -54,8 +55,29 @@ static uint32_t	get_scan_type_at(uint32_t scan_mask, size_t index)
 		return (NMAP_SCAN_XMAS);
 	if ((scan_mask & NMAP_SCAN_ACK) && current++ == index)
 		return (NMAP_SCAN_ACK);
-	/* UDP intentionally disabled for the current TCP-only engine step. */
+	if ((scan_mask & NMAP_SCAN_UDP) && current++ == index)
+		return (NMAP_SCAN_UDP);
 	return (0);
+}
+
+/**
+ * @brief Index one probe by its generated source port.
+ *
+ * @param config Global nmap configuration.
+ * @param probe Probe to index.
+ *
+ * @return 1 on success, 0 on source-port collision.
+ *
+ * @note Replies contain our source port as their destination port. ICMP errors
+ *       embed the original packet, including the same source port. This gives
+ *       O(1) matching before validating all IP/port/protocol fields.
+ */
+static int	index_probe_by_src_port(t_nmap_config *config, t_probe *probe)
+{
+	if (config->runtime.probe_by_src_port[probe->src_port])
+		return (0);
+	config->runtime.probe_by_src_port[probe->src_port] = probe;
+	return (1);
 }
 
 /**
@@ -86,7 +108,8 @@ static int	init_probe(t_nmap_config *config, t_probe *probe,
 	probe->sent_at_ms = 0;
 	probe->state = PROBE_PENDING;
 	probe->result = SCAN_RESULT_UNKNOWN;
-	return (1);
+	probe->sender_id = -1;
+	return (index_probe_by_src_port(config, probe));
 }
 
 /**
@@ -126,6 +149,48 @@ static int	fill_probe_table(t_nmap_config *config, size_t scan_type_count)
 }
 
 /**
+ * @brief Normalize runtime tuning defaults.
+ *
+ * @param config Global nmap configuration.
+ *
+ * @note Old fields are kept for parsing compatibility. New fields split TCP and
+ *       UDP behavior without forcing the parser branch to be ready now.
+ */
+static void	normalize_runtime_tuning(t_nmap_config *config)
+{
+	if (config->scan.timeout_ms <= 0)
+		config->scan.timeout_ms = 1000;
+	if (config->scan.tcp_timeout_ms <= 0)
+		config->scan.tcp_timeout_ms = config->scan.timeout_ms;
+	if (config->scan.udp_timeout_ms <= 0)
+		config->scan.udp_timeout_ms = config->scan.timeout_ms;
+	if (config->scan.max_in_flight <= 0)
+		config->scan.max_in_flight = 1;
+	if (config->scan.max_outstanding_per_worker <= 0)
+		config->scan.max_outstanding_per_worker = 1;
+	if (config->scan.udp_max_in_flight <= 0)
+		config->scan.udp_max_in_flight = config->scan.max_in_flight;
+	if (config->scan.tcp_send_gap_ms < 0)
+		config->scan.tcp_send_gap_ms = 0;
+	if (config->scan.udp_dispatch_gap_ms < 0)
+		config->scan.udp_dispatch_gap_ms = 0;
+}
+
+/**
+ * @brief Release runtime allocations created before a failure.
+ *
+ * @param config Global nmap configuration.
+ */
+static void	cleanup_partial_runtime(t_nmap_config *config)
+{
+	if (config->runtime.probes)
+		free(config->runtime.probes);
+	if (config->runtime.probe_by_src_port)
+		free(config->runtime.probe_by_src_port);
+	memset(&config->runtime, 0, sizeof(config->runtime));
+}
+
+/**
  * @brief Initialize the runtime probe table from the scan plan.
  *
  * @param config Global nmap configuration.
@@ -133,7 +198,8 @@ static int	fill_probe_table(t_nmap_config *config, size_t scan_type_count)
  *
  * @return 1 on success, 0 on failure.
  *
- * @note Runtime owns the probe table. It is freed by nmap_cleanup_config().
+ * @note Runtime owns the probe table and source-port index. They are freed by
+ *       nmap_cleanup_config().
  */
 int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 {
@@ -146,6 +212,7 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	normalize_runtime_tuning(config);
 	scan_type_count = count_scan_types(config->scan.scan_mask);
 	if (config->scan.port_count == 0 || scan_type_count == 0)
 	{
@@ -154,9 +221,11 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 		return (0);
 	}
 	probe_count = config->scan.port_count * scan_type_count;
-	config->runtime.probes = malloc(sizeof(t_probe) * probe_count);
-	if (!config->runtime.probes)
+	config->runtime.probes = calloc(probe_count, sizeof(t_probe));
+	config->runtime.probe_by_src_port = calloc(65536, sizeof(t_probe *));
+	if (!config->runtime.probes || !config->runtime.probe_by_src_port)
 	{
+		cleanup_partial_runtime(config);
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
@@ -164,11 +233,14 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 	config->runtime.probe_count = probe_count;
 	config->runtime.next_to_send = 0;
 	config->runtime.done_count = 0;
+	config->runtime.queued_count = 0;
 	config->runtime.in_flight_count = 0;
+	config->runtime.udp_queued_count = 0;
+	config->runtime.udp_in_flight_count = 0;
+	config->runtime.last_udp_dispatch_ms = 0;
 	if (!fill_probe_table(config, scan_type_count))
 	{
-		free(config->runtime.probes);
-		memset(&config->runtime, 0, sizeof(config->runtime));
+		cleanup_partial_runtime(config);
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
@@ -185,7 +257,14 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
  */
 int	nmap_runtime_is_finished(t_nmap_config *config)
 {
+	int	finished;
+
 	if (!config)
 		return (1);
-	return (config->runtime.done_count >= config->runtime.probe_count);
+	if (!config->sender_pool.initialized)
+		return (config->runtime.done_count >= config->runtime.probe_count);
+	pthread_mutex_lock(&config->sender_pool.runtime_lock);
+	finished = (config->runtime.done_count >= config->runtime.probe_count);
+	pthread_mutex_unlock(&config->sender_pool.runtime_lock);
+	return (finished);
 }

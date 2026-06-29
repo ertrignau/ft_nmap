@@ -1,5 +1,6 @@
 #include "config.h"
 #include "debug/debug.h"
+#include "runtime/worker.h"
 
 #include <stdio.h>
 #include <netinet/in.h>
@@ -65,9 +66,9 @@ static int	reply_matches_icmp_probe(t_nmap_config *config,
 }
 
 /**
- * @brief Check whether a parsed reply matches a probe.
+ * @brief Check whether a parsed reply matches a candidate probe.
  *
- * @param probe Runtime probe to test.
+ * @param probe Runtime probe found by source-port index.
  * @param reply Parsed reply.
  *
  * @return 1 if the reply matches the probe, 0 otherwise.
@@ -75,12 +76,35 @@ static int	reply_matches_icmp_probe(t_nmap_config *config,
 static int	reply_matches_probe(t_nmap_config *config,
 		t_probe *probe, t_nmap_reply *reply)
 {
-	if (probe->state != PROBE_IN_FLIGHT)
+	if (!probe || probe->state != PROBE_IN_FLIGHT)
 		return (0);
 	if (reply->type == NMAP_REPLY_TCP || reply->type == NMAP_REPLY_UDP)
 		return (reply_matches_direct_probe(config, probe, reply));
 	if (reply->type == NMAP_REPLY_ICMP)
 		return (reply_matches_icmp_probe(config, probe, reply));
+	return (0);
+}
+
+/**
+ * @brief Return the source-port index key carried by a reply.
+ *
+ * @param reply Parsed reply.
+ * @param key Output source-port key.
+ *
+ * @return 1 if a key is available, 0 otherwise.
+ */
+static int	reply_index_key(t_nmap_reply *reply, uint16_t *key)
+{
+	if (reply->type == NMAP_REPLY_TCP || reply->type == NMAP_REPLY_UDP)
+	{
+		*key = reply->dst_port;
+		return (1);
+	}
+	if (reply->type == NMAP_REPLY_ICMP)
+	{
+		*key = reply->original_src_port;
+		return (1);
+	}
 	return (0);
 }
 
@@ -91,19 +115,33 @@ static int	reply_matches_probe(t_nmap_config *config,
  * @param reply Parsed reply.
  *
  * @return Matching probe pointer, or NULL if no probe matches.
+ *
+ * @note The lookup is O(1) through source port, then all IP/port/protocol fields
+ *       are still validated before accepting the match.
  */
 static t_probe	*find_matching_probe(t_nmap_config *config, t_nmap_reply *reply)
 {
-	size_t	i;
+	t_probe		*probe;
+	uint16_t	key;
 
-	i = 0;
-	while (i < config->runtime.probe_count)
-	{
-		if (reply_matches_probe(config, &config->runtime.probes[i], reply))
-			return (&config->runtime.probes[i]);
-		i++;
-	}
-	return (NULL);
+	if (!reply_index_key(reply, &key))
+		return (NULL);
+	probe = config->runtime.probe_by_src_port[key];
+	if (!reply_matches_probe(config, probe, reply))
+		return (NULL);
+	return (probe);
+}
+
+/**
+ * @brief Check whether a probe is UDP.
+ *
+ * @param probe Probe to inspect.
+ *
+ * @return 1 for UDP, 0 otherwise.
+ */
+static int	probe_is_udp(t_probe *probe)
+{
+	return (probe && probe->scan_type == NMAP_SCAN_UDP);
 }
 
 /**
@@ -116,11 +154,21 @@ static t_probe	*find_matching_probe(t_nmap_config *config, t_nmap_reply *reply)
 static void	mark_probe_done(t_nmap_config *config, t_probe *probe,
 		t_scan_result result)
 {
+	pthread_mutex_lock(&config->sender_pool.runtime_lock);
+	if (probe->state == PROBE_DONE)
+	{
+		pthread_mutex_unlock(&config->sender_pool.runtime_lock);
+		return ;
+	}
 	probe->result = result;
 	probe->state = PROBE_DONE;
 	if (config->runtime.in_flight_count > 0)
 		config->runtime.in_flight_count--;
+	if (probe_is_udp(probe) && config->runtime.udp_in_flight_count > 0)
+		config->runtime.udp_in_flight_count--;
+	nmap_sender_note_probe_done_locked(config, probe);
 	config->runtime.done_count++;
+	pthread_mutex_unlock(&config->sender_pool.runtime_lock);
 	DEBUG_PROBE_RESULT(probe, "reply");
 }
 
@@ -153,7 +201,9 @@ static int	handle_captured_packet(t_nmap_config *config,
 	}
 	PROF_COUNT(NMAP_PROF_PACKET_PARSED);
 	prof_start = PROF_START();
+	pthread_mutex_lock(&config->sender_pool.runtime_lock);
 	probe = find_matching_probe(config, &reply);
+	pthread_mutex_unlock(&config->sender_pool.runtime_lock);
 	PROF_ADD(NMAP_PROF_MATCH_PROBE, prof_start);
 	if (!probe)
 	{

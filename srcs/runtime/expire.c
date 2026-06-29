@@ -1,5 +1,6 @@
 #include "config.h"
 #include "debug/debug.h"
+#include "runtime/worker.h"
 
 #include <sys/time.h>
 
@@ -44,6 +45,21 @@ static t_scan_result	get_timeout_result(uint32_t scan_type)
 }
 
 /**
+ * @brief Return the timeout for a specific probe.
+ *
+ * @param config Global nmap configuration.
+ * @param probe Probe to inspect.
+ *
+ * @return Timeout in milliseconds.
+ */
+static int	get_probe_timeout_ms(t_nmap_config *config, t_probe *probe)
+{
+	if (probe->scan_type == NMAP_SCAN_UDP)
+		return (config->scan.udp_timeout_ms);
+	return (config->scan.tcp_timeout_ms);
+}
+
+/**
  * @brief Check whether an in-flight probe has expired.
  *
  * @param probe Runtime probe to check.
@@ -65,6 +81,18 @@ static int	probe_has_expired(t_probe *probe, uint64_t now_ms, int timeout_ms)
 }
 
 /**
+ * @brief Check whether a probe is UDP.
+ *
+ * @param probe Probe to inspect.
+ *
+ * @return 1 for UDP, 0 otherwise.
+ */
+static int	probe_is_udp(t_probe *probe)
+{
+	return (probe && probe->scan_type == NMAP_SCAN_UDP);
+}
+
+/**
  * @brief Mark one in-flight probe as done after timeout.
  *
  * @param config Global nmap configuration.
@@ -76,6 +104,9 @@ static void	expire_probe(t_nmap_config *config, t_probe *probe)
 	probe->state = PROBE_DONE;
 	if (config->runtime.in_flight_count > 0)
 		config->runtime.in_flight_count--;
+	if (probe_is_udp(probe) && config->runtime.udp_in_flight_count > 0)
+		config->runtime.udp_in_flight_count--;
+	nmap_sender_note_probe_done_locked(config, probe);
 	config->runtime.done_count++;
 	DEBUG_PROBE_TIMEOUT(probe);
 	DEBUG_PROBE_RESULT(probe, "timeout");
@@ -100,13 +131,15 @@ void	nmap_runtime_expire_probes(t_nmap_config *config)
 		return ;
 	prof_start = PROF_START();
 	now_ms = get_time_ms();
+	pthread_mutex_lock(&config->sender_pool.runtime_lock);
 	i = 0;
 	while (i < config->runtime.probe_count)
 	{
-		if (probe_has_expired(&config->runtime.probes[i],
-				now_ms, config->scan.timeout_ms))
+		if (probe_has_expired(&config->runtime.probes[i], now_ms,
+				get_probe_timeout_ms(config, &config->runtime.probes[i])))
 			expire_probe(config, &config->runtime.probes[i]);
 		i++;
 	}
+	pthread_mutex_unlock(&config->sender_pool.runtime_lock);
 	PROF_ADD(NMAP_PROF_EXPIRE, prof_start);
 }

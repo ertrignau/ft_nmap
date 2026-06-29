@@ -27,6 +27,8 @@ static const char	*debug_probe_state_name(t_probe_state state)
 {
 	if (state == PROBE_PENDING)
 		return ("PENDING");
+	if (state == PROBE_QUEUED)
+		return ("QUEUED");
 	if (state == PROBE_IN_FLIGHT)
 		return ("IN_FLIGHT");
 	if (state == PROBE_DONE)
@@ -88,24 +90,28 @@ void	nmap_debug_runtime(const t_nmap_config *config)
 {
 	if (!config)
 		return ;
-	fprintf(stderr, "[debug][runtime] probes=%p count=%zu next=%zu done=%zu in_flight=%zu\n",
+	fprintf(stderr, "[debug][runtime] probes=%p count=%zu next=%zu done=%zu queued=%zu in_flight=%zu\n",
 		(void *)config->runtime.probes,
 		config->runtime.probe_count,
 		config->runtime.next_to_send,
 		config->runtime.done_count,
+		config->runtime.queued_count,
 		config->runtime.in_flight_count);
 }
 
 void	nmap_debug_probe_send(const t_probe *probe)
 {
 	struct in_addr	addr;
+	char			ip[INET_ADDRSTRLEN];
 
 	if (!probe)
 		return ;
 	addr.s_addr = probe->target_ip;
+	if (!inet_ntop(AF_INET, &addr, ip, sizeof(ip)))
+		snprintf(ip, sizeof(ip), "unknown");
 	fprintf(stderr,
 		"[debug][send][probe] target=%s dst_port=%u src_port=%u scan=%s seq=%u state=%s\n",
-		inet_ntoa(addr),
+		ip,
 		probe->dst_port,
 		probe->src_port,
 		debug_scan_type_name(probe->scan_type),
@@ -116,13 +122,16 @@ void	nmap_debug_probe_send(const t_probe *probe)
 void	nmap_debug_probe_timeout(const t_probe *probe)
 {
 	struct in_addr	addr;
+	char			ip[INET_ADDRSTRLEN];
 
 	if (!probe)
 		return ;
 	addr.s_addr = probe->target_ip;
+	if (!inet_ntop(AF_INET, &addr, ip, sizeof(ip)))
+		snprintf(ip, sizeof(ip), "unknown");
 	fprintf(stderr,
 		"[debug][timeout][probe] target=%s dst_port=%u src_port=%u scan=%s sent_at_ms=%llu\n",
-		inet_ntoa(addr),
+		ip,
 		probe->dst_port,
 		probe->src_port,
 		debug_scan_type_name(probe->scan_type),
@@ -132,13 +141,16 @@ void	nmap_debug_probe_timeout(const t_probe *probe)
 void	nmap_debug_probe_result(const t_probe *probe, const char *reason)
 {
 	struct in_addr	addr;
+	char			ip[INET_ADDRSTRLEN];
 
 	if (!probe)
 		return ;
 	addr.s_addr = probe->target_ip;
+	if (!inet_ntop(AF_INET, &addr, ip, sizeof(ip)))
+		snprintf(ip, sizeof(ip), "unknown");
 	fprintf(stderr,
 		"[debug][result][probe] target=%s dst_port=%u src_port=%u scan=%s result=%s reason=%s\n",
-		inet_ntoa(addr),
+		ip,
 		probe->dst_port,
 		probe->src_port,
 		debug_scan_type_name(probe->scan_type),

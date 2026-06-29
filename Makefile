@@ -41,9 +41,11 @@ SRCS :=	srcs/main.c \
 		srcs/net/socket.c \
 		srcs/net/pcap.c \
 		srcs/packet/tcp.c \
+		srcs/packet/udp.c \
 		srcs/packet/checksum.c \
 		srcs/runtime/init.c \
-		srcs/runtime/send.c \
+		srcs/runtime/scheduler.c \
+		srcs/runtime/worker.c \
 		srcs/runtime/recv.c \
 		srcs/runtime/expire.c \
 		srcs/runtime/wait.c \

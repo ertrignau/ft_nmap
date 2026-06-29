@@ -32,20 +32,30 @@ static int	set_route_ipv4(t_nmap_route *route, const char *iface,
 
 static int	set_scan_ports(t_nmap_scan *scan)
 {
-	size_t		i;
-	uint16_t	port;
+	static const uint16_t	ports[] = {
+		1, 7, 9, 13, 17, 19,
+		21, 22, 23, 25, 37, 42, 49, 53,
+		67, 68, 69, 80, 81, 88,
+		110, 111, 113, 119, 123,
+		135, 137, 138, 139,
+		143, 161, 162, 389, 443, 445,
+		500, 514, 515, 520, 587, 631, 993, 1021
+	};
+	size_t					i;
+	size_t					count;
 
+	if (!scan)
+		return (0);
+	count = sizeof(ports) / sizeof(ports[0]);
+	if (count > NMAP_MAX_PORTS)
+		return (0);
 	i = 0;
-	port = 1;
-	while (port <= 1024)
+	while (i < count)
 	{
-		if (i >= NMAP_MAX_PORTS)
-			return (0);
-		scan->ports[i] = port;
+		scan->ports[i] = ports[i];
 		i++;
-		port++;
 	}
-	scan->port_count = i;
+	scan->port_count = count;
 	return (1);
 }
 
@@ -68,25 +78,37 @@ int	nmap_load_hardcoded_dev_config(t_nmap_config *config)
 
 	config->cli.program_name = "./ft_nmap";
 	config->cli.target = "172.28.0.10";
-	config->cli.ports_arg = "20-25";
+	config->cli.ports_arg = "interesting-default-set";
 	config->cli.hide_uninteresting = 1;
-	config->cli.scan_mask = NMAP_SCAN_ACK; // (NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK);
+	config->cli.scan_mask = (NMAP_SCAN_SYN | NMAP_SCAN_NULL
+			| NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK
+			| NMAP_SCAN_UDP);
 	config->cli.timeout_ms = 1000;
 	config->cli.max_in_flight = 50;
+	config->cli.speedup = 0;
 
 	if (!set_sockaddr_ipv4(&config->target.addr, &config->target.addr_len,
 			config->target.ip, "172.28.0.10"))
 		return (0);
 
-	if (!set_route_ipv4(&config->route, "br-2fbd72aae601", "172.28.0.1"))
+	if (!set_route_ipv4(&config->route, "br-39b82ea55216", "172.28.0.1"))
 		return (0);
 
 	if (!set_scan_ports(&config->scan))
 		return (0);
-	config->scan.scan_mask = (NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK);
+	config->scan.scan_mask = config->cli.scan_mask;
 	config->scan.src_port_base = 40000;
+
 	config->scan.timeout_ms = 1000;
+	config->scan.tcp_timeout_ms = 1000;
+	config->scan.udp_timeout_ms = 2500;
+
 	config->scan.max_in_flight = 1000;
+	config->scan.max_outstanding_per_worker = 1;
+	config->scan.udp_max_in_flight = 10;
+
+	config->scan.tcp_send_gap_ms = 0;
+	config->scan.udp_dispatch_gap_ms = 50;
 
 	return (1);
 }

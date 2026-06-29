@@ -65,6 +65,10 @@ int	main(void)
 		goto cleanup;
 	DEBUG_RUNTIME(&config);
 
+	//initialisation des workers d'envoi
+	if (!nmap_prepare_sender_pool(&config, &exit_status))
+		goto cleanup;
+
 	//boucle principale
 	while (!nmap_signal_stop_requested()
 		&& !nmap_runtime_is_finished(&config))
@@ -77,8 +81,14 @@ int	main(void)
 		nmap_runtime_expire_probes(&config);
 
 		//envoyer les probes autorisees par le scheduler
-		if (!nmap_runtime_send_ready(&config, &exit_status))
+		if (!nmap_runtime_schedule_ready(&config, &exit_status))
 			break;
+
+		if (nmap_sender_pool_has_error(&config))
+		{
+			exit_status = 1;
+			break ;
+		}
 
 		//attendre le prochain evenement utile
 		if (!nmap_runtime_wait(&config, &exit_status))
@@ -87,6 +97,13 @@ int	main(void)
 
 	if (nmap_signal_stop_requested())
 		exit_status = 130;
+
+	/*
+	 * Les workers peuvent encore posséder une probe QUEUED ou être en train
+	 * de terminer un sendto(). On les stop/join avant d'imprimer le report
+	 * pour éviter de lire des probes pendant qu'un thread les modifie.
+	 */
+	nmap_stop_sender_pool(&config);
 
 	nmap_print_report(&config);
 	PROF_REPORT();

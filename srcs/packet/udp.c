@@ -107,9 +107,11 @@ int	nmap_send_udp_probe(t_nmap_config *config, t_probe *probe)
 	struct sockaddr_in	dst;
 	size_t				packet_len;
 	ssize_t				sent;
+	uint64_t			prof_start;
 
 	if (!config || !probe)
 		return (0);
+	prof_start = PROF_START();
 	packet_len = sizeof(packet);
 	memset(packet, 0, sizeof(packet));
 	ip = (struct iphdr *)packet;
@@ -117,17 +119,21 @@ int	nmap_send_udp_probe(t_nmap_config *config, t_probe *probe)
 	build_ip_header(config, probe, ip, packet_len);
 	build_udp_header(probe, udp);
 	set_udp_checksum(config, probe, udp);
+	PROF_ADD(NMAP_PROF_SEND_BUILD, prof_start);
 	memset(&dst, 0, sizeof(dst));
 	dst.sin_family = AF_INET;
 	dst.sin_addr.s_addr = probe->target_ip;
 	dst.sin_port = htons(probe->dst_port);
 	DEBUG_SEND_PACKET(packet, packet_len);
+	prof_start = PROF_START();
 	sent = sendto(config->socket.send_fd, packet, packet_len, 0,
 			(struct sockaddr *)&dst, sizeof(dst));
+	PROF_ADD(NMAP_PROF_SEND_SENDTO, prof_start);
 	if (sent < 0 || (size_t)sent != packet_len)
 	{
 		perror("ft_nmap: sendto");
 		return (0);
 	}
+	PROF_COUNT(NMAP_PROF_PROBE_SENT);
 	return (1);
 }
