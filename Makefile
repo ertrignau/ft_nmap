@@ -52,6 +52,12 @@ SRCS :=	srcs/main.c \
 		srcs/runtime/classify.c \
 		srcs/output/report.c \
 		srcs/packet/parse.c \
+		srcs/parsing/pars_port.c \
+		srcs/parsing/parsing_utils.c \
+		srcs/parsing/pars_flags.c \
+		srcs/parsing/pars_speedup.c \
+		srcs/parsing/pars_scan.c \
+		srcs/parsing/parsing.c \
 		srcs/packet/link_offset.c
 
 DEBUG_SRCS :=	$(SRCS) \

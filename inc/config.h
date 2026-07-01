@@ -7,6 +7,7 @@
 # include <stdint.h>
 # include <stddef.h>
 # include <pthread.h>
+# include <string.h>
 
 # include "runtime.h"
 
