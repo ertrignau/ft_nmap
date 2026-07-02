@@ -5,6 +5,10 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    env_file:
+      - ./configs/${LAB_PROFILE:-default}.env
+    environment:
+      LAB_PROFILE: ${LAB_PROFILE:-default}
     networks:
       ft_nmap_lab:
         ipv4_address: 172.28.0.10

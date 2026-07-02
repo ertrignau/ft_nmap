@@ -119,6 +119,60 @@ profile-run: profile
 	sudo ./$(NAME)
 
 # **************************************************************************** #
+#                                  DOCKER LAB                                  #
+# **************************************************************************** #
+
+LAB_DIR := ft_nmap_lab
+
+lab: lab-up
+
+lab-up:
+	$(MAKE) -C $(LAB_DIR) up
+
+lab-down:
+	$(MAKE) -C $(LAB_DIR) down
+
+lab-re:
+	$(MAKE) -C $(LAB_DIR) re
+
+lab-clean:
+	$(MAKE) -C $(LAB_DIR) clean
+
+lab-logs:
+	$(MAKE) -C $(LAB_DIR) logs
+
+lab-ps:
+	$(MAKE) -C $(LAB_DIR) ps
+
+lab-shell:
+	$(MAKE) -C $(LAB_DIR) shell
+
+lab-profiles:
+	$(MAKE) -C $(LAB_DIR) profiles
+
+lab-default:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=default
+
+lab-tcp-many:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=tcp-many-open
+
+lab-udp-many:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=udp-many-open
+
+lab-mixed:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=mixed
+
+lab-mostly-closed:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=mostly-closed
+
+lab-filtered-heavy:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=filtered-heavy
+
+lab-profile-%:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=$*
+
+
+# **************************************************************************** #
 #                                DEPENDENCIES                                  #
 # **************************************************************************** #
 
@@ -126,4 +180,4 @@ profile-run: profile
 -include $(DEBUG_DEPS)
 -include $(PROFILE_DEPS)
 
-.PHONY: all debug profile clean fclean re run debug-run profile-run
+.PHONY: all debug profile clean fclean re run debug-run profile-run lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell lab-ip lab-ref-tcp lab-ref-udp lab-ref-all lab-scan lab-parallel lab-sniff lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed lab-mostly-closed lab-filtered-heavy

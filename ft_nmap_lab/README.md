@@ -1,10 +1,7 @@
-# ft_nmap target-only Docker lab
+# ft_nmap Docker lab
 
-This lab starts only one Docker container: a controlled target to scan.
-
-Your ft_nmap is launched from the host VM/Linux machine, not from Docker.
-
-Target IP:
-
-```txt
-172.28.0.10
+This lab only manages a controlled Docker target at `172.28.0.10`.
+It does not run `nmap`, `ft_nmap`, `tcpdump`, `strace`, or comparisons.
+A profile defines which ports are open, closed, dropped, or rejected.
+Closed ports are simply ports with no service and no firewall DROP/REJECT rule.
+Use the root Makefile aliases like `make lab-tcp-many` or `make lab-udp-many`.

@@ -24,7 +24,7 @@ typedef enum e_scan_result
 
 typedef struct s_probe
 {
-	uint32_t		target_ip;
+	uint32_t	target_ip;
 	uint16_t	dst_port;
 	uint16_t	src_port;
 	uint32_t	seq;

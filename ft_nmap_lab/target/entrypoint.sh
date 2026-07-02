@@ -1,31 +1,88 @@
 #!/bin/sh
 set -eu
 
+expand_ports() {
+    spec="${1:-}"
+
+    [ -n "$spec" ] || return 0
+
+    old_ifs="$IFS"
+    IFS=","
+    set -- $spec
+    IFS="$old_ifs"
+
+    for item do
+        item=$(printf '%s' "$item" | tr -d '[:space:]')
+
+        [ -n "$item" ] || continue
+
+        case "$item" in
+            *-*)
+                start=${item%-*}
+                end=${item#*-}
+                port=$start
+                while [ "$port" -le "$end" ]; do
+                    printf '%s\n' "$port"
+                    port=$((port + 1))
+                done
+                ;;
+            *)
+                printf '%s\n' "$item"
+                ;;
+        esac
+    done
+}
+
+apply_accept_rules() {
+    proto="$1"
+    spec="$2"
+
+    expand_ports "$spec" | while read -r port; do
+        [ -n "$port" ] || continue
+        iptables -A INPUT -p "$proto" --dport "$port" -j ACCEPT
+    done
+}
+
+apply_drop_rules() {
+    proto="$1"
+    spec="$2"
+
+    expand_ports "$spec" | while read -r port; do
+        [ -n "$port" ] || continue
+        iptables -A INPUT -p "$proto" --dport "$port" -j DROP
+    done
+}
+
+apply_reject_rules() {
+    proto="$1"
+    spec="$2"
+
+    expand_ports "$spec" | while read -r port; do
+        [ -n "$port" ] || continue
+        iptables -A INPUT -p "$proto" --dport "$port" -j REJECT --reject-with icmp-host-prohibited
+    done
+}
+
 iptables -F INPUT
 iptables -P INPUT ACCEPT
 
-for p in 30 81 88 111 135 139 515 587 631 1021; do
-    iptables -A INPUT -p tcp --dport "$p" -j DROP
-done
+# Open ports must win if a profile accidentally overlaps with DROP/REJECT.
+apply_accept_rules tcp "${TCP_OPEN:-}"
+apply_accept_rules udp "${UDP_OPEN:-}"
 
-for p in 37 42 113 119 389; do
-    iptables -A INPUT -p tcp --dport "$p" -j REJECT --reject-with icmp-host-prohibited
-done
+apply_drop_rules tcp "${TCP_DROP:-}"
+apply_reject_rules tcp "${TCP_REJECT:-}"
 
-for p in 69 111 520 631 1021; do
-    iptables -A INPUT -p udp --dport "$p" -j DROP
-done
+apply_drop_rules udp "${UDP_DROP:-}"
+apply_reject_rules udp "${UDP_REJECT:-}"
 
-for p in 137 138 162 389 450; do
-    iptables -A INPUT -p udp --dport "$p" -j REJECT --reject-with icmp-host-prohibited
-done
-
-echo "[target] TCP open ports:      21 22 25 53 80 110 143 443 445 993"
-echo "[target] UDP open ports:      53 123 161 500 514"
-echo "[target] TCP DROP filtered:   30 81 88 111 135 139 515 587 631 1021"
-echo "[target] TCP REJECT filtered: 37 42 113 119 389"
-echo "[target] UDP DROP filtered:   69 111 520 631 1021"
-echo "[target] UDP REJECT filtered: 137 138 162 389 450"
-echo "[target] Static IP:           172.28.0.10"
+echo "[target] profile:             ${LAB_PROFILE:-default}"
+echo "[target] static IP:           172.28.0.10"
+echo "[target] TCP open:            ${TCP_OPEN:-}"
+echo "[target] UDP open:            ${UDP_OPEN:-}"
+echo "[target] TCP DROP filtered:   ${TCP_DROP:-}"
+echo "[target] TCP REJECT filtered: ${TCP_REJECT:-}"
+echo "[target] UDP DROP filtered:   ${UDP_DROP:-}"
+echo "[target] UDP REJECT filtered: ${UDP_REJECT:-}"
 
 exec python3 /service_lab.py
