@@ -7,6 +7,8 @@
 int		nmap_load_hardcoded_dev_config(t_nmap_config *config);
 void	nmap_cleanup_config(t_nmap_config *config);
 
+/* resolve */
+int		nmap_prepare_target(t_nmap_config *config, int *exit_status);
 /* net */
 int		nmap_prepare_send_socket(t_nmap_config *config, int *exit_status);
 int		nmap_prepare_pcap(t_nmap_config *config, int *exit_status);

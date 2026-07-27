@@ -35,6 +35,7 @@ PROFILE_OBJS_DIR := objs_profile
 # **************************************************************************** #
 
 SRCS :=	srcs/main.c \
+		srcs/resolve.c \
 		srcs/dev_config.c \
 		srcs/cleanup/cleanup.c \
 		srcs/signal/signal.c \

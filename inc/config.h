@@ -61,6 +61,7 @@ typedef struct s_nmap_cli
 	int			help;
 	int			no_dns;
 	int			speedup;
+	int			scan_specified;
 
 	int			timeout_ms;
 	int			max_in_flight;
@@ -69,7 +70,7 @@ typedef struct s_nmap_cli
 	int			cli_error;
 	const char	*bad_arg;
 	int			bad_index;
-	int				hide_uninteresting;
+	int			hide_uninteresting;
 }	t_nmap_cli;
 
 typedef struct s_nmap_target

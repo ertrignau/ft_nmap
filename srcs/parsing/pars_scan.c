@@ -30,7 +30,7 @@ int	parse_scan(t_nmap_config *config, int argc, char **argv, int *i)
 		fprintf(stderr, "ft_nmap: missing argument for --scan\n");
 		return (0);
 	}
-	if (config->cli.scan_mask != 0)
+	if (config->cli.scan_specified)
 	{
 		fprintf(stderr, "ft_nmap: --scan specified more than once\n");
 		return (0);
@@ -43,5 +43,6 @@ int	parse_scan(t_nmap_config *config, int argc, char **argv, int *i)
 		return (0);
 	}
 	config->cli.scan_mask = mask;
+	config->cli.scan_specified = 1;
 	return (1);
 }

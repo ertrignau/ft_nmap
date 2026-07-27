@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:54 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/07/27 11:42:59 by eric             ###   ########.fr       */
+/*   Updated: 2026/07/27 15:00:28 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,8 +32,8 @@ int	main(int ac, char *av[])
 
 	//preparation de la cible
 	//TODO : UNCOMMENT : quand le resolve sera prêt
-	// if (!nmap_prepare_target(&config, &exit_status))
-	// 	return (exit_status);
+	if (!nmap_prepare_target(&config, &exit_status))
+		return (exit_status);
 	// DEBUG_TARGET(&config);
 
 	//preparation de l'interface et de l'IP source
