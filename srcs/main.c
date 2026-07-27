@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:54 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/24 16:49:15 by eric             ###   ########.fr       */
+/*   Updated: 2026/07/27 11:42:59 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,7 @@
 
 #include <string.h>
 
-int	main(void)
+int	main(int ac, char *av[])
 {
 	t_nmap_config	config;
 	int				exit_status;
@@ -27,11 +27,8 @@ int	main(void)
 	if (!nmap_signal_setup(&exit_status))
 		return (exit_status);
 
-	//parsing des arguments
-	//TODO : UNCOMMENT : quand le parsing sera prêt
-	// if (!nmap_parse_cli(&config, &exit_status))
-	// 	return (exit_status);
-	// DEBUG_PARSING(&config);
+	if (!nmap_parse_cli(&config, ac, av, &exit_status))
+		goto cleanup;
 
 	//preparation de la cible
 	//TODO : UNCOMMENT : quand le resolve sera prêt
@@ -45,10 +42,10 @@ int	main(void)
 	// 	return (exit_status);
 	// DEBUG_ROUTE(&config);
 
-	//TODO : DELETE : bypass temporaire du parsing + resolve + route
-	if (!nmap_load_hardcoded_dev_config(&config))
-		return (1);
-	DEBUG_DEV_CONFIG(&config);
+	// //TODO : DELETE : bypass temporaire du parsing + resolve + route
+	// if (!nmap_load_hardcoded_dev_config(&config))
+	// 	return (1);
+	// DEBUG_DEV_CONFIG(&config);
 
 	//ouverture de la raw socket d'envoi
 	if (!nmap_prepare_send_socket(&config, &exit_status))

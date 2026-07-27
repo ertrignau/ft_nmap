@@ -8,6 +8,7 @@
 # include <stddef.h>
 # include <pthread.h>
 # include <string.h>
+# include <stdio.h>
 
 # include "runtime.h"
 

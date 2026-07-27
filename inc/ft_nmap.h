@@ -32,6 +32,7 @@ int	    parse_ip(t_nmap_config *config, int argc, char **argv, int *i);
 int	    parse_port(t_nmap_config *config, int argc, char **argv, int *i);
 int	    parse_scan(t_nmap_config *config, int argc, char **argv, int *i);
 int	    parse_speedup(t_nmap_config *config, int argc, char **argv, int *i);
+int		nmap_parse_cli(t_nmap_config *config, int argc, char **argv, int *exit_status);
 int	    scan_name_to_mask(const char *name, uint32_t *mask);
 
 /* parsing utils */

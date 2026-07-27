@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/30 08:42:33 by eric              #+#    #+#             */
-/*   Updated: 2026/06/30 08:43:36 by eric             ###   ########.fr       */
+/*   Updated: 2026/07/27 11:34:49 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -109,4 +109,28 @@ int	nmap_parse_ports(t_nmap_config *config, const char *arg)
 	}
 	free(copy);
 	return (config->scan.port_count > 0);
+}
+
+int	parse_port(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --ports\n");
+		return (0);
+	}
+	if (config->cli.ports_arg)
+	{
+		fprintf(stderr, "ft_nmap: --ports specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_ports(config, argv[*i]))
+	{
+		fprintf(stderr, "ft_nmap: invalid ports: %s\n", argv[*i]);
+		return (0);
+	}
+	config->cli.ports_arg = argv[*i];
+	return (1);
 }

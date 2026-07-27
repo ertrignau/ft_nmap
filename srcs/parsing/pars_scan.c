@@ -18,3 +18,30 @@ int	scan_name_to_mask(const char *name, uint32_t *mask)
 		return (0);
 	return (1);
 }
+
+int	parse_scan(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	uint32_t	mask;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --scan\n");
+		return (0);
+	}
+	if (config->cli.scan_mask != 0)
+	{
+		fprintf(stderr, "ft_nmap: --scan specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	mask = 0;
+	if (!scan_name_to_mask(argv[*i], &mask))
+	{
+		fprintf(stderr, "ft_nmap: invalid scan type: %s\n", argv[*i]);
+		return (0);
+	}
+	config->cli.scan_mask = mask;
+	return (1);
+}
