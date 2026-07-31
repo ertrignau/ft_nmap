@@ -76,6 +76,7 @@ static int	open_pcap_handle(t_nmap_config *config)
 	pcap_t	*handle;
 
 	memset(config->capture.errbuf, 0, sizeof(config->capture.errbuf));
+	fprintf(stderr, "pcap iface: [%s]\n", config->route.iface);
 	handle = pcap_create(config->route.iface, config->capture.errbuf);
 	if (!handle)
 	{

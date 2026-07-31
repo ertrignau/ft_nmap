@@ -21,36 +21,33 @@ int	main(int ac, char *av[])
 	int				exit_status;
 
 	exit_status = 0;
-	memset(&config, 0, sizeof(config));
+	// initialisation de la configuration globale
+	if (!nmap_init_config(&config, av[0], &exit_status))
+		return (exit_status);
 
-	//preparation du handler de signal
+	// preparation du handler de signal
 	if (!nmap_signal_setup(&exit_status))
 		return (exit_status);
 
+	// parsing des arguments
 	if (!nmap_parse_cli(&config, ac, av, &exit_status))
 		goto cleanup;
 
-	//preparation de la cible
-	//TODO : UNCOMMENT : quand le resolve sera prêt
+	// transformation des options CLI en configuration de scan
+	if (!nmap_prepare_scan_config(&config, &exit_status))
+		goto cleanup;
+
+	// resolution du nom ou de l'adresse de la cible
 	if (!nmap_prepare_target(&config, &exit_status))
-		return (exit_status);
-	// DEBUG_TARGET(&config);
+		goto cleanup;
 
-	//preparation de l'interface et de l'IP source
-	//TODO : UNCOMMENT : quand la detection de route sera prête
-	// if (!nmap_prepare_route(&config, &exit_status))
-	// 	return (exit_status);
-	// DEBUG_ROUTE(&config);
-
-	// //TODO : DELETE : bypass temporaire du parsing + resolve + route
-	// if (!nmap_load_hardcoded_dev_config(&config))
-	// 	return (1);
-	// DEBUG_DEV_CONFIG(&config);
+	// resolution de l'interface et de l'adresse IP source
+	if (!nmap_prepare_route(&config, &exit_status))
+		goto cleanup;
 
 	//ouverture de la raw socket d'envoi
 	if (!nmap_prepare_send_socket(&config, &exit_status))
 		goto cleanup;
-	DEBUG_SOCKET(&config);
 
 	//mise en place de pcap AVANT le premier send
 	if (!nmap_prepare_pcap(&config, &exit_status))

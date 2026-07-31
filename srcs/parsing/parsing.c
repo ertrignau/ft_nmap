@@ -12,24 +12,6 @@
 
 #include "ft_nmap.h"
 
-static void init_client(t_nmap_config *config, char *prg_name)
-{
-	memset(config, 0, sizeof(*config));
-
-	config->socket.send_fd = -1;
-	config->capture.fd = -1;
-	config->capture.datalink = -1;
-
-	config->cli.program_name = prg_name;
-
-	config->cli.speedup = 0;
-	config->cli.timeout_ms = 1000;
-	config->cli.max_in_flight = 50;
-
-	config->cli.scan_mask = NMAP_SCAN_SYN;
-	config->cli.scan_specified = 0;
-}
-
 static int	check_required_args(t_nmap_config *config)
 {
 	if (!config->cli.target)
@@ -56,7 +38,6 @@ int	nmap_parse_cli(t_nmap_config *config, int argc, char **argv, int *exit_statu
 		return (0);
 	}
 
-	init_client(config, argv[0]);
 	i = 1;
 	while (i < argc)
 	{

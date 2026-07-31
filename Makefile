@@ -60,7 +60,10 @@ SRCS :=	srcs/main.c \
 		srcs/parsing/pars_scan.c \
 		srcs/parsing/pars_ip.c \
 		srcs/parsing/parsing.c \
-		srcs/packet/link_offset.c
+		srcs/packet/link_offset.c \
+		srcs/init/init.c \
+		srcs/net/route.c \
+		srcs/init/prepare_scan_config.c 
 
 DEBUG_SRCS :=	$(SRCS) \
 				srcs/debug/debug.c

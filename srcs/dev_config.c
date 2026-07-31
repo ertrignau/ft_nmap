@@ -91,7 +91,7 @@ int	nmap_load_hardcoded_dev_config(t_nmap_config *config)
 			config->target.ip, "172.28.0.10"))
 		return (0);
 
-	if (!set_route_ipv4(&config->route, "br-39b82ea55216", "172.28.0.1"))
+	if (!set_route_ipv4(&config->route, "br-7f79f14033ca", "172.28.0.1"))
 		return (0);
 
 	if (!set_scan_ports(&config->scan))
