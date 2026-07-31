@@ -1,6 +1,4 @@
-from pathlib import Path
-
-content = """FT_NMAP - PARSING TODO
+FT_NMAP - PARSING TODO
 ======================
 
 OBJECTIF DU PARSING
@@ -531,10 +529,10 @@ Ports particuliers :
 
 
 Configuration du moteur :
-    ./ft_nmap --ip 172.28.0.10 \\
-        --speedup 10 \\
-        --probes-per-thread 50 \\
-        --retries 2 \\
+    ./ft_nmap --ip 172.28.0.10 \
+        --speedup 10 \
+        --probes-per-thread 50 \
+        --retries 2 \
         --timeout 1000
 
 
@@ -548,8 +546,3 @@ Bonus :
 
 Aide :
     ./ft_nmap --help
-"""
-
-path = Path("PARSING_TODO.txt")
-path.write_text(content, encoding="utf-8")
-print(path)
