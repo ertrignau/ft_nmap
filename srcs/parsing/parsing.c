@@ -55,6 +55,5 @@ int	nmap_parse_cli(t_nmap_config *config, int argc, char **argv, int *exit_statu
 			*exit_status = 1;
 		return (0);
 	}
-	config->scan.scan_mask = config->cli.scan_mask;
 	return (1);
 }

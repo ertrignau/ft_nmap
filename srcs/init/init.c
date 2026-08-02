@@ -1,5 +1,20 @@
+
 #include "config.h"
 
+#include <string.h>
+
+/**
+ * @brief Initialize the global configuration and resource sentinels.
+ *
+ * @param config Global nmap configuration.
+ * @param program_name Executable name received from argv[0].
+ * @param exit_status Output exit status set on invalid input.
+ *
+ * @return 1 on success, 0 on failure.
+ *
+ * @note This is the only global memset of the configuration. Effective scan
+ *       defaults are applied later by nmap_prepare_scan_config().
+ */
 int	nmap_init_config(t_nmap_config *config, const char *program_name,
 		int *exit_status)
 {
@@ -10,19 +25,9 @@ int	nmap_init_config(t_nmap_config *config, const char *program_name,
 		return (0);
 	}
 	memset(config, 0, sizeof(*config));
-
 	config->socket.send_fd = -1;
 	config->capture.fd = -1;
 	config->capture.datalink = -1;
-
 	config->cli.program_name = program_name;
-
-	config->scan.src_port_base = 40000;
-	config->scan.tcp_timeout_ms = 1000;
-	config->scan.udp_timeout_ms = 2500;
-	config->scan.max_outstanding_per_worker = 1;
-	config->scan.udp_max_in_flight = 10;
-	config->scan.tcp_send_gap_ms = 0;
-	config->scan.udp_dispatch_gap_ms = 50;
 	return (1);
 }

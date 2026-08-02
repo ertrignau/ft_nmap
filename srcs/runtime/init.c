@@ -158,16 +158,14 @@ static int	fill_probe_table(t_nmap_config *config, size_t scan_type_count)
  */
 static void	normalize_runtime_tuning(t_nmap_config *config)
 {
-	if (config->scan.timeout_ms <= 0)
-		config->scan.timeout_ms = 1000;
 	if (config->scan.tcp_timeout_ms <= 0)
-		config->scan.tcp_timeout_ms = config->scan.timeout_ms;
+		config->scan.tcp_timeout_ms = 1000;
 	if (config->scan.udp_timeout_ms <= 0)
-		config->scan.udp_timeout_ms = config->scan.timeout_ms;
+		config->scan.udp_timeout_ms = 2500;
 	if (config->scan.max_in_flight <= 0)
 		config->scan.max_in_flight = 1;
-	if (config->scan.max_outstanding_per_worker <= 0)
-		config->scan.max_outstanding_per_worker = 1;
+	if (config->scan.max_outstanding_per_sender <= 0)
+		config->scan.max_outstanding_per_sender = 1;
 	if (config->scan.udp_max_in_flight <= 0)
 		config->scan.udp_max_in_flight = config->scan.max_in_flight;
 	if (config->scan.tcp_send_gap_ms < 0)

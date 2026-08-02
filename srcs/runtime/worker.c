@@ -6,7 +6,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#define NMAP_MAX_WORKERS 250
+#define NMAP_MAX_WORKERS NMAP_MAX_THREADS
 
 int	nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe);
 int	nmap_send_udp_probe(t_nmap_config *config, t_probe *probe);
@@ -289,7 +289,7 @@ int	nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status)
 		return (0);
 	}
 	config->sender_pool.initialized = 1;
-	config->sender_pool.worker_count = normalize_worker_count(config->cli.speedup);
+	config->sender_pool.worker_count = normalize_worker_count(config->scan.thread_count);
 	if (config->sender_pool.worker_count == 0)
 		return (1);
 	config->sender_pool.workers = calloc(config->sender_pool.worker_count,
@@ -399,7 +399,7 @@ static int	worker_can_accept(t_nmap_config *config, t_nmap_worker *worker)
 
 	if (worker->job_pending)
 		return (0);
-	max_outstanding = (size_t)config->scan.max_outstanding_per_worker;
+	max_outstanding = (size_t)config->scan.max_outstanding_per_sender;
 	if (max_outstanding == 0)
 		max_outstanding = 1;
 	return (worker->outstanding_count < max_outstanding);

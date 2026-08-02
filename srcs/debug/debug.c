@@ -55,17 +55,30 @@ static const char	*debug_scan_result_name(t_scan_result result)
 
 void	nmap_debug_dev_config(const t_nmap_config *config)
 {
+	const char	*ports_arg;
+
 	if (!config)
 		return ;
+	ports_arg = config->cli.ports_arg;
+	if (!ports_arg)
+		ports_arg = "default:1-1024";
 	fprintf(stderr, "[debug][config] target=%s target_ip=%s\n",
-		config->cli.target, config->target.ip);
+		config->target.name, config->target.ip);
 	fprintf(stderr, "[debug][config] iface=%s src_ip=%s\n",
 		config->route.iface, config->route.src_ip);
 	fprintf(stderr, "[debug][config] ports=%s count=%zu scan_mask=0x%x\n",
-		config->cli.ports_arg, config->scan.port_count,
+		ports_arg, config->scan.port_count,
 		config->scan.scan_mask);
-	fprintf(stderr, "[debug][config] timeout_ms=%d max_in_flight=%d src_port_base=%u\n",
-		config->scan.timeout_ms, config->scan.max_in_flight,
+	fprintf(stderr,
+		"[debug][config] tcp_timeout_ms=%d udp_timeout_ms=%d retries=%d\n",
+		config->scan.tcp_timeout_ms,
+		config->scan.udp_timeout_ms,
+		config->scan.retries);
+	fprintf(stderr,
+		"[debug][config] threads=%d probes_per_sender=%d max_in_flight=%d src_port_base=%u\n",
+		config->scan.thread_count,
+		config->scan.max_outstanding_per_sender,
+		config->scan.max_in_flight,
 		config->scan.src_port_base);
 }
 

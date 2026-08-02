@@ -35,15 +35,20 @@ PROFILE_OBJS_DIR := objs_profile
 # **************************************************************************** #
 
 SRCS :=	srcs/main.c \
-		srcs/resolve.c \
-		srcs/dev_config.c \
+		srcs/init/init.c \
+		srcs/init/prepare_scan_config.c \
+		srcs/init/targets.c \
 		srcs/cleanup/cleanup.c \
 		srcs/signal/signal.c \
+		srcs/net/target.c \
+		srcs/net/route.c \
 		srcs/net/socket.c \
 		srcs/net/pcap.c \
 		srcs/packet/tcp.c \
 		srcs/packet/udp.c \
 		srcs/packet/checksum.c \
+		srcs/packet/parse.c \
+		srcs/packet/link_offset.c \
 		srcs/runtime/init.c \
 		srcs/runtime/scheduler.c \
 		srcs/runtime/worker.c \
@@ -52,19 +57,13 @@ SRCS :=	srcs/main.c \
 		srcs/runtime/wait.c \
 		srcs/runtime/classify.c \
 		srcs/output/report.c \
-		srcs/packet/parse.c \
 		srcs/parsing/pars_port.c \
 		srcs/parsing/parsing_utils.c \
 		srcs/parsing/pars_flags.c \
 		srcs/parsing/pars_speedup.c \
 		srcs/parsing/pars_scan.c \
 		srcs/parsing/pars_ip.c \
-		srcs/parsing/parsing.c \
-		srcs/packet/link_offset.c \
-		srcs/init/init.c \
-		srcs/net/route.c \
-		srcs/init/prepare_scan_config.c 
-
+		srcs/parsing/parsing.c
 DEBUG_SRCS :=	$(SRCS) \
 				srcs/debug/debug.c
 

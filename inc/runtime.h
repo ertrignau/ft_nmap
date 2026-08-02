@@ -32,6 +32,7 @@ typedef struct s_probe
 	uint32_t	scan_type;
 	uint64_t	sent_at_ms;
 
+	uint8_t		attempt;
 	t_probe_state	state;
 	t_scan_result	result;
 	int		sender_id;
