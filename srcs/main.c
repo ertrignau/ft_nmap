@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/10 15:59:54 by ertrigna          #+#    #+#             */
-/*   Updated: 2026/06/24 16:49:15 by eric             ###   ########.fr       */
+/*   Updated: 2026/07/27 15:00:28 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,45 +15,39 @@
 
 #include <string.h>
 
-int	main(void)
+int	main(int ac, char *av[])
 {
 	t_nmap_config	config;
 	int				exit_status;
 
 	exit_status = 0;
-	memset(&config, 0, sizeof(config));
+	// initialisation de la configuration globale
+	if (!nmap_init_config(&config, av[0], &exit_status))
+		return (exit_status);
 
-	//preparation du handler de signal
+	// preparation du handler de signal
 	if (!nmap_signal_setup(&exit_status))
 		return (exit_status);
 
-	//parsing des arguments
-	//TODO : UNCOMMENT : quand le parsing sera prêt
-	// if (!nmap_parse_cli(&config, &exit_status))
-	// 	return (exit_status);
-	// DEBUG_PARSING(&config);
+	// parsing des arguments
+	if (!nmap_parse_cli(&config, ac, av, &exit_status))
+		goto cleanup;
 
-	//preparation de la cible
-	//TODO : UNCOMMENT : quand le resolve sera prêt
-	// if (!nmap_prepare_target(&config, &exit_status))
-	// 	return (exit_status);
-	// DEBUG_TARGET(&config);
+	// transformation des options CLI en configuration de scan
+	if (!nmap_prepare_scan_config(&config, &exit_status))
+		goto cleanup;
 
-	//preparation de l'interface et de l'IP source
-	//TODO : UNCOMMENT : quand la detection de route sera prête
-	// if (!nmap_prepare_route(&config, &exit_status))
-	// 	return (exit_status);
-	// DEBUG_ROUTE(&config);
+	// resolution du nom ou de l'adresse de la cible
+	if (!nmap_prepare_target(&config, &exit_status))
+		goto cleanup;
 
-	//TODO : DELETE : bypass temporaire du parsing + resolve + route
-	if (!nmap_load_hardcoded_dev_config(&config))
-		return (1);
-	DEBUG_DEV_CONFIG(&config);
+	// resolution de l'interface et de l'adresse IP source
+	if (!nmap_prepare_route(&config, &exit_status))
+		goto cleanup;
 
 	//ouverture de la raw socket d'envoi
 	if (!nmap_prepare_send_socket(&config, &exit_status))
 		goto cleanup;
-	DEBUG_SOCKET(&config);
 
 	//mise en place de pcap AVANT le premier send
 	if (!nmap_prepare_pcap(&config, &exit_status))
