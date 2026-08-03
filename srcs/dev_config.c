@@ -84,7 +84,6 @@ int	nmap_load_hardcoded_dev_config(t_nmap_config *config)
 			| NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK
 			| NMAP_SCAN_UDP);
 	config->cli.timeout_ms = 1000;
-	config->cli.max_in_flight = 50;
 	config->cli.speedup = 0;
 
 	if (!set_sockaddr_ipv4(&config->target.addr, &config->target.addr_len,

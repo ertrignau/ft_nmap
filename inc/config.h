@@ -53,24 +53,36 @@ typedef struct s_nmap_sender_pool
 typedef struct s_nmap_cli
 {
 	const char	*program_name;
+
 	const char	*target;
+	const char	*file_path;
 	const char	*ports_arg;
+	const char	*scan_arg;
 
 	uint32_t	scan_mask;
 
 	int			help;
 	int			no_dns;
+	int			version_detection;
+	int			os_detection;
+	int			open_only;
+	int			show_reason;
+
 	int			speedup;
-	int			scan_specified;
-
+	int			retries;
 	int			timeout_ms;
-	int			max_in_flight;
+	int			probes_per_thread;
 
-	int			error;
-	int			cli_error;
-	const char	*bad_arg;
-	int			bad_index;
 	int			hide_uninteresting;
+
+	int			ip_specified;
+	int			file_specified;
+	int			ports_specified;
+	int			scan_specified;
+	int			speedup_specified;
+	int			retries_specified;
+	int			timeout_specified;
+	int			probes_per_thread_specified;
 }	t_nmap_cli;
 
 typedef struct s_nmap_target

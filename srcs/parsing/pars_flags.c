@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/30 08:32:39 by eric              #+#    #+#             */
-/*   Updated: 2026/07/27 11:28:24 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/03 11:53:25 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,11 @@
 
 int	parse_flag(t_nmap_config *config, int argc, char **argv, int *i)
 {
+	if (nmap_streq(argv[*i], "--help"))
+	{
+		config->cli.help = 1;
+		return (1);
+	}
 	if (nmap_streq(argv[*i], "--ip"))
 		return (parse_ip(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--speedup"))

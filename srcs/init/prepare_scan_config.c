@@ -30,13 +30,15 @@ int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
 		config->scan.scan_mask = config->cli.scan_mask;
 	else
 		config->scan.scan_mask = NMAP_DEFAULT_SCAN_MASK;
-	if (config->cli.timeout_ms > 0)
+	if (config->cli.timeout_specified)
 		config->scan.timeout_ms = config->cli.timeout_ms;
 	else
 		config->scan.timeout_ms = NMAP_DEFAULT_TIMEOUT_MS;
-	if (config->cli.max_in_flight > 0)
-		config->scan.max_in_flight = config->cli.max_in_flight;
+	if (config->cli.probes_per_thread_specified)
+		config->scan.max_outstanding_per_worker
+			= config->cli.probes_per_thread;
 	else
-		config->scan.max_in_flight = NMAP_DEFAULT_MAX_IN_FLIGHT;
+		config->scan.max_outstanding_per_worker = 1;
+	config->scan.max_in_flight = NMAP_DEFAULT_MAX_IN_FLIGHT;
 	return (1);
 }

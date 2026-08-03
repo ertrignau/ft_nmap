@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/27 11:16:00 by eric              #+#    #+#             */
-/*   Updated: 2026/07/27 11:25:42 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/03 11:40:44 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,5 +33,6 @@ int	parse_ip(t_nmap_config *config, int argc, char **argv, int *i)
 		return (0);
 	}
 	config->cli.target = argv[*i];
+	config->cli.ip_specified = 1;
 	return (1);
 }
