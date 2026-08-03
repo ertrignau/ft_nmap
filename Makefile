@@ -59,10 +59,14 @@ SRCS :=	srcs/main.c \
 		srcs/parsing/pars_speedup.c \
 		srcs/parsing/pars_scan.c \
 		srcs/parsing/pars_ip.c \
+		srcs/parsing/pars_file.c \
 		srcs/parsing/parsing.c \
 		srcs/packet/link_offset.c \
 		srcs/init/init.c \
 		srcs/net/route.c \
+		srcs/run/run_file.c \
+		srcs/run/run_single.c \
+		srcs/init/prepare_target_file.c \
 		srcs/init/prepare_scan_config.c 
 
 DEBUG_SRCS :=	$(SRCS) \

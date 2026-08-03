@@ -8,11 +8,17 @@
 # include <stddef.h>
 # include <pthread.h>
 # include <string.h>
+# include <errno.h>
 # include <stdio.h>
+# include <stdlib.h>
+# include <ctype.h>
 
 # include "runtime.h"
 
-# define NMAP_MAX_PORTS 1024
+# define NMAP_MAX_PORTS 				1024
+# define NMAP_MAX_TARGETS				1024
+# define NMAP_HOSTNAME_SIZE				256
+# define NMAP_TARGET_INITIAL_CAPACITY	16
 
 typedef enum e_nmap_scan_type
 {
@@ -95,6 +101,18 @@ typedef struct s_nmap_target
 	int					gai_error;
 }	t_nmap_target;
 
+typedef	struct s_nmap_target_entry
+{
+	char	hostname[NMAP_HOSTNAME_SIZE];
+} t_nmap_target_entry;
+
+typedef	struct s_nmap_target_list
+{
+	t_nmap_target_entry	*items;
+	size_t				count;
+	size_t				capacity;
+}	t_nmap_target_list;
+
 typedef struct s_nmap_route
 {
 	char				iface[64];
@@ -143,12 +161,13 @@ typedef struct s_nmap_config
 {
 	t_nmap_cli			cli;
 	t_nmap_target		target;
+	t_nmap_target_list	targets;
 	t_nmap_route		route;
 	t_nmap_socket		socket;
 	t_nmap_capture		capture;
 	t_nmap_scan			scan;
 	t_nmap_runtime		runtime;
-	t_nmap_sender_pool		sender_pool;
+	t_nmap_sender_pool	sender_pool;
 }	t_nmap_config;
 
 #endif

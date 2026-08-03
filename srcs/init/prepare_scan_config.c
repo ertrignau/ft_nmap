@@ -1,4 +1,16 @@
-#include "config.h"
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   prepare_scan_config.c                              :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/03 16:09:40 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 16:09:42 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
 
 #define NMAP_DEFAULT_TIMEOUT_MS 1000
 #define NMAP_DEFAULT_MAX_IN_FLIGHT 50
@@ -25,6 +37,15 @@ int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
+	}
+	if (!config->cli.ports_specified)
+	{
+		if (!nmap_parse_ports(config, "1-1024"))
+		{
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
 	}
 	if (config->cli.scan_specified)
 		config->scan.scan_mask = config->cli.scan_mask;
