@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/30 08:32:39 by eric              #+#    #+#             */
-/*   Updated: 2026/08/03 12:07:00 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/20 14:07:59 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,8 @@ int	parse_flag(t_nmap_config *config, int argc, char **argv, int *i)
 		return (parse_ip(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--speedup"))
 		return (parse_speedup(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--timeout"))
+		return (parse_timeout(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--port") || nmap_streq(argv[*i], "--ports"))
 		return (parse_port(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--file"))

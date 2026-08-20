@@ -59,6 +59,7 @@ SRCS :=	srcs/main.c \
 		srcs/parsing/pars_speedup.c \
 		srcs/parsing/pars_scan.c \
 		srcs/parsing/pars_ip.c \
+		srcs/parsing/pars_timeout.c \
 		srcs/parsing/pars_file.c \
 		srcs/parsing/parsing.c \
 		srcs/packet/link_offset.c \
