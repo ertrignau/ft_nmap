@@ -149,6 +149,8 @@ typedef struct s_nmap_scan
 	int					tcp_timeout_ms;
 	int					udp_timeout_ms;
 
+	int					retries;
+
 	int					max_in_flight;
 	int					max_outstanding_per_worker;
 	int					udp_max_in_flight;

@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/30 08:42:33 by eric              #+#    #+#             */
-/*   Updated: 2026/08/03 16:10:34 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/20 14:35:46 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -132,5 +132,6 @@ int	parse_port(t_nmap_config *config, int argc, char **argv, int *i)
 		return (0);
 	}
 	config->cli.ports_arg = argv[*i];
+	config->cli.ports_specified = 1;
 	return (1);
 }

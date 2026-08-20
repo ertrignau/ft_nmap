@@ -45,6 +45,8 @@ int	    parse_port(t_nmap_config *config, int argc, char **argv, int *i);
 int	    parse_scan(t_nmap_config *config, int argc, char **argv, int *i);
 int	    parse_speedup(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_timeout(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_probes_per_thread(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_retries(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_file(t_nmap_config *config, int argc, char **argv, int *i);
 int		nmap_parse_cli(t_nmap_config *config, int argc, char **argv, int *exit_status);
 int	    scan_name_to_mask(const char *name, uint32_t *mask);

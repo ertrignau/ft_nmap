@@ -6,14 +6,15 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/03 16:09:40 by eric              #+#    #+#             */
-/*   Updated: 2026/08/03 16:09:42 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/20 14:55:51 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ft_nmap.h"
 
-#define NMAP_DEFAULT_TIMEOUT_MS 1000
-#define NMAP_DEFAULT_MAX_IN_FLIGHT 50
+#define NMAP_DEFAULT_TIMEOUT_MS 	1000
+#define NMAP_DEFAULT_MAX_IN_FLIGHT	50
+#define NMAP_DEFAULT_RETRIES		1
 
 #define NMAP_DEFAULT_SCAN_MASK \
 	(NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN \
@@ -55,6 +56,10 @@ int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
 		config->scan.timeout_ms = config->cli.timeout_ms;
 	else
 		config->scan.timeout_ms = NMAP_DEFAULT_TIMEOUT_MS;
+	if (config->cli.retries_specified)
+		config->scan.retries = config->cli.retries;
+	else
+		config->scan.retries = NMAP_DEFAULT_RETRIES;
 	if (config->cli.probes_per_thread_specified)
 		config->scan.max_outstanding_per_worker
 			= config->cli.probes_per_thread;

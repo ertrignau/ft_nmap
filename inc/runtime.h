@@ -25,16 +25,18 @@ typedef enum e_scan_result
 typedef struct s_probe
 {
 	uint32_t		target_ip;
-	uint16_t	dst_port;
-	uint16_t	src_port;
-	uint32_t	seq;
+	uint16_t		dst_port;
+	uint16_t		src_port;
+	uint32_t		seq;
 
-	uint32_t	scan_type;
-	uint64_t	sent_at_ms;
+	uint32_t		scan_type;
+	uint64_t		sent_at_ms;
 
 	t_probe_state	state;
 	t_scan_result	result;
-	int		sender_id;
+	int				sender_id;
+
+	int				retry_count;
 }	t_probe;
 
 typedef struct s_nmap_runtime

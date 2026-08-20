@@ -92,6 +92,27 @@ static int	probe_is_udp(t_probe *probe)
 	return (probe && probe->scan_type == NMAP_SCAN_UDP);
 }
 
+static void	retry_probe(t_nmap_config *config, t_probe *probe)
+{
+	size_t	index;
+
+	if (config->runtime.in_flight_count > 0)
+		config->runtime.in_flight_count--;
+	if (probe_is_udp(probe)
+		&& config->runtime.udp_in_flight_count > 0)
+		config->runtime.udp_in_flight_count--;
+	nmap_sender_note_probe_done_locked(config, probe);
+	probe->retry_count++;
+	probe->sent_at_ms = 0;
+	probe->state = PROBE_PENDING;
+	probe->result = SCAN_RESULT_UNKNOWN;
+	probe->sender_id = -1;
+	index = (size_t)(probe - config->runtime.probes);
+	if (index < config->runtime.next_to_send)
+		config->runtime.next_to_send = index;
+}
+
+
 /**
  * @brief Mark one in-flight probe as done after timeout.
  *
@@ -100,6 +121,11 @@ static int	probe_is_udp(t_probe *probe)
  */
 static void	expire_probe(t_nmap_config *config, t_probe *probe)
 {
+	if (probe->retry_count < config->scan.retries)
+	{
+		retry_probe(config, probe);
+		return ;
+	}
 	probe->result = get_timeout_result(probe->scan_type);
 	probe->state = PROBE_DONE;
 	if (config->runtime.in_flight_count > 0)
