@@ -247,7 +247,7 @@ static int	handle_captured_packet(t_nmap_config *config,
 		return (0);
 	}
 	PROF_COUNT(NMAP_PROF_PACKET_MATCHED);
-	mark_probe_done(config, probe, result);
+	mark_probe_done(config, probe, result, get_reply_reason(&reply));
 	return (1);
 }
 
