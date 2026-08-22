@@ -63,6 +63,7 @@ SRCS :=	srcs/main.c \
 		srcs/parsing/pars_probes.c \
 		srcs/parsing/pars_retries.c \
 		srcs/parsing/pars_file.c \
+		srcs/parsing/pars_bool.c \
 		srcs/parsing/parsing.c \
 		srcs/packet/link_offset.c \
 		srcs/init/init.c \
