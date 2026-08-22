@@ -270,6 +270,53 @@ static void	print_port_line(t_nmap_config *config, uint16_t port)
 	printf("\n");
 }
 
+
+/*
+ * @brief Check whether a port has at least one open result.
+ *
+ * @param config Global nmap configuration.
+ * @param port Destination port.
+ *
+ * @return 1 if at least one scan type returned open, 0 otherwise.
+*/
+
+static int	port_has_open_result(t_nmap_config *config, uint16_t port)
+{
+	t_probe	*probe;
+
+	probe = find_probe(config, port, NMAP_SCAN_SYN);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	probe = find_probe(config, port, NMAP_SCAN_NULL);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	probe = find_probe(config, port, NMAP_SCAN_FIN);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	probe = find_probe(config, port, NMAP_SCAN_XMAS);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	probe = find_probe(config, port, NMAP_SCAN_ACK);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	probe = find_probe(config, port, NMAP_SCAN_UDP);
+	if (probe && probe->state == PROBE_DONE
+		&& probe->result == SCAN_RESULT_OPEN)
+		return (1);
+
+	return (0);
+}
+
 /**
  * @brief Print the final scan report.
  *
@@ -295,7 +342,12 @@ void	nmap_print_report(t_nmap_config *config)
 	i = 0;
 	while (i < config->scan.port_count)
 	{
-		if (!config->cli.hide_uninteresting
+		if (config->cli.open_only)
+		{
+			if (port_has_open_result(config, config->scan.ports[i]))
+				print_port_line(config, config->scan.ports[i]);
+		}
+		else if (!config->cli.hide_uninteresting
 			|| port_line_is_interesting(config, config->scan.ports[i]))
 			print_port_line(config, config->scan.ports[i]);
 		i++;
