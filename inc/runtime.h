@@ -4,6 +4,16 @@
 # include <stdint.h>
 # include <stddef.h>
 
+typedef enum e_scan_reason
+{
+	SCAN_REASON_NONE = 0,
+	SCAN_REASON_SYN_ACK,
+	SCAN_REASON_RST,
+	SCAN_REASON_UDP_REPLY,
+	SCAN_REASON_ICMP_UNREACH,
+	SCAN_REASON_TIMEOUT
+}	t_scan_reason;
+
 typedef enum e_probe_state
 {
 	PROBE_PENDING = 0,
@@ -34,6 +44,7 @@ typedef struct s_probe
 
 	t_probe_state	state;
 	t_scan_result	result;
+	t_scan_reason	reason;
 	int				sender_id;
 
 	int				retry_count;

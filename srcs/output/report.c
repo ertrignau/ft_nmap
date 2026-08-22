@@ -82,6 +82,29 @@ static int	scan_type_enabled(t_nmap_config *config, uint32_t scan_type)
 }
 
 /**
+ * @brief Return the name of a scan reason.
+ *
+ * @param reason Scan reason.
+ *
+ * @return Name of the scan reason, or "none" if not applicable.
+*/
+
+static const char	*scan_reason_name(t_scan_reason reason)
+{
+	if (reason == SCAN_REASON_SYN_ACK)
+		return ("syn-ack");
+	if (reason == SCAN_REASON_RST)
+		return ("rst");
+	if (reason == SCAN_REASON_UDP_REPLY)
+		return ("udp-reply");
+	if (reason == SCAN_REASON_ICMP_UNREACH)
+		return ("icmp-unreach");
+	if (reason == SCAN_REASON_TIMEOUT)
+		return ("timeout");
+	return ("none");
+}
+
+/**
  * @brief Return the display string for a probe.
  *
  * @param probe Probe to display.
@@ -214,7 +237,7 @@ static int	port_line_is_interesting(t_nmap_config *config, uint16_t port)
 static void	print_header_column(t_nmap_config *config, uint32_t scan_type)
 {
 	if (scan_type_enabled(config, scan_type))
-		printf("%-16s", scan_type_name(scan_type));
+		printf("%-24s", scan_type_name(scan_type));
 }
 
 /**
@@ -249,7 +272,18 @@ static void	print_result_column(t_nmap_config *config,
 	if (!scan_type_enabled(config, scan_type))
 		return ;
 	probe = find_probe(config, port, scan_type);
-	printf("%-16s", probe_display_result(probe));
+	if (!config->cli.show_reason)
+	{
+		printf("%-16s", probe_display_result(probe));
+		return ;
+	}
+	if (!probe)
+	{
+		printf("%-24s", "unknown");
+		return ;
+	}
+	printf("%s(%s)", probe_display_result(probe),
+		scan_reason_name(probe->reason));
 }
 
 /**

@@ -127,10 +127,12 @@ static void	expire_probe(t_nmap_config *config, t_probe *probe)
 		return ;
 	}
 	probe->result = get_timeout_result(probe->scan_type);
+	probe->reason = SCAN_REASON_TIMEOUT;
 	probe->state = PROBE_DONE;
 	if (config->runtime.in_flight_count > 0)
 		config->runtime.in_flight_count--;
-	if (probe_is_udp(probe) && config->runtime.udp_in_flight_count > 0)
+	if (probe_is_udp(probe)
+		&& config->runtime.udp_in_flight_count > 0)
 		config->runtime.udp_in_flight_count--;
 	nmap_sender_note_probe_done_locked(config, probe);
 	config->runtime.done_count++;

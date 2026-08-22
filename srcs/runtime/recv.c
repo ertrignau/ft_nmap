@@ -144,6 +144,33 @@ static int	probe_is_udp(t_probe *probe)
 	return (probe && probe->scan_type == NMAP_SCAN_UDP);
 }
 
+
+/**
+ * @brief Return the scan reason for a parsed reply.
+ *
+ * @param reply Parsed reply.
+ *
+ * @return Scan reason, or SCAN_REASON_NONE if not applicable.
+ */
+
+static t_scan_reason	get_reply_reason(t_nmap_reply *reply)
+{
+	if (!reply)
+		return (SCAN_REASON_NONE);
+	if (reply->type == NMAP_REPLY_UDP)
+		return (SCAN_REASON_UDP_REPLY);
+	if (reply->type == NMAP_REPLY_ICMP)
+		return (SCAN_REASON_ICMP_UNREACH);
+	if (reply->type == NMAP_REPLY_TCP)
+	{
+		if ((reply->tcp_flags & 0x12) == 0x12)
+			return (SCAN_REASON_SYN_ACK);
+		if (reply->tcp_flags & 0x04)
+			return (SCAN_REASON_RST);
+	}
+	return (SCAN_REASON_NONE);
+}
+
 /**
  * @brief Mark a matched probe as done.
  *
@@ -152,7 +179,7 @@ static int	probe_is_udp(t_probe *probe)
  * @param result Classification result.
  */
 static void	mark_probe_done(t_nmap_config *config, t_probe *probe,
-		t_scan_result result)
+		t_scan_result result, t_scan_reason reason)
 {
 	pthread_mutex_lock(&config->sender_pool.runtime_lock);
 	if (probe->state == PROBE_DONE)
@@ -161,6 +188,7 @@ static void	mark_probe_done(t_nmap_config *config, t_probe *probe,
 		return ;
 	}
 	probe->result = result;
+	probe->reason = reason;
 	probe->state = PROBE_DONE;
 	if (config->runtime.in_flight_count > 0)
 		config->runtime.in_flight_count--;

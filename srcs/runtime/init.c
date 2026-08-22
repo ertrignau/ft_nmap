@@ -110,6 +110,7 @@ static int	init_probe(t_nmap_config *config, t_probe *probe,
 	probe->result = SCAN_RESULT_UNKNOWN;
 	probe->sender_id = -1;
 	probe->retry_count = 0;
+	probe->reason = SCAN_REASON_NONE;
 	return (index_probe_by_src_port(config, probe));
 }
 
