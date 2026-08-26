@@ -1,4 +1,5 @@
 #include "config.h"
+#include "net/address.h"
 
 #include <errno.h>
 #include <ifaddrs.h>
@@ -9,46 +10,48 @@
 #include <unistd.h>
 
 /**
- * @brief Ask the kernel which IPv4 source address it would use.
+ * @brief Ask the kernel which source address it would route to the target.
  *
- * @param target Resolved destination.
- * @param src_addr Output source address.
- * @param saved_error Output errno value on failure.
+ * @param target Resolved IPv4/IPv6 destination.
+ * @param src_addr Output source address selected by the kernel.
+ * @param saved_error Output errno-style error on failure.
  *
  * @return 1 on success, 0 on failure.
  *
- * @note Connecting a UDP socket does not send a packet. It only associates
- *       the socket with a destination and lets the kernel perform route
- *       selection.
+ * @note Connecting this UDP socket does not perform the scan and normally sends
+ *       no datagram. It delegates route/source-address selection to the kernel.
  */
 static int	find_source_address(const t_nmap_target *target,
-		struct sockaddr_in *src_addr, int *saved_error)
+		t_nmap_ip_addr *src_addr, int *saved_error)
 {
-	struct sockaddr_in	dst_addr;
-	socklen_t			addr_len;
-	int					fd;
-	int					error;
+	struct sockaddr_storage	dst;
+	struct sockaddr_storage	local;
+	socklen_t				dst_len;
+	socklen_t				local_len;
+	int						fd;
+	int						error;
 
-	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (!nmap_ip_to_sockaddr(&target->addr, 1, &dst, &dst_len))
+	{
+		*saved_error = EAFNOSUPPORT;
+		return (0);
+	}
+	fd = socket(target->addr.family, SOCK_DGRAM, IPPROTO_UDP);
 	if (fd < 0)
 	{
 		*saved_error = errno;
 		return (0);
 	}
-	dst_addr = target->addr;
-	dst_addr.sin_port = htons(1);
-	if (connect(fd, (struct sockaddr *)&dst_addr,
-			sizeof(dst_addr)) < 0)
+	if (connect(fd, (struct sockaddr *)&dst, dst_len) < 0)
 	{
 		error = errno;
 		close(fd);
 		*saved_error = error;
 		return (0);
 	}
-	memset(src_addr, 0, sizeof(*src_addr));
-	addr_len = sizeof(*src_addr);
-	if (getsockname(fd, (struct sockaddr *)src_addr,
-			&addr_len) < 0)
+	memset(&local, 0, sizeof(local));
+	local_len = sizeof(local);
+	if (getsockname(fd, (struct sockaddr *)&local, &local_len) < 0)
 	{
 		error = errno;
 		close(fd);
@@ -56,35 +59,31 @@ static int	find_source_address(const t_nmap_target *target,
 		return (0);
 	}
 	close(fd);
-	if (src_addr->sin_family != AF_INET
-		|| addr_len < (socklen_t)sizeof(struct sockaddr_in))
+	if (!nmap_ip_from_sockaddr(src_addr,
+			(struct sockaddr *)&local, local_len))
 	{
 		*saved_error = EAFNOSUPPORT;
 		return (0);
 	}
-	src_addr->sin_port = 0;
 	return (1);
 }
 
 /**
- * @brief Find the interface owning one IPv4 source address.
+ * @brief Find the interface owning the selected source address.
  *
- * @param src_addr Source IPv4 address selected by the kernel.
- * @param iface Destination interface-name buffer.
- * @param iface_size Size of the interface-name buffer.
- * @param saved_error Output errno-style value on failure.
- *
- * @return 1 on success, 0 if no unique interface can be selected.
+ * @note For IPv6 this also gives an ifindex, required to use link-local scoped
+ *       addresses correctly.
  */
-static int	find_source_interface(const struct sockaddr_in *src_addr,
-		char *iface, size_t iface_size, int *saved_error)
+static int	find_source_interface(const t_nmap_ip_addr *src_addr,
+		char *iface, size_t iface_size, unsigned int *ifindex,
+		int *saved_error)
 {
-	struct ifaddrs			*ifaddr;
-	struct ifaddrs			*current;
-	const struct sockaddr_in	*current_addr;
-	char					found_iface[64];
-	size_t					name_len;
-	int						found;
+	struct ifaddrs	*ifaddr;
+	struct ifaddrs	*current;
+	t_nmap_ip_addr	current_addr;
+	size_t			name_len;
+	socklen_t		addr_len;
+	int				found;
 
 	ifaddr = NULL;
 	if (getifaddrs(&ifaddr) < 0)
@@ -92,41 +91,38 @@ static int	find_source_interface(const struct sockaddr_in *src_addr,
 		*saved_error = errno;
 		return (0);
 	}
-	memset(found_iface, 0, sizeof(found_iface));
 	found = 0;
 	current = ifaddr;
 	while (current)
 	{
-		if (current->ifa_name
-			&& current->ifa_addr
-			&& current->ifa_addr->sa_family == AF_INET
-			&& (current->ifa_flags & IFF_UP))
+		if (src_addr->family == AF_INET)
+			addr_len = sizeof(struct sockaddr_in);
+		else
+			addr_len = sizeof(struct sockaddr_in6);
+		if (current->ifa_name && current->ifa_addr
+			&& (current->ifa_flags & IFF_UP)
+			&& current->ifa_addr->sa_family == src_addr->family
+			&& nmap_ip_from_sockaddr(&current_addr,
+				current->ifa_addr, addr_len)
+			&& nmap_ip_equal(src_addr, &current_addr))
 		{
-			current_addr
-				= (const struct sockaddr_in *)current->ifa_addr;
-			if (current_addr->sin_addr.s_addr
-				== src_addr->sin_addr.s_addr)
+			name_len = strlen(current->ifa_name);
+			if (name_len >= iface_size)
 			{
-				name_len = strlen(current->ifa_name);
-				if (name_len >= sizeof(found_iface)
-					|| name_len >= iface_size)
-				{
-					freeifaddrs(ifaddr);
-					*saved_error = ENAMETOOLONG;
-					return (0);
-				}
-				if (!found)
-				memcpy(found_iface, current->ifa_name,
-					name_len + 1);
-				else if (strcmp(found_iface,
-						current->ifa_name) != 0)
-				{
-					freeifaddrs(ifaddr);
-					*saved_error = EADDRNOTAVAIL;
-					return (0);
-				}
-				found = 1;
+				freeifaddrs(ifaddr);
+				*saved_error = ENAMETOOLONG;
+				return (0);
 			}
+			memcpy(iface, current->ifa_name, name_len + 1);
+			*ifindex = if_nametoindex(current->ifa_name);
+			if (*ifindex == 0)
+			{
+				freeifaddrs(ifaddr);
+				*saved_error = errno ? errno : ENODEV;
+				return (0);
+			}
+			found = 1;
+			break ;
 		}
 		current = current->ifa_next;
 	}
@@ -136,27 +132,18 @@ static int	find_source_interface(const struct sockaddr_in *src_addr,
 		*saved_error = ENODEV;
 		return (0);
 	}
-	memcpy(iface, found_iface, strlen(found_iface) + 1);
 	return (1);
 }
 
 /**
- * @brief Prepare the route used to reach the resolved target.
- *
- * @param config Global nmap configuration.
- * @param exit_status Output exit status set on route-resolution failure.
- *
- * @return 1 on success, 0 on failure.
+ * @brief Prepare source address, interface and scope for the current target.
  */
 int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 {
 	int	error;
 
-	if (!config
-		|| config->target.addr.sin_family != AF_INET
-		|| config->target.addr_len
-			< (socklen_t)sizeof(struct sockaddr_in)
-		|| config->target.ip[0] == '\0')
+	if (!config || (config->target.addr.family != AF_INET
+			&& config->target.addr.family != AF_INET6))
 	{
 		if (exit_status)
 			*exit_status = 1;
@@ -174,7 +161,7 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!inet_ntop(AF_INET, &config->route.src_addr.sin_addr,
+	if (!nmap_ip_ntop(&config->route.src_addr,
 			config->route.src_ip, sizeof(config->route.src_ip)))
 	{
 		config->route.error = errno;
@@ -184,15 +171,20 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 		return (0);
 	}
 	if (!find_source_interface(&config->route.src_addr,
-			config->route.iface, sizeof(config->route.iface), &error))
+			config->route.iface, sizeof(config->route.iface),
+			&config->route.ifindex, &error))
 	{
 		config->route.error = error;
-		fprintf(stderr,
-			"ft_nmap: cannot find interface for source %s: %s\n",
+		fprintf(stderr, "ft_nmap: cannot find interface for source %s: %s\n",
 			config->route.src_ip, strerror(error));
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	/* A naked fe80:: address needs the outgoing link to become usable. */
+	if (config->target.addr.family == AF_INET6
+		&& config->target.addr.scope_id == 0
+		&& IN6_IS_ADDR_LINKLOCAL(&config->target.addr.addr.v6))
+		config->target.addr.scope_id = config->route.ifindex;
 	return (1);
 }

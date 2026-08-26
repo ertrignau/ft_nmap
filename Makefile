@@ -34,41 +34,45 @@ PROFILE_OBJS_DIR := objs_profile
 #                                  SOURCES                                     #
 # **************************************************************************** #
 
-SRCS :=	srcs/main.c \
-		srcs/init/init.c \
-		srcs/init/prepare_scan_config.c \
-		srcs/init/targets.c \
-		srcs/cleanup/cleanup.c \
-		srcs/signal/signal.c \
-		srcs/net/target.c \
-		srcs/net/route.c \
-		srcs/net/socket.c \
-		srcs/net/pcap.c \
-		srcs/packet/tcp.c \
-		srcs/packet/udp.c \
-		srcs/packet/checksum.c \
-		srcs/packet/parse.c \
-		srcs/packet/link_offset.c \
-		srcs/runtime/init.c \
-		srcs/runtime/scheduler.c \
-		srcs/runtime/worker.c \
-		srcs/runtime/recv.c \
-		srcs/runtime/expire.c \
-		srcs/runtime/wait.c \
-		srcs/runtime/classify.c \
-		srcs/output/report.c \
-		srcs/parsing/pars_port.c \
-		srcs/parsing/parsing_utils.c \
-		srcs/parsing/pars_flags.c \
-		srcs/parsing/pars_speedup.c \
-		srcs/parsing/pars_scan.c \
-		srcs/parsing/pars_ip.c \
-		srcs/parsing/parsing.c
-DEBUG_SRCS :=	$(SRCS) \
-				srcs/debug/debug.c
+SRCS := srcs/main.c \
+	srcs/init/init.c \
+	srcs/init/prepare_scan_config.c \
+	srcs/init/targets.c \
+	srcs/cleanup/cleanup.c \
+	srcs/signal/signal.c \
+	srcs/net/address.c \
+	srcs/net/target.c \
+	srcs/net/route.c \
+	srcs/net/socket.c \
+	srcs/net/pcap.c \
+	srcs/packet/checksum.c \
+	srcs/packet/ipv4.c \
+	srcs/packet/ipv6.c \
+	srcs/packet/send.c \
+	srcs/packet/tcp.c \
+	srcs/packet/udp.c \
+	srcs/packet/link_offset.c \
+	srcs/packet/parse.c \
+	srcs/runtime/common.c \
+	srcs/runtime/init.c \
+	srcs/runtime/match.c \
+	srcs/runtime/classify.c \
+	srcs/runtime/recv.c \
+	srcs/runtime/expire.c \
+	srcs/runtime/scheduler.c \
+	srcs/runtime/worker.c \
+	srcs/runtime/wait.c \
+	srcs/output/report.c \
+	srcs/parsing/pars_port.c \
+	srcs/parsing/parsing_utils.c \
+	srcs/parsing/pars_flags.c \
+	srcs/parsing/pars_speedup.c \
+	srcs/parsing/pars_scan.c \
+	srcs/parsing/pars_ip.c \
+	srcs/parsing/parsing.c
 
-PROFILE_SRCS :=	$(SRCS) \
-				srcs/debug/profilage.c
+DEBUG_SRCS := $(SRCS) srcs/debug/debug.c
+PROFILE_SRCS := $(SRCS) srcs/debug/profilage.c
 
 # **************************************************************************** #
 #                                  OBJECTS                                     #
@@ -110,9 +114,7 @@ $(PROFILE_OBJS_DIR)/%.o: %.c
 	$(CC) $(CFLAGS) -DPROFILE $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
 
 clean:
-	$(RM) $(OBJS_DIR)
-	$(RM) $(DEBUG_OBJS_DIR)
-	$(RM) $(PROFILE_OBJS_DIR)
+	$(RM) $(OBJS_DIR) $(DEBUG_OBJS_DIR) $(PROFILE_OBJS_DIR)
 
 fclean: clean
 	$(RM) $(NAME)
@@ -181,7 +183,6 @@ lab-filtered-heavy:
 lab-profile-%:
 	$(MAKE) -C $(LAB_DIR) up PROFILE=$*
 
-
 # **************************************************************************** #
 #                                DEPENDENCIES                                  #
 # **************************************************************************** #
@@ -190,4 +191,7 @@ lab-profile-%:
 -include $(DEBUG_DEPS)
 -include $(PROFILE_DEPS)
 
-.PHONY: all debug profile clean fclean re run debug-run profile-run lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell lab-ip lab-ref-tcp lab-ref-udp lab-ref-all lab-scan lab-parallel lab-sniff lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed lab-mostly-closed lab-filtered-heavy
+.PHONY: all debug profile clean fclean re run debug-run profile-run \
+	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell \
+	lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed \
+	lab-mostly-closed lab-filtered-heavy

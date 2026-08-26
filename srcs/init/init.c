@@ -1,19 +1,18 @@
-
 #include "config.h"
 
 #include <string.h>
 
 /**
- * @brief Initialize the global configuration and resource sentinels.
+ * @brief Initialize global process state and invalid file-descriptor sentinels.
  *
  * @param config Global nmap configuration.
  * @param program_name Executable name received from argv[0].
- * @param exit_status Output exit status set on invalid input.
+ * @param exit_status Output status set on invalid input.
  *
  * @return 1 on success, 0 on failure.
  *
- * @note This is the only global memset of the configuration. Effective scan
- *       defaults are applied later by nmap_prepare_scan_config().
+ * @note Effective scan defaults are intentionally applied later by
+ *       nmap_prepare_scan_config().
  */
 int	nmap_init_config(t_nmap_config *config, const char *program_name,
 		int *exit_status)

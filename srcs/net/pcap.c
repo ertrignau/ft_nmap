@@ -1,54 +1,48 @@
 #include "config.h"
 
+#include <pcap/pcap.h>
 #include <stdio.h>
 #include <string.h>
-#include <pcap/pcap.h>
 
 #define NMAP_PCAP_SNAPLEN 65535
 #define NMAP_PCAP_TIMEOUT_MS 1
-#define NMAP_PCAP_FILTER_SIZE 512
+#define NMAP_PCAP_FILTER_SIZE 1024
 
 /**
- * @brief Build the BPF filter used by pcap.
+ * @brief Build the target-family BPF capture filter.
  *
- * @param config Global nmap configuration.
- * @param filter Destination buffer receiving the filter string.
- * @param filter_size Size of the destination buffer.
- *
- * @return 1 on success, 0 if the filter does not fit.
- *
- * @note TCP covers SYN, NULL, FIN, XMAS and ACK scans. UDP direct replies
- *       cover services that answer with UDP payloads. ICMP covers filtered
- *       errors and UDP port-unreachable replies.
+ * @note Direct replies are restricted to target -> local traffic. ICMP errors
+ *       may come from intermediate routers, so the error branch only requires
+ *       the packet to be addressed to the local source address.
  */
-static int	build_pcap_filter(t_nmap_config *config,
+static int	build_pcap_filter(const t_nmap_config *config,
 		char *filter, size_t filter_size)
 {
 	int	ret;
 
-	ret = snprintf(filter, filter_size,
-			"((tcp and src host %s and dst host %s)"
-			" or (udp and src host %s and dst host %s)"
-			" or (icmp and dst host %s))",
-			config->target.ip,
-			config->route.src_ip,
-			config->target.ip,
-			config->route.src_ip,
-			config->route.src_ip);
-	if (ret < 0 || (size_t)ret >= filter_size)
+	if (config->target.addr.family == AF_INET)
+	{
+		ret = snprintf(filter, filter_size,
+				"((ip and src host %s and dst host %s)"
+				" or (icmp and dst host %s))",
+				config->target.ip, config->route.src_ip,
+				config->route.src_ip);
+	}
+	else if (config->target.addr.family == AF_INET6)
+	{
+		ret = snprintf(filter, filter_size,
+				"((ip6 and src host %s and dst host %s)"
+				" or (icmp6 and dst host %s))",
+				config->target.ip, config->route.src_ip,
+				config->route.src_ip);
+	}
+	else
 		return (0);
-	return (1);
+	return (ret >= 0 && (size_t)ret < filter_size);
 }
 
 /**
- * @brief Apply pcap options before activating the handle.
- *
- * @param handle Pcap handle created with pcap_create().
- *
- * @return 1 on success, 0 on pcap option failure.
- *
- * @note The timeout is kept very short so pcap does not buffer packets for
- *       too long before the runtime loop drains available replies.
+ * @brief Apply capture settings before activation.
  */
 static int	apply_pcap_settings(pcap_t *handle)
 {
@@ -62,21 +56,13 @@ static int	apply_pcap_settings(pcap_t *handle)
 }
 
 /**
- * @brief Create and activate the pcap handle.
- *
- * @param config Global nmap configuration.
- *
- * @return 1 on success, 0 on pcap creation, setup or activation failure.
- *
- * @note This only prepares the capture path. No probe should be sent before
- *       this function and the filter setup have succeeded.
+ * @brief Create and activate the pcap handle on the selected route interface.
  */
 static int	open_pcap_handle(t_nmap_config *config)
 {
 	pcap_t	*handle;
 
 	memset(config->capture.errbuf, 0, sizeof(config->capture.errbuf));
-	fprintf(stderr, "pcap iface: [%s]\n", config->route.iface);
 	handle = pcap_create(config->route.iface, config->capture.errbuf);
 	if (!handle)
 	{
@@ -86,15 +72,13 @@ static int	open_pcap_handle(t_nmap_config *config)
 	}
 	if (!apply_pcap_settings(handle))
 	{
-		fprintf(stderr, "ft_nmap: pcap settings failed: %s\n",
-			pcap_geterr(handle));
+		fprintf(stderr, "ft_nmap: pcap settings: %s\n", pcap_geterr(handle));
 		pcap_close(handle);
 		return (0);
 	}
 	if (pcap_activate(handle) < 0)
 	{
-		fprintf(stderr, "ft_nmap: pcap_activate: %s\n",
-			pcap_geterr(handle));
+		fprintf(stderr, "ft_nmap: pcap_activate: %s\n", pcap_geterr(handle));
 		pcap_close(handle);
 		return (0);
 	}
@@ -103,11 +87,7 @@ static int	open_pcap_handle(t_nmap_config *config)
 }
 
 /**
- * @brief Compile and install the BPF filter.
- *
- * @param config Global nmap configuration.
- *
- * @return 1 on success, 0 on filter build, compile or install failure.
+ * @brief Compile and install the capture filter.
  */
 static int	install_pcap_filter(t_nmap_config *config)
 {
@@ -138,15 +118,7 @@ static int	install_pcap_filter(t_nmap_config *config)
 }
 
 /**
- * @brief Prepare pcap for the runtime event loop.
- *
- * @param config Global nmap configuration.
- *
- * @return 1 on success, 0 if pcap cannot provide a selectable fd or cannot be
- *         switched to non-blocking mode.
- *
- * @note The selectable fd is used by select(); non-blocking mode lets the
- *       receive step drain all currently available packets without blocking.
+ * @brief Expose pcap as a non-blocking selectable fd for the event loop.
  */
 static int	prepare_pcap_fd(t_nmap_config *config)
 {
@@ -168,15 +140,7 @@ static int	prepare_pcap_fd(t_nmap_config *config)
 }
 
 /**
- * @brief Prepare packet capture before the first probe is sent.
- *
- * @param config Global nmap configuration.
- * @param exit_status Output exit status set on fatal setup error.
- *
- * @return 1 on success, 0 on pcap setup failure.
- *
- * @note This function owns the complete pcap setup sequence: create, configure,
- *       activate, filter, selectable fd. On failure, any opened handle is closed.
+ * @brief Prepare packet capture before the first probe is scheduled.
  */
 int	nmap_prepare_pcap(t_nmap_config *config, int *exit_status)
 {
@@ -186,7 +150,7 @@ int	nmap_prepare_pcap(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	config->capture.handle = NULL;
+	memset(&config->capture, 0, sizeof(config->capture));
 	config->capture.fd = -1;
 	config->capture.datalink = -1;
 	if (!open_pcap_handle(config)

@@ -1,90 +1,55 @@
 #include "config.h"
 #include "debug/debug.h"
+#include "runtime/runtime_internal.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/time.h>
 
-/**
- * @brief Return current time in microseconds.
- *
- * @return Current timestamp in microseconds.
- */
-static uint64_t	get_time_us(void)
+/** Return current wall-clock time in microseconds for profiling/select. */
+static uint64_t	now_us(void)
 {
 	struct timeval	tv;
 
 	gettimeofday(&tv, NULL);
-	return ((uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec);
+	return ((uint64_t)tv.tv_sec * 1000000ULL
+		+ (uint64_t)tv.tv_usec);
 }
 
-/**
- * @brief Convert milliseconds to struct timeval.
- *
- * @param ms Duration in milliseconds.
- * @param timeout Destination timeval.
- */
-static void	set_timeout_ms(uint64_t ms, struct timeval *timeout)
+/** Return the timeout configured for one probe family. */
+static int	probe_timeout_ms(const t_nmap_config *config,
+		const t_probe *probe)
 {
-	timeout->tv_sec = ms / 1000;
-	timeout->tv_usec = (ms % 1000) * 1000;
-}
-
-/**
- * @brief Return the timeout for a specific probe.
- *
- * @param config Global nmap configuration.
- * @param probe Probe to inspect.
- *
- * @return Timeout in milliseconds.
- */
-static int	get_probe_timeout_ms(t_nmap_config *config, t_probe *probe)
-{
-	if (probe->scan_type == NMAP_SCAN_UDP)
+	if (nmap_probe_is_udp(probe))
 		return (config->scan.udp_timeout_ms);
 	return (config->scan.tcp_timeout_ms);
 }
 
-/**
- * @brief Compute remaining time before one probe expires.
- *
- * @param probe In-flight runtime probe.
- * @param now_ms Current timestamp in milliseconds.
- * @param timeout_ms Configured probe timeout in milliseconds.
- *
- * @return Remaining milliseconds before timeout, or 0 if already expired.
- */
-static uint64_t	get_probe_remaining_ms(t_probe *probe,
-		uint64_t now_ms, int timeout_ms)
+/** Compute remaining milliseconds before one outstanding probe expires. */
+static uint64_t	remaining_probe_ms(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
 {
-	uint64_t	elapsed_ms;
+	uint64_t	elapsed;
+	int			timeout_ms;
 
-	if (timeout_ms <= 0)
+	timeout_ms = probe_timeout_ms(config, probe);
+	if (timeout_ms <= 0 || now_ms <= probe->sent_at_ms)
+		return ((timeout_ms <= 0) ? 0 : (uint64_t)timeout_ms);
+	elapsed = now_ms - probe->sent_at_ms;
+	if (elapsed >= (uint64_t)timeout_ms)
 		return (0);
-	if (now_ms <= probe->sent_at_ms)
-		return ((uint64_t)timeout_ms);
-	elapsed_ms = now_ms - probe->sent_at_ms;
-	if (elapsed_ms >= (uint64_t)timeout_ms)
-		return (0);
-	return ((uint64_t)timeout_ms - elapsed_ms);
+	return ((uint64_t)timeout_ms - elapsed);
 }
 
-/**
- * @brief Return remaining UDP pacing delay.
- *
- * @param config Global nmap configuration.
- * @param now_ms Current timestamp in milliseconds.
- *
- * @return Remaining milliseconds before next UDP dispatch is allowed.
- */
-static uint64_t	get_udp_gap_remaining_ms(t_nmap_config *config, uint64_t now_ms)
+/** Compute remaining global UDP pacing delay. */
+static uint64_t	remaining_udp_gap_ms(const t_nmap_config *config,
+		uint64_t now_ms)
 {
 	uint64_t	elapsed;
 
-	if (config->scan.udp_dispatch_gap_ms <= 0)
-		return (0);
-	if (config->runtime.last_udp_dispatch_ms == 0)
+	if (config->scan.udp_dispatch_gap_ms <= 0
+		|| config->runtime.last_udp_dispatch_ms == 0)
 		return (0);
 	elapsed = now_ms - config->runtime.last_udp_dispatch_ms;
 	if (elapsed >= (uint64_t)config->scan.udp_dispatch_gap_ms)
@@ -92,101 +57,87 @@ static uint64_t	get_udp_gap_remaining_ms(t_nmap_config *config, uint64_t now_ms)
 	return ((uint64_t)config->scan.udp_dispatch_gap_ms - elapsed);
 }
 
-/**
- * @brief Register a candidate wait duration.
- *
- * @param wait_ms Destination wait duration.
- * @param found Whether a previous wait was already found.
- * @param candidate_ms Candidate duration in milliseconds.
- */
-static void	update_wait_ms(uint64_t *wait_ms, int *found,
-		uint64_t candidate_ms)
+/** Register one candidate duration and preserve the nearest deadline. */
+static void	update_wait(uint64_t *wait_ms, int *found, uint64_t candidate)
 {
-	if (!*found || candidate_ms < *wait_ms)
-		*wait_ms = candidate_ms;
+	if (!*found || candidate < *wait_ms)
+		*wait_ms = candidate;
 	*found = 1;
 }
 
-/**
- * @brief Find the next useful scheduler wait while runtime_lock is held.
- *
- * @param config Global nmap configuration.
- * @param wait_ms Destination wait duration in milliseconds.
- * @param now_us Output timestamp used to compute this wait.
- *
- * @return 1 if a wait is useful, 0 otherwise.
- */
-static int	get_next_wait_ms_locked(t_nmap_config *config,
-		uint64_t *wait_ms, uint64_t *now_us)
+/** Return whether a PENDING UDP probe exists while runtime.lock is held. */
+static int	has_pending_udp_locked(const t_nmap_config *config)
 {
-	size_t		i;
-	uint64_t	now_ms;
-	uint64_t	remaining_ms;
-	int			found;
+	size_t	i;
 
-	if (!now_us)
-		return (0);
-	*now_us = get_time_us();
-	now_ms = *now_us / 1000;
-	found = 0;
-	if (config->runtime.queued_count > 0)
-		update_wait_ms(wait_ms, &found, 1);
 	i = 0;
 	while (i < config->runtime.probe_count)
 	{
-		if (config->runtime.probes[i].state == PROBE_IN_FLIGHT)
+		if (config->runtime.probes[i].state == PROBE_PENDING
+			&& nmap_probe_is_udp(&config->runtime.probes[i]))
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/**
+ * @brief Compute how long select() may sleep before the next useful event.
+ *
+ * Candidates are outstanding-probe deadlines, queued-worker progress and UDP
+ * pacing. Pcap readability can wake select earlier at any time.
+ */
+static int	get_next_wait_ms(t_nmap_config *config,
+		uint64_t *wait_ms, uint64_t *sample_us)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	uint64_t	remaining;
+	int			found;
+
+	*sample_us = now_us();
+	now_ms = *sample_us / 1000ULL;
+	found = 0;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (config->runtime.queued_count > 0)
+		update_wait(wait_ms, &found, 1);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_OUTSTANDING)
 		{
-			remaining_ms = get_probe_remaining_ms(&config->runtime.probes[i],
-					now_ms,
-					get_probe_timeout_ms(config, &config->runtime.probes[i]));
-			update_wait_ms(wait_ms, &found, remaining_ms);
+			remaining = remaining_probe_ms(config,
+					&config->runtime.probes[i], now_ms);
+			update_wait(wait_ms, &found, remaining);
 		}
 		i++;
 	}
-	remaining_ms = get_udp_gap_remaining_ms(config, now_ms);
-	if (remaining_ms > 0)
-		update_wait_ms(wait_ms, &found, remaining_ms);
+	if (has_pending_udp_locked(config))
+	{
+		remaining = remaining_udp_gap_ms(config, now_ms);
+		if (remaining > 0)
+			update_wait(wait_ms, &found, remaining);
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
 	return (found);
 }
 
-/**
- * @brief Find the next useful scheduler wait.
- *
- * @param config Global nmap configuration.
- * @param wait_ms Destination wait duration in milliseconds.
- * @param now_us Output timestamp used to compute this wait.
- *
- * @return 1 if a wait is useful, 0 otherwise.
- */
-static int	get_next_wait_ms(t_nmap_config *config,
-		uint64_t *wait_ms, uint64_t *now_us)
+/** Convert a millisecond duration to select() timeval form. */
+static void	set_timeval(uint64_t ms, struct timeval *timeout)
 {
-	int	found;
-
-	pthread_mutex_lock(&config->sender_pool.runtime_lock);
-	found = get_next_wait_ms_locked(config, wait_ms, now_us);
-	pthread_mutex_unlock(&config->sender_pool.runtime_lock);
-	return (found);
+	timeout->tv_sec = ms / 1000ULL;
+	timeout->tv_usec = (ms % 1000ULL) * 1000ULL;
 }
 
 /**
- * @brief Wait for the next useful runtime event.
- *
- * @param config Global nmap configuration.
- * @param exit_status Output exit status set on fatal select error.
- *
- * @return 1 on success, 0 on fatal select error.
- *
- * @note This waits on the pcap fd, but never longer than the next probe
- *       timeout, a queued worker transition, or UDP pacing deadline. EINTR is
- *       not fatal because SIGINT is handled by the main loop.
+ * @brief Block until pcap activity or the nearest runtime deadline.
  */
 int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 {
 	fd_set			readfds;
 	struct timeval	timeout;
 	uint64_t		wait_ms;
-	uint64_t		now_us;
+	uint64_t		before_us;
 	uint64_t		after_us;
 	int				ret;
 
@@ -196,15 +147,16 @@ int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!get_next_wait_ms(config, &wait_ms, &now_us))
+	if (!get_next_wait_ms(config, &wait_ms, &before_us))
 		return (1);
 	FD_ZERO(&readfds);
 	FD_SET(config->capture.fd, &readfds);
-	set_timeout_ms(wait_ms, &timeout);
-	ret = select(config->capture.fd + 1, &readfds, NULL, NULL, &timeout);
-	after_us = get_time_us();
+	set_timeval(wait_ms, &timeout);
+	ret = select(config->capture.fd + 1,
+			&readfds, NULL, NULL, &timeout);
+	after_us = now_us();
 	PROF_ADD_VALUE(NMAP_PROF_SELECT_REQUESTED, wait_ms * 1000ULL);
-	PROF_ADD_VALUE(NMAP_PROF_SELECT_WAIT, after_us - now_us);
+	PROF_ADD_VALUE(NMAP_PROF_SELECT_WAIT, after_us - before_us);
 	if (ret < 0)
 	{
 		if (errno == EINTR)

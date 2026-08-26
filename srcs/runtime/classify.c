@@ -1,121 +1,126 @@
-#include "config.h"
-
-#include <netinet/tcp.h>
-#include <netinet/ip_icmp.h>
-
-#define TCP_FLAG_FIN 0x01
-#define TCP_FLAG_SYN 0x02
-#define TCP_FLAG_RST 0x04
-#define TCP_FLAG_ACK 0x10
+#include "runtime/runtime_internal.h"
+#include "net/address.h"
+#include "packet/wire.h"
 
 /**
- * @brief Check whether an ICMP unreachable code means filtered.
- *
- * @param code ICMP destination unreachable code.
- *
- * @return 1 if the code means filtered, 0 otherwise.
+ * @brief Return whether an ICMPv4 Destination Unreachable code participates in
+ *        the scan decision trees.
  */
-static int	icmp_code_is_filtered(uint8_t code)
+static int	icmp4_unreachable_code_is_known(uint8_t code)
 {
-	return (code == ICMP_NET_UNREACH
-		|| code == ICMP_HOST_UNREACH
-		|| code == ICMP_PROT_UNREACH
-		|| code == ICMP_NET_ANO
-		|| code == ICMP_HOST_ANO
-		|| code == ICMP_PKT_FILTERED);
+	return (code == 0 || code == 1 || code == 2 || code == 3
+		|| code == 9 || code == 10 || code == 13);
 }
 
 /**
- * @brief Classify a TCP reply for a TCP scan.
- *
- * @param probe Probe matched with the reply.
- * @param reply Parsed reply.
- *
- * @return Scan result, or SCAN_RESULT_UNKNOWN when the reply is not useful.
+ * @brief Classify a matched direct TCP response according to scan type.
  */
-static t_scan_result	classify_tcp_reply(t_probe *probe, t_nmap_reply *reply)
+static t_scan_result	classify_tcp_packet(const t_probe *probe,
+		const t_nmap_reply *reply)
 {
 	uint8_t	flags;
 
 	flags = reply->tcp_flags;
 	if (probe->scan_type == NMAP_SCAN_SYN)
 	{
-		if ((flags & TCP_FLAG_SYN) && (flags & TCP_FLAG_ACK))
+		if ((flags & NMAP_TCP_SYN) && (flags & NMAP_TCP_ACK))
 			return (SCAN_RESULT_OPEN);
-		if (flags & TCP_FLAG_RST)
+		if (flags & NMAP_TCP_RST)
 			return (SCAN_RESULT_CLOSED);
+		/* Split-handshake behavior: a matching SYN is evidence of OPEN. */
+		if (flags & NMAP_TCP_SYN)
+			return (SCAN_RESULT_OPEN);
 	}
 	else if (probe->scan_type == NMAP_SCAN_ACK)
 	{
-		if (flags & TCP_FLAG_RST)
+		if (flags & NMAP_TCP_RST)
 			return (SCAN_RESULT_UNFILTERED);
 	}
 	else if (probe->scan_type == NMAP_SCAN_NULL
 		|| probe->scan_type == NMAP_SCAN_FIN
 		|| probe->scan_type == NMAP_SCAN_XMAS)
 	{
-		if (flags & TCP_FLAG_RST)
+		if (flags & NMAP_TCP_RST)
 			return (SCAN_RESULT_CLOSED);
 	}
 	return (SCAN_RESULT_UNKNOWN);
 }
 
 /**
- * @brief Classify a UDP or ICMP reply for a UDP probe.
+ * @brief Classify one matched ICMPv4 error.
  *
- * @param reply Parsed reply.
- *
- * @return Scan result, or SCAN_RESULT_UNKNOWN when the reply is not useful.
+ * @note Unknown type/code pairs return UNKNOWN: they do not finalize the probe,
+ *       so the runtime continues waiting/retransmitting according to policy.
  */
-static t_scan_result	classify_udp_reply(t_nmap_reply *reply)
+static t_scan_result	classify_icmp4(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (reply->type == NMAP_REPLY_UDP)
-		return (SCAN_RESULT_OPEN);
-	if (reply->type == NMAP_REPLY_ICMP
-		&& reply->icmp_type == ICMP_DEST_UNREACH)
+	if (reply->icmp_type == 11)
+		return (SCAN_RESULT_FILTERED);
+	if (reply->icmp_type != 3
+		|| !icmp4_unreachable_code_is_known(reply->icmp_code))
+		return (SCAN_RESULT_UNKNOWN);
+	if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 3)
 	{
-		if (reply->icmp_code == ICMP_PORT_UNREACH)
+		if (nmap_ip_equal(&reply->src_addr, &config->target.addr))
 			return (SCAN_RESULT_CLOSED);
-		if (icmp_code_is_filtered(reply->icmp_code))
-			return (SCAN_RESULT_FILTERED);
+		return (SCAN_RESULT_FILTERED);
 	}
-	return (SCAN_RESULT_UNKNOWN);
+	return (SCAN_RESULT_FILTERED);
 }
 
 /**
- * @brief Classify an ICMP reply for a TCP probe.
+ * @brief Classify one matched ICMPv6 error.
  *
- * @param reply Parsed reply.
- *
- * @return Scan result, or SCAN_RESULT_UNKNOWN when the reply is not useful.
+ * Destination Unreachable (type 1) codes 0..6 are filtering/unreachable
+ * evidence, except UDP port-unreachable 1/4 from the target itself -> CLOSED.
+ * Parameter Problem 4/0 is treated as OPEN indication; 4/1 as FILTERED.
  */
-static t_scan_result	classify_tcp_icmp_reply(t_nmap_reply *reply)
+static t_scan_result	classify_icmp6(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (reply->type == NMAP_REPLY_ICMP
-		&& reply->icmp_type == ICMP_DEST_UNREACH
-		&& icmp_code_is_filtered(reply->icmp_code))
+	if (reply->icmp_type == 1 && reply->icmp_code <= 6)
+	{
+		if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 4
+			&& nmap_ip_equal(&reply->src_addr, &config->target.addr))
+			return (SCAN_RESULT_CLOSED);
+		return (SCAN_RESULT_FILTERED);
+	}
+	if (reply->icmp_type == 4 && reply->icmp_code == 0)
+		return (SCAN_RESULT_OPEN);
+	if (reply->icmp_type == 4 && reply->icmp_code == 1)
 		return (SCAN_RESULT_FILTERED);
 	return (SCAN_RESULT_UNKNOWN);
 }
 
 /**
- * @brief Classify a matched reply for a probe.
- *
- * @param probe Probe matched with the reply.
- * @param reply Parsed reply.
- *
- * @return Final scan result, or SCAN_RESULT_UNKNOWN when the reply should be
- *         ignored.
+ * @brief Apply the per-scan response decision tree to one already-matched reply.
  */
-t_scan_result	nmap_classify_reply(t_probe *probe, t_nmap_reply *reply)
+t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (!probe || !reply)
+	if (!config || !probe || !reply)
 		return (SCAN_RESULT_UNKNOWN);
-	if (probe->scan_type == NMAP_SCAN_UDP)
-		return (classify_udp_reply(reply));
-	if (reply->type == NMAP_REPLY_TCP)
-		return (classify_tcp_reply(probe, reply));
-	if (reply->type == NMAP_REPLY_ICMP)
-		return (classify_tcp_icmp_reply(reply));
+	if (reply->type == NMAP_REPLY_TCP && probe->scan_type != NMAP_SCAN_UDP)
+		return (classify_tcp_packet(probe, reply));
+	if (reply->type == NMAP_REPLY_UDP && probe->scan_type == NMAP_SCAN_UDP)
+		return (SCAN_RESULT_OPEN);
+	if (reply->type == NMAP_REPLY_ICMP4)
+		return (classify_icmp4(config, probe, reply));
+	if (reply->type == NMAP_REPLY_ICMP6)
+		return (classify_icmp6(config, probe, reply));
+	return (SCAN_RESULT_UNKNOWN);
+}
+
+/**
+ * @brief Classify NO MATCHING RESPONSE AFTER RETRANSMISSION POLICY.
+ */
+t_scan_result	nmap_classify_no_response(uint32_t scan_type)
+{
+	if (scan_type == NMAP_SCAN_SYN || scan_type == NMAP_SCAN_ACK)
+		return (SCAN_RESULT_FILTERED);
+	if (scan_type == NMAP_SCAN_NULL || scan_type == NMAP_SCAN_FIN
+		|| scan_type == NMAP_SCAN_XMAS || scan_type == NMAP_SCAN_UDP)
+		return (SCAN_RESULT_OPEN_FILTERED);
 	return (SCAN_RESULT_UNKNOWN);
 }

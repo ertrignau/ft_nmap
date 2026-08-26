@@ -1,9 +1,8 @@
-
 #ifndef CONFIG_H
 # define CONFIG_H
 
-# include <arpa/inet.h>
-# include <netinet/in.h>
+# include "runtime.h"
+
 # include <pcap/pcap.h>
 # include <pthread.h>
 # include <stddef.h>
@@ -11,11 +10,13 @@
 # include <stdio.h>
 # include <string.h>
 
-# include "runtime.h"
-
 # define NMAP_MAX_PORTS 1024
 # define NMAP_MAX_THREADS 250
+# define NMAP_IFACE_NAME_MAX 64
 
+/**
+ * @brief Scan families required by the ft_nmap subject.
+ */
 typedef enum e_nmap_scan_type
 {
 	NMAP_SCAN_SYN = 1 << 0,
@@ -26,27 +27,39 @@ typedef enum e_nmap_scan_type
 	NMAP_SCAN_UDP = 1 << 5
 }	t_nmap_scan_type;
 
-typedef enum e_nmap_socket_error
-{
-	NMAP_SOCKET_OK = 0,
-	NMAP_SOCKET_RAW,
-	NMAP_SOCKET_HDRINCL
-}	t_nmap_socket_error;
-
-typedef struct s_nmap_worker		t_nmap_worker;
+typedef struct s_nmap_worker	t_nmap_worker;
 
 /**
- * @brief Sender pool state.
+ * @brief One sender-pool job.
  *
- * @note The main thread still owns pcap, classification and expiration. Workers
- *       only build and send packets.
+ * @note dispatch_id invalidates stale queued jobs when a logical probe changes
+ *       generation (for example after a late reply or retransmission cycle).
+ */
+typedef struct s_nmap_send_job
+{
+	t_probe		*probe;
+	uint32_t	dispatch_id;
+}	t_nmap_send_job;
+
+/**
+ * @brief Shared producer/consumer queue for sender threads.
+ *
+ * @note Workers only build/send packets. They never read pcap, classify a
+ *       reply, expire a probe, or choose which probe should be scheduled.
  */
 typedef struct s_nmap_sender_pool
 {
 	t_nmap_worker	*workers;
 	int				worker_count;
 
-	pthread_mutex_t	runtime_lock;
+	t_nmap_send_job	*queue;
+	size_t			queue_capacity;
+	size_t			queue_head;
+	size_t			queue_tail;
+	size_t			queue_count;
+
+	pthread_mutex_t	lock;
+	pthread_cond_t	cond;
 	int				initialized;
 	int				stop_requested;
 	int				send_error;
@@ -55,8 +68,8 @@ typedef struct s_nmap_sender_pool
 /**
  * @brief Raw options explicitly supplied through the command line.
  *
- * @note Zero-valued fields mean that the option was not supplied, except when
- *       the matching *_specified field is set.
+ * @note This structure intentionally remains compatible with the existing
+ *       parsing branch. Parsing is not part of this architectural rewrite.
  */
 typedef struct s_nmap_cli
 {
@@ -90,7 +103,7 @@ typedef struct s_nmap_cli
 }	t_nmap_cli;
 
 /**
- * @brief Owned list of targets prepared after parsing.
+ * @brief Owned list of target strings prepared by the unchanged parser layer.
  */
 typedef struct s_nmap_targets
 {
@@ -99,32 +112,43 @@ typedef struct s_nmap_targets
 	size_t	capacity;
 }	t_nmap_targets;
 
+/**
+ * @brief One currently resolved target.
+ */
 typedef struct s_nmap_target
 {
-	const char			*name;
-	struct sockaddr_in	addr;
-	socklen_t			addr_len;
-	char				ip[INET_ADDRSTRLEN];
-
-	int					error;
-	int					gai_error;
+	const char		*name;
+	t_nmap_ip_addr	addr;
+	char			ip[NMAP_ADDR_TEXT_MAX];
+	int				error;
+	int				gai_error;
 }	t_nmap_target;
 
+/**
+ * @brief Route selected by the kernel for the current target.
+ */
 typedef struct s_nmap_route
 {
-	char				iface[64];
-	struct sockaddr_in	src_addr;
-	char				src_ip[INET_ADDRSTRLEN];
-
-	int					error;
+	char			iface[NMAP_IFACE_NAME_MAX];
+	unsigned int	ifindex;
+	t_nmap_ip_addr	src_addr;
+	char			src_ip[NMAP_ADDR_TEXT_MAX];
+	int				error;
 }	t_nmap_route;
 
+/**
+ * @brief Raw send socket for the current target family.
+ */
 typedef struct s_nmap_socket
 {
-	int	error;
-	int	send_fd;
+	int			send_fd;
+	sa_family_t	family;
+	int			error;
 }	t_nmap_socket;
 
+/**
+ * @brief Pcap state owned by the main thread.
+ */
 typedef struct s_nmap_capture
 {
 	pcap_t	*handle;
@@ -135,30 +159,26 @@ typedef struct s_nmap_capture
 }	t_nmap_capture;
 
 /**
- * @brief Effective scan configuration consumed by the engine.
+ * @brief Effective immutable scan configuration consumed by the engine.
  *
- * @note The runtime, scheduler and workers must read this structure instead of
- *       config.cli.
+ * @note window_size is the current global outstanding/queued capacity. It is a
+ *       fixed window for now; the architecture deliberately leaves the timing
+ *       policy outside workers so adaptive Nmap-like congestion control can be
+ *       introduced later without touching packet builders or parsers.
  */
 typedef struct s_nmap_scan
 {
 	uint16_t	ports[NMAP_MAX_PORTS];
 	size_t		port_count;
-
 	uint32_t	scan_mask;
-	uint16_t	src_port_base;
 
 	int			thread_count;
 	int			retries;
-
 	int			tcp_timeout_ms;
 	int			udp_timeout_ms;
 
-	int			max_outstanding_per_sender;
-	int			max_in_flight;
-	int			udp_max_in_flight;
-
-	int			tcp_send_gap_ms;
+	int			window_size;
+	int			udp_window_size;
 	int			udp_dispatch_gap_ms;
 
 	int			no_dns;
@@ -168,6 +188,12 @@ typedef struct s_nmap_scan
 	int			show_reason;
 }	t_nmap_scan;
 
+/**
+ * @brief Complete process state.
+ *
+ * Parsing/options are global. target/route/socket/capture/runtime/sender_pool
+ * are prepared and cleaned for each concrete resolved target.
+ */
 typedef struct s_nmap_config
 {
 	t_nmap_cli			cli;

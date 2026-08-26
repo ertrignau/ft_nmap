@@ -5,6 +5,7 @@
 # include <stdio.h>
 # include <sys/time.h>
 
+/** One profiling slot, used either as a timer or a simple counter. */
 typedef struct s_prof_slot
 {
 	const char	*name;
@@ -21,9 +22,7 @@ static t_prof_slot	g_prof[NMAP_PROF_EVENT_COUNT] = {
 	[NMAP_PROF_PACKET_PARSE_TOTAL] = {"packet parse total", 0, 0, 0, 0},
 	[NMAP_PROF_LINK_OFFSET] = {"link offset", 0, 0, 0, 0},
 	[NMAP_PROF_IPV4_PARSE] = {"ipv4 parse", 0, 0, 0, 0},
-	[NMAP_PROF_TCP_PARSE] = {"tcp parse", 0, 0, 0, 0},
-	[NMAP_PROF_UDP_PARSE] = {"udp parse", 0, 0, 0, 0},
-	[NMAP_PROF_ICMP_PARSE] = {"icmp parse", 0, 0, 0, 0},
+	[NMAP_PROF_IPV6_PARSE] = {"ipv6 parse", 0, 0, 0, 0},
 	[NMAP_PROF_MATCH_PROBE] = {"match probe", 0, 0, 0, 0},
 	[NMAP_PROF_CLASSIFY] = {"classify", 0, 0, 0, 0},
 	[NMAP_PROF_EXPIRE] = {"expire", 0, 0, 0, 0},
@@ -36,6 +35,7 @@ static t_prof_slot	g_prof[NMAP_PROF_EVENT_COUNT] = {
 	[NMAP_PROF_PACKET_MATCHED] = {"packets matched", 0, 0, 0, 0},
 	[NMAP_PROF_PACKET_TIMEOUT] = {"probe timeouts", 0, 0, 0, 0},
 	[NMAP_PROF_PROBE_SENT] = {"probes sent", 0, 0, 0, 0},
+	[NMAP_PROF_PROBE_RETRIED] = {"probes retried", 0, 0, 0, 0},
 };
 
 uint64_t	nmap_prof_now_us(void)
@@ -68,12 +68,9 @@ void	nmap_prof_add(t_nmap_prof_event event, uint64_t start_us)
 
 void	nmap_prof_count(t_nmap_prof_event event)
 {
-	t_prof_slot	*slot;
-
 	if ((int)event < 0 || event >= NMAP_PROF_EVENT_COUNT)
 		return ;
-	slot = &g_prof[event];
-	slot->calls++;
+	g_prof[event].calls++;
 }
 
 static void	print_timed_slot(const t_prof_slot *slot)
@@ -87,10 +84,7 @@ static void	print_timed_slot(const t_prof_slot *slot)
 	avg_us = (double)slot->total_us / (double)slot->calls;
 	fprintf(stderr,
 		"[profile] %-20s calls=%-8llu total=%10.3f ms avg=%10.3f us min=%-8llu max=%-8llu\n",
-		slot->name,
-		(unsigned long long)slot->calls,
-		total_ms,
-		avg_us,
+		slot->name, (unsigned long long)slot->calls, total_ms, avg_us,
 		(unsigned long long)slot->min_us,
 		(unsigned long long)slot->max_us);
 }
@@ -99,10 +93,8 @@ static void	print_counter_slot(const t_prof_slot *slot)
 {
 	if (slot->calls == 0)
 		return ;
-	fprintf(stderr,
-		"[profile] %-20s count=%llu\n",
-		slot->name,
-		(unsigned long long)slot->calls);
+	fprintf(stderr, "[profile] %-20s count=%llu\n",
+		slot->name, (unsigned long long)slot->calls);
 }
 
 void	nmap_prof_report(void)

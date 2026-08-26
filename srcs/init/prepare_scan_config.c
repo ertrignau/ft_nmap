@@ -1,4 +1,3 @@
-
 #include "config.h"
 
 #include <limits.h>
@@ -8,11 +7,9 @@
 #define NMAP_MAX_RETRIES 10
 #define NMAP_DEFAULT_TCP_TIMEOUT_MS 1000
 #define NMAP_DEFAULT_UDP_TIMEOUT_MS 2500
-#define NMAP_DEFAULT_PROBES_PER_THREAD 50
-#define NMAP_MAX_PROBES_PER_THREAD 4096
-#define NMAP_DEFAULT_SRC_PORT_BASE 40000
-#define NMAP_DEFAULT_UDP_MAX_IN_FLIGHT 10
-#define NMAP_DEFAULT_TCP_SEND_GAP_MS 0
+#define NMAP_DEFAULT_WINDOW_PER_SENDER 50
+#define NMAP_MAX_WINDOW_PER_SENDER 4096
+#define NMAP_DEFAULT_UDP_WINDOW 10
 #define NMAP_DEFAULT_UDP_DISPATCH_GAP_MS 50
 
 #define NMAP_ALL_SCAN_TYPES \
@@ -21,30 +18,24 @@
 
 /**
  * @brief Fill the mandatory default port range.
- *
- * @param scan Effective scan configuration.
  */
 static void	set_default_ports(t_nmap_scan *scan)
 {
-	size_t	index;
+	size_t	i;
 
-	index = 0;
-	while (index < NMAP_MAX_PORTS)
+	i = 0;
+	while (i < NMAP_MAX_PORTS)
 	{
-		scan->ports[index] = (uint16_t)(index + 1);
-		index++;
+		scan->ports[i] = (uint16_t)(i + 1);
+		i++;
 	}
 	scan->port_count = NMAP_MAX_PORTS;
 }
 
 /**
- * @brief Prepare the effective port and scan selections.
- *
- * @param config Global nmap configuration.
- *
- * @return 1 on success, 0 on invalid parsed values.
+ * @brief Normalize the requested port and scan selections.
  */
-static int	prepare_scan_selection(t_nmap_config *config)
+static int	prepare_selection(t_nmap_config *config)
 {
 	if (config->scan.port_count == 0)
 		set_default_ports(&config->scan);
@@ -57,8 +48,8 @@ static int	prepare_scan_selection(t_nmap_config *config)
 		config->scan.scan_mask = config->cli.scan_mask;
 	else
 		config->scan.scan_mask = NMAP_ALL_SCAN_TYPES;
-	if ((config->scan.scan_mask & ~NMAP_ALL_SCAN_TYPES) != 0
-		|| config->scan.scan_mask == 0)
+	if (config->scan.scan_mask == 0
+		|| (config->scan.scan_mask & ~NMAP_ALL_SCAN_TYPES) != 0)
 	{
 		fprintf(stderr, "ft_nmap: invalid scan mask\n");
 		return (0);
@@ -67,16 +58,16 @@ static int	prepare_scan_selection(t_nmap_config *config)
 }
 
 /**
- * @brief Prepare thread, retry and timeout settings.
+ * @brief Build the fixed timing/window policy consumed by the runtime.
  *
- * @param config Global nmap configuration.
- *
- * @return 1 on success, 0 on invalid parsed values.
+ * @note The window is deliberately centralized here instead of in workers.
+ *       A later adaptive congestion controller can replace this policy without
+ *       changing packet senders or thread ownership.
  */
-static int	prepare_runtime_limits(t_nmap_config *config)
+static int	prepare_timing(t_nmap_config *config)
 {
-	int	sender_count;
-	int	probes_per_sender;
+	int	senders;
+	int	per_sender;
 
 	if (config->cli.speedup < 0 || config->cli.speedup > NMAP_MAX_THREADS)
 	{
@@ -95,26 +86,6 @@ static int	prepare_runtime_limits(t_nmap_config *config)
 			NMAP_MAX_RETRIES);
 		return (0);
 	}
-	if (config->cli.probes_per_thread_specified)
-		probes_per_sender = config->cli.probes_per_thread;
-	else
-		probes_per_sender = NMAP_DEFAULT_PROBES_PER_THREAD;
-	if (probes_per_sender <= 0
-		|| probes_per_sender > NMAP_MAX_PROBES_PER_THREAD)
-	{
-		fprintf(stderr, "ft_nmap: invalid probes-per-thread value\n");
-		return (0);
-	}
-	config->scan.max_outstanding_per_sender = probes_per_sender;
-	sender_count = config->scan.thread_count;
-	if (sender_count == 0)
-		sender_count = 1;
-	if (probes_per_sender > INT_MAX / sender_count)
-	{
-		fprintf(stderr, "ft_nmap: in-flight limit overflow\n");
-		return (0);
-	}
-	config->scan.max_in_flight = probes_per_sender * sender_count;
 	if (config->cli.timeout_specified)
 	{
 		if (config->cli.timeout_ms <= 0)
@@ -130,22 +101,36 @@ static int	prepare_runtime_limits(t_nmap_config *config)
 		config->scan.tcp_timeout_ms = NMAP_DEFAULT_TCP_TIMEOUT_MS;
 		config->scan.udp_timeout_ms = NMAP_DEFAULT_UDP_TIMEOUT_MS;
 	}
+	if (config->cli.probes_per_thread_specified)
+		per_sender = config->cli.probes_per_thread;
+	else
+		per_sender = NMAP_DEFAULT_WINDOW_PER_SENDER;
+	if (per_sender <= 0 || per_sender > NMAP_MAX_WINDOW_PER_SENDER)
+	{
+		fprintf(stderr, "ft_nmap: invalid probes-per-thread value\n");
+		return (0);
+	}
+	senders = config->scan.thread_count;
+	if (senders == 0)
+		senders = 1;
+	if (per_sender > INT_MAX / senders)
+	{
+		fprintf(stderr, "ft_nmap: send window overflow\n");
+		return (0);
+	}
+	config->scan.window_size = per_sender * senders;
+	config->scan.udp_window_size = NMAP_DEFAULT_UDP_WINDOW;
+	if (config->scan.udp_window_size > config->scan.window_size)
+		config->scan.udp_window_size = config->scan.window_size;
+	config->scan.udp_dispatch_gap_ms = NMAP_DEFAULT_UDP_DISPATCH_GAP_MS;
 	return (1);
 }
 
 /**
- * @brief Prepare effective feature and pacing options.
- *
- * @param config Global nmap configuration.
+ * @brief Copy optional feature flags into the effective scan configuration.
  */
-static void	prepare_feature_options(t_nmap_config *config)
+static void	prepare_features(t_nmap_config *config)
 {
-	config->scan.src_port_base = NMAP_DEFAULT_SRC_PORT_BASE;
-	config->scan.udp_max_in_flight = NMAP_DEFAULT_UDP_MAX_IN_FLIGHT;
-	if (config->scan.udp_max_in_flight > config->scan.max_in_flight)
-		config->scan.udp_max_in_flight = config->scan.max_in_flight;
-	config->scan.tcp_send_gap_ms = NMAP_DEFAULT_TCP_SEND_GAP_MS;
-	config->scan.udp_dispatch_gap_ms = NMAP_DEFAULT_UDP_DISPATCH_GAP_MS;
 	config->scan.no_dns = config->cli.no_dns;
 	config->scan.version_detection = config->cli.version_detection;
 	config->scan.os_detection = config->cli.os_detection;
@@ -154,26 +139,16 @@ static void	prepare_feature_options(t_nmap_config *config)
 }
 
 /**
- * @brief Build the effective scan configuration from parsed CLI options.
- *
- * @param config Global nmap configuration.
- * @param exit_status Output exit status set on invalid configuration.
- *
- * @return 1 on success, 0 on failure.
- *
- * @note The parser records user input. This function applies defaults and
- *       derives the limits consumed by the runtime, scheduler and workers.
+ * @brief Convert parsed CLI values into the immutable scan plan.
  */
 int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
 {
-	if (!config
-		|| !prepare_scan_selection(config)
-		|| !prepare_runtime_limits(config))
+	if (!config || !prepare_selection(config) || !prepare_timing(config))
 	{
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	prepare_feature_options(config);
+	prepare_features(config);
 	return (1);
 }

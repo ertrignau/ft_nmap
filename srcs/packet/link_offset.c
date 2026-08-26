@@ -1,6 +1,7 @@
+#include <pcap/pcap.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <pcap/pcap.h>
+#include <sys/socket.h>
 
 #define NMAP_ETHERNET_HEADER_LEN 14
 #define NMAP_LINUX_SLL_HEADER_LEN 16
@@ -13,63 +14,61 @@
 #define NMAP_80211_HT_CONTROL_LEN 4
 #define NMAP_LLC_SNAP_LEN 8
 #define NMAP_ETHERTYPE_IPV4 0x0800
+#define NMAP_ETHERTYPE_IPV6 0x86dd
 #define NMAP_ETHERTYPE_VLAN 0x8100
 #define NMAP_ETHERTYPE_QINQ 0x88a8
 
-/**
- * @brief Read a big-endian uint16_t from a packet buffer.
- *
- * @param data Pointer to the 2-byte field.
- *
- * @return Host-order uint16_t value.
- */
+/** Read a network-order uint16_t without assuming packet alignment. */
 static uint16_t	read_be16(const unsigned char *data)
 {
 	return (((uint16_t)data[0] << 8) | data[1]);
 }
 
-/**
- * @brief Read a little-endian uint16_t from a packet buffer.
- *
- * @param data Pointer to the 2-byte field.
- *
- * @return Host-order uint16_t value.
- */
+/** Read a little-endian uint16_t without assuming packet alignment. */
 static uint16_t	read_le16(const unsigned char *data)
 {
 	return (((uint16_t)data[1] << 8) | data[0]);
 }
 
 /**
- * @brief Check whether a packet byte looks like an IPv4 header start.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Candidate IPv4 offset.
- *
- * @return 1 if the offset points to an IPv4 header, 0 otherwise.
+ * @brief Convert an Ethernet protocol value to an address family.
  */
-static int	offset_points_to_ipv4(const unsigned char *packet,
-		size_t len, size_t offset)
+static int	family_from_ethertype(uint16_t ethertype, sa_family_t *family)
 {
-	if (len < offset + 1)
+	if (ethertype == NMAP_ETHERTYPE_IPV4)
+		*family = AF_INET;
+	else if (ethertype == NMAP_ETHERTYPE_IPV6)
+		*family = AF_INET6;
+	else
 		return (0);
-	return ((packet[offset] >> 4) == 4);
+	return (1);
 }
 
 /**
- * @brief Return IPv4 offset for Ethernet-like packets.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- *
- * @note Supports normal Ethernet and one or more VLAN tags.
+ * @brief Validate that one candidate offset points to the expected IP version.
  */
-static int	get_ethernet_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
+static int	family_from_version(const unsigned char *packet,
+		size_t len, size_t offset, sa_family_t *family)
+{
+	uint8_t	version;
+
+	if (len <= offset)
+		return (0);
+	version = packet[offset] >> 4;
+	if (version == 4)
+		*family = AF_INET;
+	else if (version == 6)
+		*family = AF_INET6;
+	else
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Locate IPv4/IPv6 after an Ethernet header and optional VLAN tags.
+ */
+static int	get_ethernet_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
 {
 	size_t		pos;
 	uint16_t	ethertype;
@@ -87,92 +86,36 @@ static int	get_ethernet_ipv4_offset(const unsigned char *packet,
 		ethertype = read_be16(packet + pos + 2);
 		pos += 4;
 	}
-	if (ethertype != NMAP_ETHERTYPE_IPV4)
+	if (!family_from_ethertype(ethertype, family))
 		return (0);
 	*offset = pos;
-	return (offset_points_to_ipv4(packet, len, *offset));
+	return (family_from_version(packet, len, *offset, family));
 }
 
-/**
- * @brief Return IPv4 offset for Linux cooked capture v1.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- */
-static int	get_linux_sll_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
+/** Locate IPv4/IPv6 in Linux cooked capture v1. */
+static int	get_sll_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
 {
-	if (len < NMAP_LINUX_SLL_HEADER_LEN)
-		return (0);
-	if (read_be16(packet + 14) != NMAP_ETHERTYPE_IPV4)
+	if (len < NMAP_LINUX_SLL_HEADER_LEN
+		|| !family_from_ethertype(read_be16(packet + 14), family))
 		return (0);
 	*offset = NMAP_LINUX_SLL_HEADER_LEN;
-	return (offset_points_to_ipv4(packet, len, *offset));
+	return (family_from_version(packet, len, *offset, family));
 }
 
-/**
- * @brief Return IPv4 offset for Linux cooked capture v2.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- */
-static int	get_linux_sll2_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
+/** Locate IPv4/IPv6 in Linux cooked capture v2. */
+static int	get_sll2_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
 {
-	if (len < NMAP_LINUX_SLL2_HEADER_LEN)
-		return (0);
-	if (read_be16(packet) != NMAP_ETHERTYPE_IPV4)
+	if (len < NMAP_LINUX_SLL2_HEADER_LEN
+		|| !family_from_ethertype(read_be16(packet), family))
 		return (0);
 	*offset = NMAP_LINUX_SLL2_HEADER_LEN;
-	return (offset_points_to_ipv4(packet, len, *offset));
+	return (family_from_version(packet, len, *offset, family));
 }
 
 /**
- * @brief Return IPv4 offset for raw IP packets.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- */
-static int	get_raw_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
-{
-	*offset = 0;
-	return (offset_points_to_ipv4(packet, len, *offset));
-}
-
-/**
- * @brief Return IPv4 offset for loopback captures.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- */
-static int	get_loopback_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
-{
-	if (len < NMAP_LOOPBACK_HEADER_LEN)
-		return (0);
-	*offset = NMAP_LOOPBACK_HEADER_LEN;
-	return (offset_points_to_ipv4(packet, len, *offset));
-}
-
-/**
- * @brief Compute the 802.11 MAC header length.
- *
- * @param frame_control 802.11 frame control field in host order.
- *
- * @return Header length in bytes, or 0 if the frame is not a data frame.
+ * @brief Compute the 802.11 MAC header size for a data frame.
  */
 static size_t	get_80211_header_len(uint16_t frame_control)
 {
@@ -203,17 +146,10 @@ static size_t	get_80211_header_len(uint16_t frame_control)
 }
 
 /**
- * @brief Return IPv4 offset after an 802.11 header and LLC/SNAP.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param wifi_offset Offset of the 802.11 frame.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
+ * @brief Locate IPv4/IPv6 after an 802.11 data header + LLC/SNAP.
  */
-static int	get_80211_ipv4_offset_at(const unsigned char *packet,
-		size_t len, size_t wifi_offset, size_t *offset)
+static int	get_80211_offset_at(const unsigned char *packet,
+		size_t len, size_t wifi_offset, size_t *offset, sa_family_t *family)
 {
 	uint16_t	frame_control;
 	size_t		wifi_header_len;
@@ -233,79 +169,80 @@ static int	get_80211_ipv4_offset_at(const unsigned char *packet,
 	if (packet[llc_offset] != 0xaa || packet[llc_offset + 1] != 0xaa
 		|| packet[llc_offset + 2] != 0x03)
 		return (0);
-	if (read_be16(packet + llc_offset + 6) != NMAP_ETHERTYPE_IPV4)
+	if (!family_from_ethertype(read_be16(packet + llc_offset + 6), family))
 		return (0);
 	*offset = llc_offset + NMAP_LLC_SNAP_LEN;
-	return (offset_points_to_ipv4(packet, len, *offset));
+	return (family_from_version(packet, len, *offset, family));
 }
 
-/**
- * @brief Return IPv4 offset for Radiotap + 802.11 monitor captures.
- *
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
- *
- * @return 1 on IPv4 packet, 0 otherwise.
- */
-static int	get_radiotap_ipv4_offset(const unsigned char *packet,
-		size_t len, size_t *offset)
+/** Locate IPv4/IPv6 after a Radiotap monitor header. */
+static int	get_radiotap_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
 {
 	size_t	radiotap_len;
 
-	if (len < NMAP_RADIOTAP_MIN_LEN)
-		return (0);
-	if (packet[0] != 0)
+	if (len < NMAP_RADIOTAP_MIN_LEN || packet[0] != 0)
 		return (0);
 	radiotap_len = read_le16(packet + 2);
 	if (radiotap_len < NMAP_RADIOTAP_MIN_LEN || radiotap_len >= len)
 		return (0);
-	return (get_80211_ipv4_offset_at(packet, len, radiotap_len, offset));
+	return (get_80211_offset_at(packet, len,
+			radiotap_len, offset, family));
 }
 
 /**
- * @brief Return the offset of the IPv4 header in a pcap packet.
+ * @brief Locate the network-layer header in one pcap frame.
  *
- * @param datalink Pcap datalink type.
- * @param packet Captured packet buffer.
- * @param len Captured packet length.
- * @param offset Output IPv4 offset.
+ * @param datalink Pcap DLT_* type.
+ * @param packet Captured frame.
+ * @param len Captured byte length.
+ * @param offset Output IPv4/IPv6 offset.
+ * @param family Output AF_INET or AF_INET6.
  *
- * @return 1 when IPv4 offset was found, 0 otherwise.
+ * @return 1 when a supported IPv4/IPv6 frame was located, 0 otherwise.
  *
- * @note Layer 2 headers are only used to locate IPv4. Their addresses and
- *       metadata are not used for scan matching or classification.
+ * @note The old code exposed nmap_get_ipv4_offset(). This function is now a
+ *       true L2 boundary: it knows framing but does not parse IP protocols.
  */
-int	nmap_get_ipv4_offset(int datalink, const unsigned char *packet,
-		size_t len, size_t *offset)
+int	nmap_get_network_offset(int datalink, const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
 {
-	if (!packet || !offset)
+	if (!packet || !offset || !family)
 		return (0);
 	if (datalink == DLT_EN10MB)
-		return (get_ethernet_ipv4_offset(packet, len, offset));
+		return (get_ethernet_offset(packet, len, offset, family));
 	if (datalink == DLT_LINUX_SLL)
-		return (get_linux_sll_ipv4_offset(packet, len, offset));
+		return (get_sll_offset(packet, len, offset, family));
 #ifdef DLT_LINUX_SLL2
 	if (datalink == DLT_LINUX_SLL2)
-		return (get_linux_sll2_ipv4_offset(packet, len, offset));
+		return (get_sll2_offset(packet, len, offset, family));
 #endif
 	if (datalink == DLT_RAW)
-		return (get_raw_ipv4_offset(packet, len, offset));
+	{
+		*offset = 0;
+		return (family_from_version(packet, len, *offset, family));
+	}
 #ifdef DLT_NULL
 	if (datalink == DLT_NULL)
-		return (get_loopback_ipv4_offset(packet, len, offset));
+	{
+		*offset = NMAP_LOOPBACK_HEADER_LEN;
+		return (family_from_version(packet, len, *offset, family));
+	}
 #endif
 #ifdef DLT_LOOP
 	if (datalink == DLT_LOOP)
-		return (get_loopback_ipv4_offset(packet, len, offset));
+	{
+		*offset = NMAP_LOOPBACK_HEADER_LEN;
+		return (family_from_version(packet, len, *offset, family));
+	}
 #endif
 #ifdef DLT_IEEE802_11_RADIO
 	if (datalink == DLT_IEEE802_11_RADIO)
-		return (get_radiotap_ipv4_offset(packet, len, offset));
+		return (get_radiotap_offset(packet, len, offset, family));
 #endif
 #ifdef DLT_IEEE802_11
 	if (datalink == DLT_IEEE802_11)
-		return (get_80211_ipv4_offset_at(packet, len, 0, offset));
+		return (get_80211_offset_at(packet, len, 0, offset, family));
 #endif
 	return (0);
 }

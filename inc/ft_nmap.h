@@ -1,4 +1,3 @@
-
 #ifndef FT_NMAP_H
 # define FT_NMAP_H
 
@@ -12,11 +11,9 @@ int		nmap_prepare_targets(t_nmap_config *config, int *exit_status);
 void	nmap_cleanup_current_target(t_nmap_config *config);
 void	nmap_cleanup_config(t_nmap_config *config);
 
-/* resolve */
+/* target / network */
 int		nmap_prepare_target(t_nmap_config *config, const char *target_name,
 			int *exit_status);
-
-/* net */
 int		nmap_prepare_route(t_nmap_config *config, int *exit_status);
 int		nmap_prepare_send_socket(t_nmap_config *config, int *exit_status);
 int		nmap_prepare_pcap(t_nmap_config *config, int *exit_status);
@@ -35,7 +32,7 @@ int		nmap_sender_pool_has_error(t_nmap_config *config);
 /* output */
 void	nmap_print_report(t_nmap_config *config);
 
-/* parsing */
+/* parsing -- kept compatible with the existing parser branch */
 int		nmap_parse_ports(t_nmap_config *config, const char *arg);
 int		parse_flag(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_ip(t_nmap_config *config, int argc, char **argv, int *i);

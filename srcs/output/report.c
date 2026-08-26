@@ -1,15 +1,8 @@
-
 #include "config.h"
 
 #include <stdio.h>
 
-/**
- * @brief Return the display name for a scan type.
- *
- * @param scan_type Concrete scan type.
- *
- * @return Static scan type name.
- */
+/** Return the display name for one concrete scan type. */
 static const char	*scan_type_name(uint32_t scan_type)
 {
 	if (scan_type == NMAP_SCAN_SYN)
@@ -27,13 +20,7 @@ static const char	*scan_type_name(uint32_t scan_type)
 	return ("UNKNOWN");
 }
 
-/**
- * @brief Return the display name for a scan result.
- *
- * @param result Final scan result.
- *
- * @return Static result name.
- */
+/** Return the display name for one final scan result. */
 static const char	*scan_result_name(t_scan_result result)
 {
 	if (result == SCAN_RESULT_OPEN)
@@ -49,47 +36,45 @@ static const char	*scan_result_name(t_scan_result result)
 	return ("unknown");
 }
 
-/**
- * @brief Return the display name for a non-final probe state.
- *
- * @param state Runtime probe state.
- *
- * @return Static state name.
- */
+/** Return the display name for one non-final runtime state. */
 static const char	*probe_state_name(t_probe_state state)
 {
 	if (state == PROBE_PENDING)
 		return ("pending");
 	if (state == PROBE_QUEUED)
 		return ("queued");
-	if (state == PROBE_IN_FLIGHT)
-		return ("in-flight");
+	if (state == PROBE_OUTSTANDING)
+		return ("outstanding");
 	if (state == PROBE_DONE)
 		return ("done");
 	return ("unknown");
 }
 
-/**
- * @brief Check whether a scan type is enabled in the scan mask.
- *
- * @param config Global nmap configuration.
- * @param scan_type Concrete scan type.
- *
- * @return 1 if enabled, 0 otherwise.
- */
-static int	scan_type_enabled(t_nmap_config *config, uint32_t scan_type)
+/** Check whether one scan column is enabled. */
+static int	scan_enabled(const t_nmap_config *config, uint32_t scan_type)
 {
 	return ((config->scan.scan_mask & scan_type) != 0);
 }
 
-/**
- * @brief Return the display string for a probe.
- *
- * @param probe Probe to display.
- *
- * @return Probe result if done, otherwise runtime state.
- */
-static const char	*probe_display_result(t_probe *probe)
+/** Find one logical probe by destination port and scan type. */
+static t_probe	*find_probe(t_nmap_config *config,
+		uint16_t port, uint32_t scan_type)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].dst_port == port
+			&& config->runtime.probes[i].scan_type == scan_type)
+			return (&config->runtime.probes[i]);
+		i++;
+	}
+	return (NULL);
+}
+
+/** Display a final result when DONE, otherwise the live runtime state. */
+static const char	*probe_display(const t_probe *probe)
 {
 	if (!probe)
 		return ("unknown");
@@ -98,39 +83,8 @@ static const char	*probe_display_result(t_probe *probe)
 	return (scan_result_name(probe->result));
 }
 
-/**
- * @brief Find a probe by port and scan type.
- *
- * @param config Global nmap configuration.
- * @param port Destination port.
- * @param scan_type Concrete scan type.
- *
- * @return Matching probe, or NULL if not found.
- */
-static t_probe	*find_probe(t_nmap_config *config,
-		uint16_t port, uint32_t scan_type)
-{
-	size_t	index;
-
-	index = 0;
-	while (index < config->runtime.probe_count)
-	{
-		if (config->runtime.probes[index].dst_port == port
-			&& config->runtime.probes[index].scan_type == scan_type)
-			return (&config->runtime.probes[index]);
-		index++;
-	}
-	return (NULL);
-}
-
-/**
- * @brief Check whether one probe has an open-like final result.
- *
- * @param probe Probe to inspect.
- *
- * @return 1 for open or open|filtered, 0 otherwise.
- */
-static int	probe_result_is_open(t_probe *probe)
+/** Return whether a DONE result counts as open-like for --open filtering. */
+static int	probe_is_open_like(const t_probe *probe)
 {
 	if (!probe || probe->state != PROBE_DONE)
 		return (0);
@@ -138,66 +92,47 @@ static int	probe_result_is_open(t_probe *probe)
 		|| probe->result == SCAN_RESULT_OPEN_FILTERED);
 }
 
-/**
- * @brief Check whether one enabled scan keeps a port visible in --open mode.
- *
- * @param config Global nmap configuration.
- * @param port Destination port.
- * @param scan_type Concrete scan type.
- *
- * @return 1 when the scan has an open-like result, 0 otherwise.
- */
-static int	scan_column_is_open(t_nmap_config *config,
-		uint16_t port, uint32_t scan_type)
+/** Check whether any enabled scan keeps one port visible in --open mode. */
+static int	port_is_open_like(t_nmap_config *config, uint16_t port)
 {
-	if (!scan_type_enabled(config, scan_type))
-		return (0);
-	return (probe_result_is_open(find_probe(config, port, scan_type)));
-}
+	static const uint32_t	types[] = {
+		NMAP_SCAN_SYN,
+		NMAP_SCAN_NULL,
+		NMAP_SCAN_FIN,
+		NMAP_SCAN_XMAS,
+		NMAP_SCAN_ACK,
+		NMAP_SCAN_UDP
+	};
+	size_t					i;
 
-/**
- * @brief Check whether a port line should be printed in --open mode.
- *
- * @param config Global nmap configuration.
- * @param port Destination port.
- *
- * @return 1 if one enabled scan is open-like, 0 otherwise.
- */
-static int	port_line_is_open(t_nmap_config *config, uint16_t port)
-{
-	if (scan_column_is_open(config, port, NMAP_SCAN_SYN))
-		return (1);
-	if (scan_column_is_open(config, port, NMAP_SCAN_NULL))
-		return (1);
-	if (scan_column_is_open(config, port, NMAP_SCAN_FIN))
-		return (1);
-	if (scan_column_is_open(config, port, NMAP_SCAN_XMAS))
-		return (1);
-	if (scan_column_is_open(config, port, NMAP_SCAN_ACK))
-		return (1);
-	if (scan_column_is_open(config, port, NMAP_SCAN_UDP))
-		return (1);
+	i = 0;
+	while (i < sizeof(types) / sizeof(types[0]))
+	{
+		if (scan_enabled(config, types[i])
+			&& probe_is_open_like(find_probe(config, port, types[i])))
+			return (1);
+		i++;
+	}
 	return (0);
 }
 
-/**
- * @brief Print one enabled scan column in the header.
- *
- * @param config Global nmap configuration.
- * @param scan_type Concrete scan type.
- */
-static void	print_header_column(t_nmap_config *config, uint32_t scan_type)
+/** Print one enabled result-table header column. */
+static void	print_header_column(const t_nmap_config *config, uint32_t type)
 {
-	if (scan_type_enabled(config, scan_type))
-		printf("%-16s", scan_type_name(scan_type));
+	if (scan_enabled(config, type))
+		printf("%-16s", scan_type_name(type));
 }
 
-/**
- * @brief Print the report header.
- *
- * @param config Global nmap configuration.
- */
-static void	print_report_header(t_nmap_config *config)
+/** Print one enabled result-table cell. */
+static void	print_result_column(t_nmap_config *config,
+		uint16_t port, uint32_t type)
+{
+	if (scan_enabled(config, type))
+		printf("%-16s", probe_display(find_probe(config, port, type)));
+}
+
+/** Print the report table header in stable scan order. */
+static void	print_header(const t_nmap_config *config)
 {
 	printf("%-8s", "PORT");
 	print_header_column(config, NMAP_SCAN_SYN);
@@ -209,31 +144,8 @@ static void	print_report_header(t_nmap_config *config)
 	printf("\n");
 }
 
-/**
- * @brief Print one scan result column for a port.
- *
- * @param config Global nmap configuration.
- * @param port Destination port.
- * @param scan_type Concrete scan type.
- */
-static void	print_result_column(t_nmap_config *config,
-		uint16_t port, uint32_t scan_type)
-{
-	t_probe	*probe;
-
-	if (!scan_type_enabled(config, scan_type))
-		return ;
-	probe = find_probe(config, port, scan_type);
-	printf("%-16s", probe_display_result(probe));
-}
-
-/**
- * @brief Print one destination port line.
- *
- * @param config Global nmap configuration.
- * @param port Destination port.
- */
-static void	print_port_line(t_nmap_config *config, uint16_t port)
+/** Print all enabled scan results for one destination port. */
+static void	print_port(t_nmap_config *config, uint16_t port)
 {
 	printf("%-8u", port);
 	print_result_column(config, port, NMAP_SCAN_SYN);
@@ -246,33 +158,28 @@ static void	print_port_line(t_nmap_config *config, uint16_t port)
 }
 
 /**
- * @brief Print the final scan report.
- *
- * @param config Global nmap configuration.
- *
- * @note The report does not classify or modify probes. It only displays the
- *       final state already produced by runtime/recv.c and runtime/expire.c.
+ * @brief Print the current-target scan report without modifying runtime state.
  */
 void	nmap_print_report(t_nmap_config *config)
 {
-	size_t	index;
+	size_t	i;
 
 	if (!config)
 		return ;
-	printf("Scan report for %s (%s)\n", config->target.name,
-		config->target.ip);
-	printf("Probes: %zu total, %zu done, %zu queued, %zu in flight\n\n",
+	printf("Scan report for %s (%s)\n",
+		config->target.name, config->target.ip);
+	printf("Probes: %zu total, %zu done, %zu queued, %zu outstanding\n\n",
 		config->runtime.probe_count,
 		config->runtime.done_count,
 		config->runtime.queued_count,
-		config->runtime.in_flight_count);
-	print_report_header(config);
-	index = 0;
-	while (index < config->scan.port_count)
+		config->runtime.outstanding_count);
+	print_header(config);
+	i = 0;
+	while (i < config->scan.port_count)
 	{
 		if (!config->scan.open_only
-			|| port_line_is_open(config, config->scan.ports[index]))
-			print_port_line(config, config->scan.ports[index]);
-		index++;
+			|| port_is_open_like(config, config->scan.ports[i]))
+			print_port(config, config->scan.ports[i]);
+		i++;
 	}
 }
