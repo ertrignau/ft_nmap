@@ -18,6 +18,9 @@ int		nmap_prepare_route(t_nmap_config *config, int *exit_status);
 int		nmap_prepare_send_socket(t_nmap_config *config, int *exit_status);
 int		nmap_prepare_pcap(t_nmap_config *config, int *exit_status);
 
+/* run */
+int		nmap_run(t_nmap_config *config, int *exit_status);
+
 /* runtime */
 int		nmap_prepare_runtime(t_nmap_config *config, int *exit_status);
 int		nmap_runtime_is_finished(t_nmap_config *config);
@@ -32,13 +35,19 @@ int		nmap_sender_pool_has_error(t_nmap_config *config);
 /* output */
 void	nmap_print_report(t_nmap_config *config);
 
-/* parsing -- kept compatible with the existing parser branch */
+/* parsing */
 int		nmap_parse_ports(t_nmap_config *config, const char *arg);
 int		parse_flag(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_ip(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_port(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_scan(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_speedup(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_timeout(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_probes_per_thread(t_nmap_config *config,
+			int argc, char **argv, int *i);
+int		parse_retries(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_file(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_bool_flag(t_nmap_config *config, const char *flag);
 int		nmap_parse_cli(t_nmap_config *config, int argc, char **argv,
 			int *exit_status);
 int		scan_name_to_mask(const char *name, uint32_t *mask);

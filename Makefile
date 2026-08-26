@@ -35,6 +35,7 @@ PROFILE_OBJS_DIR := objs_profile
 # **************************************************************************** #
 
 SRCS := srcs/main.c \
+	srcs/run.c \
 	srcs/init/init.c \
 	srcs/init/prepare_scan_config.c \
 	srcs/init/targets.c \
@@ -69,6 +70,11 @@ SRCS := srcs/main.c \
 	srcs/parsing/pars_speedup.c \
 	srcs/parsing/pars_scan.c \
 	srcs/parsing/pars_ip.c \
+	srcs/parsing/pars_timeout.c \
+	srcs/parsing/pars_probes.c \
+	srcs/parsing/pars_retries.c \
+	srcs/parsing/pars_file.c \
+	srcs/parsing/pars_bool.c \
 	srcs/parsing/parsing.c
 
 DEBUG_SRCS := $(SRCS) srcs/debug/debug.c

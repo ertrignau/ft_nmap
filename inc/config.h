@@ -11,6 +11,8 @@
 # include <string.h>
 
 # define NMAP_MAX_PORTS 1024
+# define NMAP_MAX_TARGETS 1024
+# define NMAP_TARGET_INITIAL_CAPACITY 16
 # define NMAP_MAX_THREADS 250
 # define NMAP_IFACE_NAME_MAX 64
 
@@ -68,8 +70,8 @@ typedef struct s_nmap_sender_pool
 /**
  * @brief Raw options explicitly supplied through the command line.
  *
- * @note This structure intentionally remains compatible with the existing
- *       parsing branch. Parsing is not part of this architectural rewrite.
+ * @note The parser only records user intent here. Runtime/network policy is
+ *       normalized later by nmap_prepare_scan_config().
  */
 typedef struct s_nmap_cli
 {
@@ -77,33 +79,34 @@ typedef struct s_nmap_cli
 	const char	*target;
 	const char	*target_file;
 	const char	*ports_arg;
+	const char	*scan_arg;
 
 	uint32_t	scan_mask;
 
 	int			help;
-	int			scan_specified;
-
-	int			speedup;
-	int			speedup_specified;
-
-	int			retries;
-	int			retries_specified;
-
-	int			timeout_ms;
-	int			timeout_specified;
-
-	int			probes_per_thread;
-	int			probes_per_thread_specified;
-
 	int			no_dns;
 	int			version_detection;
 	int			os_detection;
 	int			open_only;
 	int			show_reason;
+
+	int			speedup;
+	int			retries;
+	int			timeout_ms;
+	int			probes_per_thread;
+
+	int			ip_specified;
+	int			file_specified;
+	int			ports_specified;
+	int			scan_specified;
+	int			speedup_specified;
+	int			retries_specified;
+	int			timeout_specified;
+	int			probes_per_thread_specified;
 }	t_nmap_cli;
 
 /**
- * @brief Owned list of target strings prepared by the unchanged parser layer.
+ * @brief Owned list of target strings prepared from --ip or --file.
  */
 typedef struct s_nmap_targets
 {
@@ -162,9 +165,8 @@ typedef struct s_nmap_capture
  * @brief Effective immutable scan configuration consumed by the engine.
  *
  * @note window_size is the current global outstanding/queued capacity. It is a
- *       fixed window for now; the architecture deliberately leaves the timing
- *       policy outside workers so adaptive Nmap-like congestion control can be
- *       introduced later without touching packet builders or parsers.
+ *       fixed window for now; the timing policy remains centralized outside
+ *       workers so adaptive Nmap-like control can be added later.
  */
 typedef struct s_nmap_scan
 {

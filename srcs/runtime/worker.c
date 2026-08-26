@@ -90,7 +90,7 @@ static void	*worker_main(void *arg)
 		{
 			set_send_error(&worker->config->sender_pool);
 			nmap_mark_probe_done(worker->config, job.probe,
-				SCAN_RESULT_UNKNOWN, "send failure");
+				SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
 		}
 	}
 	return (NULL);

@@ -26,6 +26,6 @@ t_scan_result	nmap_classify_no_response(uint32_t scan_type);
 /** Atomically finalize one logical probe and update runtime counters. */
 void			nmap_mark_probe_done(t_nmap_config *config,
 					t_probe *probe, t_scan_result result,
-					const char *reason);
+					t_scan_reason reason, const char *debug_reason);
 
 #endif

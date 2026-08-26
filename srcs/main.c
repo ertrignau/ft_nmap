@@ -1,17 +1,36 @@
 #include "ft_nmap.h"
 #include "debug/debug.h"
 
+/** Print the command-line options supported by the current parser. */
+static void	print_help(const char *progname)
+{
+	printf("Usage: %s [OPTIONS]\n\n", progname);
+	printf("Options:\n");
+	printf("  --help                     Show this help message\n");
+	printf("  --ip <host>                Target host (IP or hostname)\n");
+	printf("  --file <file>              Read targets from file\n");
+	printf("  --ports <list|range>       Ports to scan (default: 1-1024)\n");
+	printf("  --scan <types>             SYN,NULL,FIN,XMAS,ACK,UDP\n");
+	printf("  --speedup <0-250>          Number of sender workers\n");
+	printf("  --timeout <ms>             Override TCP/UDP probe timeout\n");
+	printf("  --retries <count>          Number of retransmissions\n");
+	printf("  --probes-per-thread <n>    Send-window capacity per sender\n");
+	printf("  --no-dns                   Disable reverse DNS lookups\n");
+	printf("  --version                  Enable service version detection\n");
+	printf("  --os                       Enable OS detection\n");
+	printf("  --open                     Show only open/open|filtered ports\n");
+	printf("  --reason                   Show the reason for each state\n");
+}
+
 /**
- * @brief Program entry point and owner of the main event loop.
+ * @brief Program entry point.
  *
- * @note The main thread exclusively owns pcap draining, matching,
- *       classification, expiration and scheduling. Sender threads only execute
- *       jobs selected by this loop.
+ * @note High-level orchestration intentionally fits in main.c + run.c so the
+ *       complete control flow remains easy to explain during correction.
  */
 int	main(int ac, char **av)
 {
 	t_nmap_config	config;
-	size_t			target_index;
 	int				exit_status;
 
 	exit_status = 0;
@@ -21,59 +40,16 @@ int	main(int ac, char **av)
 		goto cleanup;
 	if (!nmap_parse_cli(&config, ac, av, &exit_status))
 		goto cleanup;
+	if (config.cli.help)
+	{
+		print_help(config.cli.program_name);
+		goto cleanup;
+	}
 	if (!nmap_prepare_scan_config(&config, &exit_status))
 		goto cleanup;
 	if (!nmap_prepare_targets(&config, &exit_status))
 		goto cleanup;
-	target_index = 0;
-	while (target_index < config.targets.count
-		&& !nmap_signal_stop_requested())
-	{
-		/*
-		 * Family-dependent resources are deliberately prepared after target
-		 * resolution. An IPv4 and an IPv6 target may therefore coexist in the
-		 * same target list without keeping two permanent raw sockets open.
-		 */
-		if (!nmap_prepare_target(&config,
-				config.targets.items[target_index], &exit_status)
-			|| !nmap_prepare_route(&config, &exit_status)
-			|| !nmap_prepare_send_socket(&config, &exit_status)
-			|| !nmap_prepare_pcap(&config, &exit_status)
-			|| !nmap_prepare_runtime(&config, &exit_status)
-			|| !nmap_prepare_sender_pool(&config, &exit_status))
-			goto cleanup;
-		DEBUG_DEV_CONFIG(&config);
-		DEBUG_SOCKET(&config);
-		DEBUG_PCAP(&config);
-		DEBUG_RUNTIME(&config);
-		while (!nmap_signal_stop_requested() && !nmap_runtime_is_finished(&config))
-		{
-			/* Consume replies before expiring probes to favor on-time packets. */
-			if (!nmap_runtime_drain_replies(&config, &exit_status))
-				break ;
-			nmap_runtime_expire_probes(&config);
-			if (!nmap_runtime_schedule_ready(&config, &exit_status))
-				break ;
-			if (nmap_sender_pool_has_error(&config))
-			{
-				exit_status = 1;
-				break ;
-			}
-			if (!nmap_runtime_wait(&config, &exit_status))
-				break ;
-		}
-		if (nmap_signal_stop_requested())
-			exit_status = 130;
-		/* Join workers before report/cleanup can inspect or free probes. */
-		nmap_stop_sender_pool(&config);
-		nmap_print_report(&config);
-		nmap_cleanup_current_target(&config);
-		if (exit_status != 0)
-			break ;
-		target_index++;
-	}
-	if (nmap_signal_stop_requested())
-		exit_status = 130;
+	nmap_run(&config, &exit_status);
 	PROF_REPORT();
 cleanup:
 	nmap_cleanup_config(&config);

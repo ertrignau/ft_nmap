@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <string.h>
 
 /** Return the display name for one concrete scan type. */
 static const char	*scan_type_name(uint32_t scan_type)
@@ -50,6 +51,28 @@ static const char	*probe_state_name(t_probe_state state)
 	return ("unknown");
 }
 
+/** Return a concise report name for the event that produced the result. */
+static const char	*scan_reason_name(t_scan_reason reason)
+{
+	if (reason == SCAN_REASON_SYN_ACK)
+		return ("syn-ack");
+	if (reason == SCAN_REASON_SYN)
+		return ("syn");
+	if (reason == SCAN_REASON_RST)
+		return ("reset");
+	if (reason == SCAN_REASON_UDP_REPLY)
+		return ("udp-response");
+	if (reason == SCAN_REASON_ICMP4)
+		return ("icmp");
+	if (reason == SCAN_REASON_ICMP6)
+		return ("icmp6");
+	if (reason == SCAN_REASON_NO_RESPONSE)
+		return ("no-response");
+	if (reason == SCAN_REASON_SEND_ERROR)
+		return ("send-error");
+	return ("none");
+}
+
 /** Check whether one scan column is enabled. */
 static int	scan_enabled(const t_nmap_config *config, uint32_t scan_type)
 {
@@ -96,14 +119,10 @@ static int	probe_is_open_like(const t_probe *probe)
 static int	port_is_open_like(t_nmap_config *config, uint16_t port)
 {
 	static const uint32_t	types[] = {
-		NMAP_SCAN_SYN,
-		NMAP_SCAN_NULL,
-		NMAP_SCAN_FIN,
-		NMAP_SCAN_XMAS,
-		NMAP_SCAN_ACK,
-		NMAP_SCAN_UDP
+		NMAP_SCAN_SYN, NMAP_SCAN_NULL, NMAP_SCAN_FIN,
+		NMAP_SCAN_XMAS, NMAP_SCAN_ACK, NMAP_SCAN_UDP
 	};
-	size_t					i;
+	size_t				i;
 
 	i = 0;
 	while (i < sizeof(types) / sizeof(types[0]))
@@ -120,15 +139,27 @@ static int	port_is_open_like(t_nmap_config *config, uint16_t port)
 static void	print_header_column(const t_nmap_config *config, uint32_t type)
 {
 	if (scan_enabled(config, type))
-		printf("%-16s", scan_type_name(type));
+		printf("%-24s", scan_type_name(type));
 }
 
-/** Print one enabled result-table cell. */
+/** Print one enabled result-table cell, optionally with --reason. */
 static void	print_result_column(t_nmap_config *config,
 		uint16_t port, uint32_t type)
 {
-	if (scan_enabled(config, type))
-		printf("%-16s", probe_display(find_probe(config, port, type)));
+	t_probe		*probe;
+	char		cell[64];
+
+	if (!scan_enabled(config, type))
+		return ;
+	probe = find_probe(config, port, type);
+	if (!config->scan.show_reason || !probe || probe->state != PROBE_DONE)
+	{
+		printf("%-24s", probe_display(probe));
+		return ;
+	}
+	snprintf(cell, sizeof(cell), "%s(%s)", probe_display(probe),
+		scan_reason_name(probe->reason));
+	printf("%-24s", cell);
 }
 
 /** Print the report table header in stable scan order. */
@@ -157,9 +188,7 @@ static void	print_port(t_nmap_config *config, uint16_t port)
 	printf("\n");
 }
 
-/**
- * @brief Print the current-target scan report without modifying runtime state.
- */
+/** @brief Print the current-target scan report without modifying runtime state. */
 void	nmap_print_report(t_nmap_config *config)
 {
 	size_t	i;

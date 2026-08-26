@@ -61,6 +61,7 @@ static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
 	result = nmap_classify_no_response(probe->scan_type);
 	probe->state = PROBE_DONE;
 	probe->result = result;
+	probe->reason = SCAN_REASON_NO_RESPONSE;
 	config->runtime.done_count++;
 	DEBUG_PROBE_RESULT(probe,
 		"no matching response after retransmission policy");

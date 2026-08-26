@@ -117,7 +117,7 @@ static int	send_inline(t_nmap_config *config, t_probe *probe,
 	if (!nmap_send_probe(config, probe))
 	{
 		nmap_mark_probe_done(config, probe,
-			SCAN_RESULT_UNKNOWN, "send failure");
+			SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
 		if (exit_status)
 			*exit_status = 1;
 		return (0);

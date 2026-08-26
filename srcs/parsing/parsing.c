@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/30 08:31:43 by eric              #+#    #+#             */
-/*   Updated: 2026/07/27 14:50:26 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/03 11:39:38 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,14 +14,18 @@
 
 static int	check_required_args(t_nmap_config *config)
 {
-	if (!config->cli.target)
+	if (config->cli.help)
+		return (1);
+	if (config->cli.ip_specified && config->cli.file_specified)
 	{
-		fprintf(stderr, "ft_nmap: missing --ip\n");
+		fprintf(stderr,
+			"ft_nmap: --ip and --file are mutually exclusive\n");
 		return (0);
 	}
-	if (config->scan.port_count == 0)
+	if (!config->cli.ip_specified && !config->cli.file_specified)
 	{
-		fprintf(stderr, "ft_nmap: missing --ports\n");
+		fprintf(stderr,
+			"ft_nmap: one of --ip or --file is required\n");
 		return (0);
 	}
 	return (1);

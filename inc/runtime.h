@@ -40,6 +40,25 @@ typedef enum e_scan_result
 }	t_scan_result;
 
 /**
+ * @brief Event that justified a final scan classification.
+ *
+ * @note IPv4/IPv6 ICMP details remain stored in the parsed reply while the
+ *       probe keeps only the stable report-level reason category.
+ */
+typedef enum e_scan_reason
+{
+	SCAN_REASON_NONE = 0,
+	SCAN_REASON_SYN_ACK,
+	SCAN_REASON_SYN,
+	SCAN_REASON_RST,
+	SCAN_REASON_UDP_REPLY,
+	SCAN_REASON_ICMP4,
+	SCAN_REASON_ICMP6,
+	SCAN_REASON_NO_RESPONSE,
+	SCAN_REASON_SEND_ERROR
+}	t_scan_reason;
+
+/**
  * @brief One logical scan probe for one destination port and scan type.
  *
  * @note Target/source IP addresses deliberately do not live here. The current
@@ -58,6 +77,7 @@ typedef struct s_probe
 	uint32_t		dispatch_id;
 	t_probe_state	state;
 	t_scan_result	result;
+	t_scan_reason	reason;
 }	t_probe;
 
 /**
@@ -111,8 +131,7 @@ typedef struct s_nmap_reply
  * @brief Runtime state owned by the main scan engine.
  *
  * @note probe_by_src_port gives O(1) candidate lookup. The candidate is still
- *       fully validated (addresses, ports, protocol and TCP sequence when
- *       available) before a captured packet is accepted.
+ *       fully validated before a captured packet is accepted.
  */
 typedef struct s_nmap_runtime
 {

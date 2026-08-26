@@ -1,19 +1,40 @@
 #include "config.h"
 #include "debug/debug.h"
 #include "packet/packet.h"
+#include "packet/wire.h"
 #include "runtime/runtime_internal.h"
 
 #include <pcap/pcap.h>
 #include <stdio.h>
 
+/** Return the stable report-level reason represented by one matched reply. */
+static t_scan_reason	reply_reason(const t_nmap_reply *reply)
+{
+	if (!reply)
+		return (SCAN_REASON_NONE);
+	if (reply->type == NMAP_REPLY_UDP)
+		return (SCAN_REASON_UDP_REPLY);
+	if (reply->type == NMAP_REPLY_ICMP4)
+		return (SCAN_REASON_ICMP4);
+	if (reply->type == NMAP_REPLY_ICMP6)
+		return (SCAN_REASON_ICMP6);
+	if (reply->type == NMAP_REPLY_TCP)
+	{
+		if ((reply->tcp_flags & NMAP_TCP_SYN)
+			&& (reply->tcp_flags & NMAP_TCP_ACK))
+			return (SCAN_REASON_SYN_ACK);
+		if (reply->tcp_flags & NMAP_TCP_RST)
+			return (SCAN_REASON_RST);
+		if (reply->tcp_flags & NMAP_TCP_SYN)
+			return (SCAN_REASON_SYN);
+	}
+	return (SCAN_REASON_NONE);
+}
+
 /**
  * @brief Parse, match and classify one captured frame.
  *
  * @return 1 when the frame finalized a probe, 0 when it was safely ignored.
- *
- * @note Parsing, matching and classification are separate stages on purpose:
- *       an unknown/invalid packet can be discarded without leaking wire-level
- *       IPv4/IPv6 details into the scan-state machine.
  */
 static int	handle_captured_packet(t_nmap_config *config,
 		const unsigned char *packet, size_t len)
@@ -50,13 +71,11 @@ static int	handle_captured_packet(t_nmap_config *config,
 		return (0);
 	}
 	PROF_COUNT(NMAP_PROF_PACKET_MATCHED);
-	nmap_mark_probe_done(config, probe, result, "reply");
+	nmap_mark_probe_done(config, probe, result, reply_reason(&reply), "reply");
 	return (1);
 }
 
-/**
- * @brief Drain every pcap frame currently available without blocking.
- */
+/** @brief Drain every pcap frame currently available without blocking. */
 int	nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status)
 {
 	struct pcap_pkthdr	*header;
