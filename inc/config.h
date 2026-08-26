@@ -96,6 +96,7 @@ typedef struct s_nmap_target
 	struct sockaddr_in	addr;
 	socklen_t			addr_len;
 	char				ip[INET_ADDRSTRLEN];
+	char				hostname[NMAP_HOSTNAME_SIZE];
 
 	int					error;
 	int					gai_error;

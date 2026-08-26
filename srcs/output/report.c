@@ -351,6 +351,24 @@ static int	port_has_open_result(t_nmap_config *config, uint16_t port)
 	return (0);
 }
 
+static void	print_target_name(t_nmap_config *config)
+{
+	if (config->target.hostname[0] != '\0')
+	{
+		printf("Scan report for %s (%s)\n",
+			config->target.hostname,
+			config->target.ip);
+	}
+	else if (strcmp(config->cli.target, config->target.ip) != 0)
+	{
+		printf("Scan report for %s (%s)\n",
+			config->cli.target,
+			config->target.ip);
+	}
+	else
+		printf("Scan report for %s\n", config->target.ip);
+}
+
 /**
  * @brief Print the final scan report.
  *
@@ -365,8 +383,7 @@ void	nmap_print_report(t_nmap_config *config)
 
 	if (!config)
 		return ;
-	printf("Scan report for %s (%s)\n", config->cli.target,
-		config->target.ip);
+	print_target_name(config);
 	printf("Probes: %zu total, %zu done, %zu queued, %zu in flight\n\n",
 		config->runtime.probe_count,
 		config->runtime.done_count,

@@ -6,7 +6,7 @@
 /*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/24 13:04:12 by eric              #+#    #+#             */
-/*   Updated: 2026/07/27 15:07:56 by eric             ###   ########.fr       */
+/*   Updated: 2026/08/26 14:18:00 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,13 +26,12 @@
  *
  * @return 0 on success, -1 on resolution failure.
  */
-static int	resolve_host(t_nmap_target *target, const char *hostname,
-		int no_dns)
+static int	resolve_host(t_nmap_target *target, const char *hostname)
 {
-	struct addrinfo			hints;
-	struct addrinfo			*res;
-	const struct sockaddr_in	*addr;
-	int						status;
+	struct addrinfo				hints;
+	struct addrinfo				*res;
+	const struct sockaddr_in		*addr;
+	int							status;
 
 	if (!target || !hostname || hostname[0] == '\0')
 		return (-1);
@@ -42,8 +41,6 @@ static int	resolve_host(t_nmap_target *target, const char *hostname,
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_protocol = IPPROTO_UDP;
-	if (no_dns)
-		hints.ai_flags |= AI_NUMERICHOST;
 	status = getaddrinfo(hostname, NULL, &hints, &res);
 	if (status != 0)
 	{
@@ -79,6 +76,34 @@ static int	resolve_host(t_nmap_target *target, const char *hostname,
 	return (0);
 }
 
+static int	target_is_numeric(const char *target)
+{
+	struct in_addr	addr;
+
+	if (!target)
+		return (0);
+	return (inet_pton(AF_INET, target, &addr) == 1);
+}
+
+static void	resolve_reverse_dns(t_nmap_target *target)
+{
+	int	status;
+
+	if (!target)
+		return ;
+	target->hostname[0] = '\0';
+	status = getnameinfo(
+			(const struct sockaddr *)&target->addr,
+			target->addr_len,
+			target->hostname,
+			sizeof(target->hostname),
+			NULL,
+			0,
+			NI_NAMEREQD);
+	if (status != 0)
+		target->hostname[0] = '\0';
+}
+
 /**
  * @brief Prepare the resolved IPv4 target from parsed CLI input.
  *
@@ -96,12 +121,14 @@ int	nmap_prepare_target(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (resolve_host(&config->target, config->cli.target,
-			config->cli.no_dns) < 0)
+	if (resolve_host(&config->target, config->cli.target) < 0)
 	{
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	if (!config->cli.no_dns
+		&& target_is_numeric(config->cli.target))
+		resolve_reverse_dns(&config->target);
 	return (1);
 }
