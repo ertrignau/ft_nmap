@@ -1,7 +1,8 @@
+
 #include "config.h"
+#include "packet/wire.h"
 
 #include <stdio.h>
-#include <string.h>
 
 /** Return the display name for one concrete scan type. */
 static const char	*scan_type_name(uint32_t scan_type)
@@ -51,26 +52,99 @@ static const char	*probe_state_name(t_probe_state state)
 	return ("unknown");
 }
 
-/** Return a concise report name for the event that produced the result. */
-static const char	*scan_reason_name(t_scan_reason reason)
+/** Convert known ICMPv4 type/code pairs to concise report text. */
+static const char	*icmp4_reason(uint8_t type, uint8_t code)
 {
-	if (reason == SCAN_REASON_SYN_ACK)
-		return ("syn-ack");
-	if (reason == SCAN_REASON_SYN)
-		return ("syn");
-	if (reason == SCAN_REASON_RST)
-		return ("reset");
-	if (reason == SCAN_REASON_UDP_REPLY)
-		return ("udp-response");
-	if (reason == SCAN_REASON_ICMP4)
-		return ("icmp");
-	if (reason == SCAN_REASON_ICMP6)
-		return ("icmp6");
-	if (reason == SCAN_REASON_NO_RESPONSE)
-		return ("no-response");
-	if (reason == SCAN_REASON_SEND_ERROR)
-		return ("send-error");
-	return ("none");
+	if (type == 3 && code == 0)
+		return ("net-unreachable");
+	if (type == 3 && code == 1)
+		return ("host-unreachable");
+	if (type == 3 && code == 2)
+		return ("protocol-unreachable");
+	if (type == 3 && code == 3)
+		return ("port-unreachable");
+	if (type == 3 && code == 9)
+		return ("net-prohibited");
+	if (type == 3 && code == 10)
+		return ("host-prohibited");
+	if (type == 3 && code == 13)
+		return ("admin-prohibited");
+	if (type == 11 && code == 0)
+		return ("ttl-exceeded");
+	if (type == 11 && code == 1)
+		return ("fragment-timeout");
+	return (NULL);
+}
+
+/** Convert known ICMPv6 type/code pairs to concise report text. */
+static const char	*icmp6_reason(uint8_t type, uint8_t code)
+{
+	if (type == 1 && code == 0)
+		return ("no-route");
+	if (type == 1 && code == 1)
+		return ("admin-prohibited");
+	if (type == 1 && code == 2)
+		return ("beyond-scope");
+	if (type == 1 && code == 3)
+		return ("address-unreachable");
+	if (type == 1 && code == 4)
+		return ("port-unreachable");
+	if (type == 1 && code == 5)
+		return ("source-policy-failed");
+	if (type == 1 && code == 6)
+		return ("reject-route");
+	if (type == 3 && code == 0)
+		return ("hop-limit-exceeded");
+	if (type == 3 && code == 1)
+		return ("fragment-timeout");
+	return (NULL);
+}
+
+/** Format the structured runtime reason without inventing protocol evidence. */
+static void	format_scan_reason(const t_scan_reason *reason,
+		char *buf, size_t size)
+{
+	const char	*name;
+
+	if (!reason || size == 0)
+		return ;
+	if (reason->kind == SCAN_REASON_TCP)
+	{
+		if ((reason->tcp_flags & NMAP_TCP_SYN)
+			&& (reason->tcp_flags & NMAP_TCP_ACK))
+			snprintf(buf, size, "syn-ack");
+		else if (reason->tcp_flags & NMAP_TCP_RST)
+			snprintf(buf, size, "reset");
+		else if (reason->tcp_flags & NMAP_TCP_SYN)
+			snprintf(buf, size, "syn");
+		else
+			snprintf(buf, size, "tcp-flags-0x%02x", reason->tcp_flags);
+		return ;
+	}
+	if (reason->kind == SCAN_REASON_UDP_REPLY)
+		snprintf(buf, size, "udp-response");
+	else if (reason->kind == SCAN_REASON_NO_RESPONSE)
+		snprintf(buf, size, "no-response");
+	else if (reason->kind == SCAN_REASON_SEND_ERROR)
+		snprintf(buf, size, "send-error");
+	else if (reason->kind == SCAN_REASON_ICMP)
+	{
+		name = NULL;
+		if (reason->family == AF_INET)
+			name = icmp4_reason(reason->icmp_type, reason->icmp_code);
+		else if (reason->family == AF_INET6)
+			name = icmp6_reason(reason->icmp_type, reason->icmp_code);
+		if (name)
+			snprintf(buf, size, "%s", name);
+		else if (reason->family == AF_INET6)
+			snprintf(buf, size, "icmp6-%u/%u",
+				reason->icmp_type, reason->icmp_code);
+		else
+			snprintf(buf, size, "icmp-%u/%u",
+				reason->icmp_type, reason->icmp_code);
+	}
+	else
+		snprintf(buf, size, "none");
 }
 
 /** Check whether one scan column is enabled. */
@@ -139,27 +213,28 @@ static int	port_is_open_like(t_nmap_config *config, uint16_t port)
 static void	print_header_column(const t_nmap_config *config, uint32_t type)
 {
 	if (scan_enabled(config, type))
-		printf("%-24s", scan_type_name(type));
+		printf("%-28s", scan_type_name(type));
 }
 
 /** Print one enabled result-table cell, optionally with --reason. */
 static void	print_result_column(t_nmap_config *config,
 		uint16_t port, uint32_t type)
 {
-	t_probe		*probe;
-	char		cell[64];
+	t_probe	*probe;
+	char	reason[48];
+	char	cell[96];
 
 	if (!scan_enabled(config, type))
 		return ;
 	probe = find_probe(config, port, type);
 	if (!config->scan.show_reason || !probe || probe->state != PROBE_DONE)
 	{
-		printf("%-24s", probe_display(probe));
+		printf("%-28s", probe_display(probe));
 		return ;
 	}
-	snprintf(cell, sizeof(cell), "%s(%s)", probe_display(probe),
-		scan_reason_name(probe->reason));
-	printf("%-24s", cell);
+	format_scan_reason(&probe->reason, reason, sizeof(reason));
+	snprintf(cell, sizeof(cell), "%s(%s)", probe_display(probe), reason);
+	printf("%-28s", cell);
 }
 
 /** Print the report table header in stable scan order. */

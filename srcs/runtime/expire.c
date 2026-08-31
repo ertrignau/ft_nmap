@@ -1,3 +1,4 @@
+
 #include "config.h"
 #include "debug/debug.h"
 #include "runtime/runtime_internal.h"
@@ -23,6 +24,8 @@ static int	probe_expired(const t_nmap_config *config,
 	timeout_ms = probe_timeout_ms(config, probe);
 	if (timeout_ms <= 0)
 		return (1);
+	if (now_ms <= probe->sent_at_ms)
+		return (0);
 	elapsed = now_ms - probe->sent_at_ms;
 	return (elapsed >= (uint64_t)timeout_ms);
 }
@@ -41,8 +44,9 @@ static void	remove_outstanding_count(t_nmap_config *config,
 /**
  * @brief Apply retransmission policy or final no-response classification.
  *
- * @note retries counts additional sends. With retries=1, attempts_sent=1 times
- *       out back to PENDING; attempts_sent=2 times out to the final result.
+ * @note retries counts additional successful sends. With retries=1, the first
+ *       successful attempt times out back to PENDING; the second successful
+ *       attempt times out to the final no-response result.
  */
 static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
 {
@@ -61,14 +65,15 @@ static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
 	result = nmap_classify_no_response(probe->scan_type);
 	probe->state = PROBE_DONE;
 	probe->result = result;
-	probe->reason = SCAN_REASON_NO_RESPONSE;
+	probe->reason = (t_scan_reason){0};
+	probe->reason.kind = SCAN_REASON_NO_RESPONSE;
 	config->runtime.done_count++;
 	DEBUG_PROBE_RESULT(probe,
 		"no matching response after retransmission policy");
 }
 
 /**
- * @brief Expire every probe whose current attempt reached its deadline.
+ * @brief Expire every probe whose current successful attempt reached deadline.
  */
 void	nmap_runtime_expire_probes(t_nmap_config *config)
 {

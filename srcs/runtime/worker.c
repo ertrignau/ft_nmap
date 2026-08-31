@@ -1,3 +1,4 @@
+
 #include "runtime/worker.h"
 #include "debug/debug.h"
 #include "packet/packet.h"
@@ -26,43 +27,7 @@ static int	pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
 	return (1);
 }
 
-/**
- * @brief Convert a reserved QUEUED job into an actual OUTSTANDING attempt.
- *
- * @return 1 when this job generation is still valid, 0 when stale/cancelled.
- *
- * @note The timeout clock starts here, immediately before the worker sends.
- */
-static int	mark_job_outstanding(t_nmap_config *config,
-		const t_nmap_send_job *job)
-{
-	t_probe	*probe;
-
-	probe = job->probe;
-	pthread_mutex_lock(&config->runtime.lock);
-	if (!probe || probe->state != PROBE_QUEUED
-		|| probe->dispatch_id != job->dispatch_id)
-	{
-		pthread_mutex_unlock(&config->runtime.lock);
-		return (0);
-	}
-	if (config->runtime.queued_count > 0)
-		config->runtime.queued_count--;
-	config->runtime.outstanding_count++;
-	if (nmap_probe_is_udp(probe))
-	{
-		if (config->runtime.udp_queued_count > 0)
-			config->runtime.udp_queued_count--;
-		config->runtime.udp_outstanding_count++;
-	}
-	probe->attempts_sent++;
-	probe->sent_at_ms = nmap_now_ms();
-	probe->state = PROBE_OUTSTANDING;
-	pthread_mutex_unlock(&config->runtime.lock);
-	return (1);
-}
-
-/** Record a fatal sender error visible to the main scheduler. */
+/** Record a fatal sender error visible to the main event loop. */
 static void	set_send_error(t_nmap_sender_pool *pool)
 {
 	pthread_mutex_lock(&pool->lock);
@@ -71,9 +36,44 @@ static void	set_send_error(t_nmap_sender_pool *pool)
 }
 
 /**
+ * @brief Execute one already-reserved generation.
+ *
+ * The worker does not decide any lifecycle policy. begin_send() only validates
+ * that this exact QUEUED generation is still current and creates a short-lived
+ * execution token. OUTSTANDING is committed only after sendto() succeeds.
+ *
+ * Once begin_send() succeeds, the physical send is considered committed. A
+ * late reply can still complete the logical probe while sendto() is running;
+ * complete_send() then observes DONE and never reopens it.
+ */
+static void	execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
+{
+	t_probe		snapshot;
+	uint64_t	sent_at_ms;
+	int			fatal;
+
+	if (!nmap_runtime_begin_send(worker->config, job->probe,
+			job->dispatch_id, &snapshot))
+		return ;
+	DEBUG_PROBE_SEND(&snapshot);
+	if (!nmap_send_probe(worker->config, job->probe))
+	{
+		fatal = nmap_runtime_fail_send(worker->config,
+				job->probe, job->dispatch_id);
+		if (fatal)
+			set_send_error(&worker->config->sender_pool);
+		return ;
+	}
+	sent_at_ms = nmap_now_ms();
+	nmap_runtime_complete_send(worker->config, job->probe,
+		job->dispatch_id, sent_at_ms);
+}
+
+/**
  * @brief Sender worker entry point.
  *
- * @note No pcap/matching/classification/expiration code belongs in this loop.
+ * No pcap, matching, classification, expiration, retry or scheduling policy
+ * belongs in this loop.
  */
 static void	*worker_main(void *arg)
 {
@@ -82,17 +82,7 @@ static void	*worker_main(void *arg)
 
 	worker = (t_nmap_worker *)arg;
 	while (pool_pop_job(&worker->config->sender_pool, &job))
-	{
-		if (!mark_job_outstanding(worker->config, &job))
-			continue ;
-		DEBUG_PROBE_SEND(job.probe);
-		if (!nmap_send_probe(worker->config, job.probe))
-		{
-			set_send_error(&worker->config->sender_pool);
-			nmap_mark_probe_done(worker->config, job.probe,
-				SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
-		}
-	}
+		execute_job(worker, &job);
 	return (NULL);
 }
 
@@ -192,7 +182,7 @@ void	nmap_stop_sender_pool(t_nmap_config *config)
 	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
 }
 
-/** Return whether any sender thread reported a fatal send failure. */
+/** Return whether any relevant sender job reported a fatal send failure. */
 int	nmap_sender_pool_has_error(t_nmap_config *config)
 {
 	int	error;

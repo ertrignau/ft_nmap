@@ -14,7 +14,6 @@ static void	print_help(const char *progname)
 	printf("  --speedup <0-250>          Number of sender workers\n");
 	printf("  --timeout <ms>             Override TCP/UDP probe timeout\n");
 	printf("  --retries <count>          Number of retransmissions\n");
-	printf("  --probes-per-thread <n>    Send-window capacity per sender\n");
 	printf("  --no-dns                   Disable reverse DNS lookups\n");
 	printf("  --version                  Enable service version detection\n");
 	printf("  --os                       Enable OS detection\n");

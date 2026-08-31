@@ -1,28 +1,23 @@
+
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
 /*   prepare_scan_config.c                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/08/03 16:09:40 by eric              #+#    #+#             */
-/*   Updated: 2026/08/20 14:55:51 by eric             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config.h"
 
-#include <limits.h>
 #include <stdio.h>
 
 #define NMAP_DEFAULT_RETRIES 1
 #define NMAP_MAX_RETRIES 10
 #define NMAP_DEFAULT_TCP_TIMEOUT_MS 1000
 #define NMAP_DEFAULT_UDP_TIMEOUT_MS 2500
-#define NMAP_DEFAULT_WINDOW_PER_SENDER 50
-#define NMAP_MAX_WINDOW_PER_SENDER 4096
+#define NMAP_DEFAULT_WINDOW_SIZE 50
 #define NMAP_DEFAULT_UDP_WINDOW 10
-#define NMAP_DEFAULT_UDP_DISPATCH_GAP_MS 50
+#define NMAP_DEFAULT_UDP_SEND_GAP_MS 50
 
 #define NMAP_ALL_SCAN_TYPES \
 	(NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN \
@@ -72,15 +67,12 @@ static int	prepare_selection(t_nmap_config *config)
 /**
  * @brief Build the fixed timing/window policy consumed by the runtime.
  *
- * @note The window is deliberately centralized here instead of in workers.
- *       A later adaptive congestion controller can replace this policy without
- *       changing packet senders or thread ownership.
+ * @note Sender-thread count and network window are intentionally independent.
+ *       A later RTT/cwnd controller can replace window_size without changing
+ *       the worker pool or packet parser.
  */
 static int	prepare_timing(t_nmap_config *config)
 {
-	int	senders;
-	int	per_sender;
-
 	if (config->cli.speedup < 0 || config->cli.speedup > NMAP_MAX_THREADS)
 	{
 		fprintf(stderr, "ft_nmap: speedup must be between 0 and %d\n",
@@ -113,28 +105,11 @@ static int	prepare_timing(t_nmap_config *config)
 		config->scan.tcp_timeout_ms = NMAP_DEFAULT_TCP_TIMEOUT_MS;
 		config->scan.udp_timeout_ms = NMAP_DEFAULT_UDP_TIMEOUT_MS;
 	}
-	if (config->cli.probes_per_thread_specified)
-		per_sender = config->cli.probes_per_thread;
-	else
-		per_sender = NMAP_DEFAULT_WINDOW_PER_SENDER;
-	if (per_sender <= 0 || per_sender > NMAP_MAX_WINDOW_PER_SENDER)
-	{
-		fprintf(stderr, "ft_nmap: invalid probes-per-thread value\n");
-		return (0);
-	}
-	senders = config->scan.thread_count;
-	if (senders == 0)
-		senders = 1;
-	if (per_sender > INT_MAX / senders)
-	{
-		fprintf(stderr, "ft_nmap: send window overflow\n");
-		return (0);
-	}
-	config->scan.window_size = per_sender * senders;
+	config->scan.window_size = NMAP_DEFAULT_WINDOW_SIZE;
 	config->scan.udp_window_size = NMAP_DEFAULT_UDP_WINDOW;
 	if (config->scan.udp_window_size > config->scan.window_size)
 		config->scan.udp_window_size = config->scan.window_size;
-	config->scan.udp_dispatch_gap_ms = NMAP_DEFAULT_UDP_DISPATCH_GAP_MS;
+	config->scan.udp_send_gap_ms = NMAP_DEFAULT_UDP_SEND_GAP_MS;
 	return (1);
 }
 
@@ -151,7 +126,7 @@ static void	prepare_features(t_nmap_config *config)
 }
 
 /**
- * @brief Convert parsed CLI values into the immutable scan plan.
+ * @brief Convert parsed CLI values into the effective scan plan.
  */
 int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
 {

@@ -71,7 +71,6 @@ SRCS := srcs/main.c \
 	srcs/parsing/pars_scan.c \
 	srcs/parsing/pars_ip.c \
 	srcs/parsing/pars_timeout.c \
-	srcs/parsing/pars_probes.c \
 	srcs/parsing/pars_retries.c \
 	srcs/parsing/pars_file.c \
 	srcs/parsing/pars_bool.c \

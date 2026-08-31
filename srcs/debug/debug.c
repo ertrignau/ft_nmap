@@ -72,7 +72,7 @@ void	nmap_debug_dev_config(const t_nmap_config *config)
 	fprintf(stderr,
 		"[debug][config] threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
 		config->scan.thread_count, config->scan.window_size,
-		config->scan.udp_window_size, config->scan.udp_dispatch_gap_ms);
+		config->scan.udp_window_size, config->scan.udp_send_gap_ms);
 }
 
 /** Print raw socket state. */
@@ -114,7 +114,8 @@ void	nmap_debug_probe_send(const t_probe *probe)
 	fprintf(stderr,
 		"[debug][send][probe] dst_port=%u src_port=%u scan=%s seq=%u attempt=%u state=%s dispatch=%u\n",
 		probe->dst_port, probe->src_port, debug_scan_type_name(probe->scan_type),
-		probe->seq, probe->attempts_sent,
+		probe->seq, (unsigned int)(probe->attempts_sent
+			+ (probe->sending_dispatch_id != 0)),
 		debug_probe_state_name(probe->state), probe->dispatch_id);
 }
 

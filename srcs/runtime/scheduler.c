@@ -1,3 +1,4 @@
+
 #include "config.h"
 #include "debug/debug.h"
 #include "packet/packet.h"
@@ -18,21 +19,27 @@ static size_t	udp_active_count_locked(const t_nmap_config *config)
 		+ config->runtime.udp_outstanding_count);
 }
 
-/** Check whether the global UDP dispatch gap has elapsed. */
+/** Check whether the configured gap since the last real UDP send elapsed. */
 static int	udp_gap_allows_locked(const t_nmap_config *config,
 		uint64_t now_ms)
 {
 	uint64_t	elapsed;
 
-	if (config->scan.udp_dispatch_gap_ms <= 0
-		|| config->runtime.last_udp_dispatch_ms == 0)
+	if (config->scan.udp_send_gap_ms <= 0
+		|| config->runtime.last_udp_sent_ms == 0)
 		return (1);
-	elapsed = now_ms - config->runtime.last_udp_dispatch_ms;
-	return (elapsed >= (uint64_t)config->scan.udp_dispatch_gap_ms);
+	if (now_ms <= config->runtime.last_udp_sent_ms)
+		return (0);
+	elapsed = now_ms - config->runtime.last_udp_sent_ms;
+	return (elapsed >= (uint64_t)config->scan.udp_send_gap_ms);
 }
 
 /**
  * @brief Check whether one PENDING probe can consume scheduler capacity now.
+ *
+ * Only one UDP job is allowed to remain QUEUED at a time. This makes the UDP
+ * pacing timestamp refer to actual successful sends rather than to reservations
+ * that may sit in a worker queue for an arbitrary duration.
  */
 static int	probe_can_be_reserved_locked(const t_nmap_config *config,
 		const t_probe *probe, uint64_t now_ms)
@@ -46,48 +53,31 @@ static int	probe_can_be_reserved_locked(const t_nmap_config *config,
 	if (udp_active_count_locked(config)
 		>= (size_t)config->scan.udp_window_size)
 		return (0);
+	if (config->runtime.udp_queued_count > 0)
+		return (0);
 	return (udp_gap_allows_locked(config, now_ms));
 }
 
-/** Reserve one threaded send job and create a fresh dispatch generation. */
-static uint32_t	reserve_threaded_locked(t_nmap_config *config,
-		t_probe *probe, uint64_t now_ms)
+/** Reserve one exact send generation in QUEUED state. */
+static uint32_t	reserve_probe_locked(t_nmap_config *config, t_probe *probe)
 {
 	probe->state = PROBE_QUEUED;
 	probe->dispatch_id++;
+	probe->sending_dispatch_id = 0;
 	config->runtime.queued_count++;
 	if (nmap_probe_is_udp(probe))
-	{
 		config->runtime.udp_queued_count++;
-		config->runtime.last_udp_dispatch_ms = now_ms;
-	}
 	return (probe->dispatch_id);
 }
 
-/**
- * @brief Start one inline attempt immediately before the packet-layer send.
- */
-static void	reserve_inline_locked(t_nmap_config *config,
-		t_probe *probe, uint64_t now_ms)
-{
-	probe->state = PROBE_OUTSTANDING;
-	probe->attempts_sent++;
-	probe->sent_at_ms = now_ms;
-	config->runtime.outstanding_count++;
-	if (nmap_probe_is_udp(probe))
-	{
-		config->runtime.udp_outstanding_count++;
-		config->runtime.last_udp_dispatch_ms = now_ms;
-	}
-}
-
-/** Undo a QUEUED reservation if the sender-pool queue cannot accept the job. */
-static void	revert_threaded_reservation(t_nmap_config *config,
+/** Undo a reservation that never reached a sender. */
+static void	revert_reservation(t_nmap_config *config,
 		t_probe *probe, uint32_t dispatch_id)
 {
 	pthread_mutex_lock(&config->runtime.lock);
 	if (probe->state == PROBE_QUEUED
-		&& probe->dispatch_id == dispatch_id)
+		&& probe->dispatch_id == dispatch_id
+		&& probe->sending_dispatch_id == 0)
 	{
 		probe->state = PROBE_PENDING;
 		if (config->runtime.queued_count > 0)
@@ -99,51 +89,53 @@ static void	revert_threaded_reservation(t_nmap_config *config,
 	pthread_mutex_unlock(&config->runtime.lock);
 }
 
-/**
- * @brief Send one selected probe directly from the main thread.
- */
-static int	send_inline(t_nmap_config *config, t_probe *probe,
-		uint64_t now_ms, int *exit_status)
+/** Reserve one PENDING probe and return its new generation. */
+static int	reserve_probe(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, uint32_t *dispatch_id)
 {
+	int	reserved;
+
 	pthread_mutex_lock(&config->runtime.lock);
-	if (!probe_can_be_reserved_locked(config, probe, now_ms))
-	{
-		pthread_mutex_unlock(&config->runtime.lock);
-		return (1);
-	}
-	reserve_inline_locked(config, probe, now_ms);
+	reserved = probe_can_be_reserved_locked(config, probe, now_ms);
+	if (reserved)
+		*dispatch_id = reserve_probe_locked(config, probe);
 	pthread_mutex_unlock(&config->runtime.lock);
-	DEBUG_PROBE_SEND(probe);
+	return (reserved);
+}
+
+/** Send one already-reserved generation synchronously from the main thread. */
+static int	send_reserved_inline(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id, int *exit_status)
+{
+	t_probe		snapshot;
+	uint64_t	sent_at_ms;
+
+	if (!nmap_runtime_begin_send(config, probe, dispatch_id, &snapshot))
+		return (1);
+	DEBUG_PROBE_SEND(&snapshot);
 	if (!nmap_send_probe(config, probe))
 	{
-		nmap_mark_probe_done(config, probe,
-			SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
+		(void)nmap_runtime_fail_send(config, probe, dispatch_id);
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	sent_at_ms = nmap_now_ms();
+	nmap_runtime_complete_send(config, probe, dispatch_id, sent_at_ms);
 	return (1);
 }
 
-/**
- * @brief Reserve and enqueue one probe for sender-thread execution.
- */
+/** Reserve and enqueue one probe for sender-thread execution. */
 static int	queue_threaded(t_nmap_config *config, t_probe *probe,
 		uint64_t now_ms, int *exit_status)
 {
 	uint32_t	dispatch_id;
 
-	pthread_mutex_lock(&config->runtime.lock);
-	if (!probe_can_be_reserved_locked(config, probe, now_ms))
-	{
-		pthread_mutex_unlock(&config->runtime.lock);
+	if (!reserve_probe(config, probe, now_ms, &dispatch_id))
 		return (1);
-	}
-	dispatch_id = reserve_threaded_locked(config, probe, now_ms);
-	pthread_mutex_unlock(&config->runtime.lock);
 	if (!nmap_dispatch_probe_to_sender(config, probe, dispatch_id))
 	{
-		revert_threaded_reservation(config, probe, dispatch_id);
+		revert_reservation(config, probe, dispatch_id);
 		if (nmap_sender_pool_has_error(config))
 		{
 			if (exit_status)
@@ -152,6 +144,17 @@ static int	queue_threaded(t_nmap_config *config, t_probe *probe,
 		}
 	}
 	return (1);
+}
+
+/** Reserve and execute one probe directly from the main thread. */
+static int	send_inline(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, int *exit_status)
+{
+	uint32_t	dispatch_id;
+
+	if (!reserve_probe(config, probe, now_ms, &dispatch_id))
+		return (1);
+	return (send_reserved_inline(config, probe, dispatch_id, exit_status));
 }
 
 /** Check whether the global send window is currently full. */
@@ -169,8 +172,8 @@ static int	global_window_full(t_nmap_config *config)
 /**
  * @brief Schedule every currently eligible PENDING probe while capacity allows.
  *
- * @note This function is the only owner of send-order/window policy. Workers
- *       do not decide what to send and cannot bypass UDP/global limits.
+ * This function owns send order and window policy. Workers can only execute a
+ * generation already reserved here and cannot bypass global/UDP limits.
  */
 int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
 {

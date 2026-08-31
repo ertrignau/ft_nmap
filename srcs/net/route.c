@@ -1,3 +1,4 @@
+
 #include "config.h"
 #include "net/address.h"
 
@@ -11,15 +12,6 @@
 
 /**
  * @brief Ask the kernel which source address it would route to the target.
- *
- * @param target Resolved IPv4/IPv6 destination.
- * @param src_addr Output source address selected by the kernel.
- * @param saved_error Output errno-style error on failure.
- *
- * @return 1 on success, 0 on failure.
- *
- * @note Connecting this UDP socket does not perform the scan and normally sends
- *       no datagram. It delegates route/source-address selection to the kernel.
  */
 static int	find_source_address(const t_nmap_target *target,
 		t_nmap_ip_addr *src_addr, int *saved_error)
@@ -71,16 +63,18 @@ static int	find_source_address(const t_nmap_target *target,
 /**
  * @brief Find the interface owning the selected source address.
  *
- * @note For IPv6 this also gives an ifindex, required to use link-local scoped
- *       addresses correctly.
+ * expected_ifindex is zero for ordinary unscoped routes. For a scoped IPv6
+ * target it forces the local source-address match to occur on the same zone,
+ * avoiding an address-only comparison across different interfaces.
  */
 static int	find_source_interface(const t_nmap_ip_addr *src_addr,
-		char *iface, size_t iface_size, unsigned int *ifindex,
-		int *saved_error)
+		unsigned int expected_ifindex, char *iface, size_t iface_size,
+		unsigned int *ifindex, int *saved_error)
 {
 	struct ifaddrs	*ifaddr;
 	struct ifaddrs	*current;
 	t_nmap_ip_addr	current_addr;
+	unsigned int	current_ifindex;
 	size_t			name_len;
 	socklen_t		addr_len;
 	int				found;
@@ -99,9 +93,15 @@ static int	find_source_interface(const t_nmap_ip_addr *src_addr,
 			addr_len = sizeof(struct sockaddr_in);
 		else
 			addr_len = sizeof(struct sockaddr_in6);
+		current_ifindex = 0;
+		if (current->ifa_name)
+			current_ifindex = if_nametoindex(current->ifa_name);
 		if (current->ifa_name && current->ifa_addr
 			&& (current->ifa_flags & IFF_UP)
 			&& current->ifa_addr->sa_family == src_addr->family
+			&& current_ifindex != 0
+			&& (expected_ifindex == 0
+				|| current_ifindex == expected_ifindex)
 			&& nmap_ip_from_sockaddr(&current_addr,
 				current->ifa_addr, addr_len)
 			&& nmap_ip_equal(src_addr, &current_addr))
@@ -114,13 +114,7 @@ static int	find_source_interface(const t_nmap_ip_addr *src_addr,
 				return (0);
 			}
 			memcpy(iface, current->ifa_name, name_len + 1);
-			*ifindex = if_nametoindex(current->ifa_name);
-			if (*ifindex == 0)
-			{
-				freeifaddrs(ifaddr);
-				*saved_error = errno ? errno : ENODEV;
-				return (0);
-			}
+			*ifindex = current_ifindex;
 			found = 1;
 			break ;
 		}
@@ -140,11 +134,23 @@ static int	find_source_interface(const t_nmap_ip_addr *src_addr,
  */
 int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 {
-	int	error;
+	unsigned int	expected_ifindex;
+	int				error;
 
 	if (!config || (config->target.addr.family != AF_INET
 			&& config->target.addr.family != AF_INET6))
 	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (config->target.addr.family == AF_INET6
+		&& IN6_IS_ADDR_LINKLOCAL(&config->target.addr.addr.v6)
+		&& config->target.addr.scope_id == 0)
+	{
+		fprintf(stderr,
+			"ft_nmap: link-local IPv6 target %s requires a zone "
+			"identifier (for example %%eth0)\n", config->target.name);
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
@@ -170,7 +176,12 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!find_source_interface(&config->route.src_addr,
+	expected_ifindex = 0;
+	if (config->target.addr.family == AF_INET6)
+		expected_ifindex = config->target.addr.scope_id;
+	if (expected_ifindex == 0 && config->route.src_addr.family == AF_INET6)
+		expected_ifindex = config->route.src_addr.scope_id;
+	if (!find_source_interface(&config->route.src_addr, expected_ifindex,
 			config->route.iface, sizeof(config->route.iface),
 			&config->route.ifindex, &error))
 	{
@@ -181,10 +192,5 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	/* A naked fe80:: address needs the outgoing link to become usable. */
-	if (config->target.addr.family == AF_INET6
-		&& config->target.addr.scope_id == 0
-		&& IN6_IS_ADDR_LINKLOCAL(&config->target.addr.addr.v6))
-		config->target.addr.scope_id = config->route.ifindex;
 	return (1);
 }

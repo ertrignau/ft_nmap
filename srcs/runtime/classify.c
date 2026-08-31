@@ -1,3 +1,4 @@
+
 #include "runtime/runtime_internal.h"
 #include "net/address.h"
 #include "packet/wire.h"
@@ -27,7 +28,7 @@ static t_scan_result	classify_tcp_packet(const t_probe *probe,
 			return (SCAN_RESULT_OPEN);
 		if (flags & NMAP_TCP_RST)
 			return (SCAN_RESULT_CLOSED);
-		/* Split-handshake behavior: a matching SYN is evidence of OPEN. */
+		/* Keep split-handshake support explicit rather than accidental. */
 		if (flags & NMAP_TCP_SYN)
 			return (SCAN_RESULT_OPEN);
 	}
@@ -48,9 +49,6 @@ static t_scan_result	classify_tcp_packet(const t_probe *probe,
 
 /**
  * @brief Classify one matched ICMPv4 error.
- *
- * @note Unknown type/code pairs return UNKNOWN: they do not finalize the probe,
- *       so the runtime continues waiting/retransmitting according to policy.
  */
 static t_scan_result	classify_icmp4(const t_nmap_config *config,
 		const t_probe *probe, const t_nmap_reply *reply)
@@ -72,9 +70,11 @@ static t_scan_result	classify_icmp4(const t_nmap_config *config,
 /**
  * @brief Classify one matched ICMPv6 error.
  *
- * Destination Unreachable (type 1) codes 0..6 are filtering/unreachable
+ * Destination Unreachable type 1 codes 0..6 are filtering/unreachable
  * evidence, except UDP port-unreachable 1/4 from the target itself -> CLOSED.
- * Parameter Problem 4/0 is treated as OPEN indication; 4/1 as FILTERED.
+ * Time Exceeded type 3 is filtering/path evidence for the current scan.
+ * Packet Too Big and Parameter Problem are not port-state evidence here and
+ * deliberately remain UNKNOWN instead of inventing an OPEN result.
  */
 static t_scan_result	classify_icmp6(const t_nmap_config *config,
 		const t_probe *probe, const t_nmap_reply *reply)
@@ -86,9 +86,7 @@ static t_scan_result	classify_icmp6(const t_nmap_config *config,
 			return (SCAN_RESULT_CLOSED);
 		return (SCAN_RESULT_FILTERED);
 	}
-	if (reply->icmp_type == 4 && reply->icmp_code == 0)
-		return (SCAN_RESULT_OPEN);
-	if (reply->icmp_type == 4 && reply->icmp_code == 1)
+	if (reply->icmp_type == 3 && reply->icmp_code <= 1)
 		return (SCAN_RESULT_FILTERED);
 	return (SCAN_RESULT_UNKNOWN);
 }
@@ -113,7 +111,7 @@ t_scan_result	nmap_classify_reply(const t_nmap_config *config,
 }
 
 /**
- * @brief Classify NO MATCHING RESPONSE AFTER RETRANSMISSION POLICY.
+ * @brief Classify final absence of a matching response after retry policy.
  */
 t_scan_result	nmap_classify_no_response(uint32_t scan_type)
 {

@@ -1,3 +1,4 @@
+
 #ifndef CONFIG_H
 # define CONFIG_H
 
@@ -32,10 +33,11 @@ typedef enum e_nmap_scan_type
 typedef struct s_nmap_worker	t_nmap_worker;
 
 /**
- * @brief One sender-pool job.
+ * @brief One immutable sender-pool job.
  *
- * @note dispatch_id invalidates stale queued jobs when a logical probe changes
- *       generation (for example after a late reply or retransmission cycle).
+ * @note dispatch_id identifies the exact scheduling generation. A job that is
+ *       still waiting in the queue becomes stale as soon as the logical probe
+ *       is completed or reserved again with another generation.
  */
 typedef struct s_nmap_send_job
 {
@@ -46,8 +48,10 @@ typedef struct s_nmap_send_job
 /**
  * @brief Shared producer/consumer queue for sender threads.
  *
- * @note Workers only build/send packets. They never read pcap, classify a
- *       reply, expire a probe, or choose which probe should be scheduled.
+ * Workers only execute an already selected send generation. They never read
+ * pcap, classify replies, expire probes, decide retries, or choose scheduling
+ * policy. Runtime state changes made by workers are limited to the atomic
+ * begin/commit/fail bookkeeping surrounding the actual send syscall.
  */
 typedef struct s_nmap_sender_pool
 {
@@ -70,7 +74,7 @@ typedef struct s_nmap_sender_pool
 /**
  * @brief Raw options explicitly supplied through the command line.
  *
- * @note The parser only records user intent here. Runtime/network policy is
+ * @note The parser records user intent here. Runtime/network policy is
  *       normalized later by nmap_prepare_scan_config().
  */
 typedef struct s_nmap_cli
@@ -93,7 +97,6 @@ typedef struct s_nmap_cli
 	int			speedup;
 	int			retries;
 	int			timeout_ms;
-	int			probes_per_thread;
 
 	int			ip_specified;
 	int			file_specified;
@@ -102,7 +105,6 @@ typedef struct s_nmap_cli
 	int			speedup_specified;
 	int			retries_specified;
 	int			timeout_specified;
-	int			probes_per_thread_specified;
 }	t_nmap_cli;
 
 /**
@@ -117,6 +119,9 @@ typedef struct s_nmap_targets
 
 /**
  * @brief One currently resolved target.
+ *
+ * addr is the semantic source of truth. ip is only its cached presentation
+ * form for diagnostics, reports and pcap filter construction.
  */
 typedef struct s_nmap_target
 {
@@ -129,6 +134,9 @@ typedef struct s_nmap_target
 
 /**
  * @brief Route selected by the kernel for the current target.
+ *
+ * src_addr is the semantic source of truth. src_ip is a cached presentation
+ * string. ifindex is also the IPv6 zone when a scoped route is required.
  */
 typedef struct s_nmap_route
 {
@@ -162,11 +170,11 @@ typedef struct s_nmap_capture
 }	t_nmap_capture;
 
 /**
- * @brief Effective immutable scan configuration consumed by the engine.
+ * @brief Effective scan configuration consumed by the engine.
  *
- * @note window_size is the current global outstanding/queued capacity. It is a
- *       fixed window for now; the timing policy remains centralized outside
- *       workers so adaptive Nmap-like control can be added later.
+ * @note window_size is global. It deliberately does not depend on the number
+ *       of sender workers: thread parallelism and network in-flight capacity
+ *       are separate concerns.
  */
 typedef struct s_nmap_scan
 {
@@ -181,7 +189,7 @@ typedef struct s_nmap_scan
 
 	int			window_size;
 	int			udp_window_size;
-	int			udp_dispatch_gap_ms;
+	int			udp_send_gap_ms;
 
 	int			no_dns;
 	int			version_detection;
@@ -193,8 +201,9 @@ typedef struct s_nmap_scan
 /**
  * @brief Complete process state.
  *
- * Parsing/options are global. target/route/socket/capture/runtime/sender_pool
- * are prepared and cleaned for each concrete resolved target.
+ * Parsing/options and the target list are process-scoped. target/route/socket/
+ * capture/runtime/sender_pool are prepared and cleaned for each resolved
+ * target.
  */
 typedef struct s_nmap_config
 {

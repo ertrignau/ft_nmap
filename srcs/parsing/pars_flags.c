@@ -31,8 +31,6 @@ int	parse_flag(t_nmap_config *config, int argc, char **argv, int *i)
 		return (parse_file(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--scan"))
 		return (parse_scan(config, argc, argv, i));
-	if (nmap_streq(argv[*i], "--probes-per-thread"))
-		return (parse_probes_per_thread(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--retries"))
 		return (parse_retries(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--no-dns") || nmap_streq(argv[*i], "--open") || nmap_streq(argv[*i], "--reason") || nmap_streq(argv[*i], "--version") || nmap_streq(argv[*i], "--os"))

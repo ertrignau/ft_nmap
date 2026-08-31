@@ -1,3 +1,4 @@
+
 #include "config.h"
 #include "debug/debug.h"
 #include "runtime/runtime_internal.h"
@@ -6,15 +7,17 @@
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <time.h>
 
-/** Return current wall-clock time in microseconds for profiling/select. */
+/** Return current monotonic time in microseconds for profiling/select. */
 static uint64_t	now_us(void)
 {
-	struct timeval	tv;
+	struct timespec	ts;
 
-	gettimeofday(&tv, NULL);
-	return ((uint64_t)tv.tv_sec * 1000000ULL
-		+ (uint64_t)tv.tv_usec);
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return (0);
+	return ((uint64_t)ts.tv_sec * 1000000ULL
+		+ (uint64_t)ts.tv_nsec / 1000ULL);
 }
 
 /** Return the timeout configured for one probe family. */
@@ -42,19 +45,21 @@ static uint64_t	remaining_probe_ms(const t_nmap_config *config,
 	return ((uint64_t)timeout_ms - elapsed);
 }
 
-/** Compute remaining global UDP pacing delay. */
+/** Compute remaining delay since the last successful UDP send. */
 static uint64_t	remaining_udp_gap_ms(const t_nmap_config *config,
 		uint64_t now_ms)
 {
 	uint64_t	elapsed;
 
-	if (config->scan.udp_dispatch_gap_ms <= 0
-		|| config->runtime.last_udp_dispatch_ms == 0)
+	if (config->scan.udp_send_gap_ms <= 0
+		|| config->runtime.last_udp_sent_ms == 0)
 		return (0);
-	elapsed = now_ms - config->runtime.last_udp_dispatch_ms;
-	if (elapsed >= (uint64_t)config->scan.udp_dispatch_gap_ms)
+	if (now_ms <= config->runtime.last_udp_sent_ms)
+		return ((uint64_t)config->scan.udp_send_gap_ms);
+	elapsed = now_ms - config->runtime.last_udp_sent_ms;
+	if (elapsed >= (uint64_t)config->scan.udp_send_gap_ms)
 		return (0);
-	return ((uint64_t)config->scan.udp_dispatch_gap_ms - elapsed);
+	return ((uint64_t)config->scan.udp_send_gap_ms - elapsed);
 }
 
 /** Register one candidate duration and preserve the nearest deadline. */
@@ -84,8 +89,8 @@ static int	has_pending_udp_locked(const t_nmap_config *config)
 /**
  * @brief Compute how long select() may sleep before the next useful event.
  *
- * Candidates are outstanding-probe deadlines, queued-worker progress and UDP
- * pacing. Pcap readability can wake select earlier at any time.
+ * Candidates are outstanding-probe deadlines, queued-worker progress and the
+ * real UDP send pacing deadline. Pcap readability may wake select earlier.
  */
 static int	get_next_wait_ms(t_nmap_config *config,
 		uint64_t *wait_ms, uint64_t *sample_us)

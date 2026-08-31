@@ -1,0 +1,6487 @@
+
+================================================================
+FT_NMAP SOURCE CONTEXT
+================================================================
+
+Generated from: /home/kearmand/projet42/ft_nmap
+Date: mer. 26 août 2026 17:29:39 CEST
+
+================================================================
+GIT STATUS
+================================================================
+
+ M copy.sh
+?? ft_nmap_source_context.txt
+
+================================================================
+GIT LOG
+================================================================
+
+*   21c7949 (HEAD -> packet, origin/packet) Merge parsing features into IPv6 scan architecture
+|\  
+| * fda7e94 [FIX] compilation error
+| * 217d2fc add --reason mode
+| * 73a30cc add pars_bool.c to makefile
+| * b7ce01b --open flag ready
+| * 1bef4d6 pars_bool ready
+| * bae30c1 push retries and mandatory flags
+| * 7f6e776 pars timeout
+| * 109ca01 parsing --ip --ports --speedup --file ready
+| * eb2c785 push print_help changement todo_list
+* | 2dfd7ad ajout de l ipv6
+* | 5b60e1b Petite reorganisation des fichier
+* | 0aa5f48 Merge branch 'parsing' into packet
+|\| 
+| * 1ad65fa (parsing) todo
+| * 04e7a64 petit ajout
+| * bf997d0 push parsing + resolve DNS
+| * ad31239 push parsing ip and port
+| * ec275f8 push parsing speedup flags
+| * 0ef96e4 add parsing utils and port
+* | fac0de9 adding change
+
+================================================================
+PROJECT FILES
+================================================================
+
+./debug
+./ft_nmap_context.txt
+./ft_nmap_lab/configs/default.env
+./ft_nmap_lab/configs/filtered-heavy.env
+./ft_nmap_lab/configs/mixed.env
+./ft_nmap_lab/configs/mostly-closed.env
+./ft_nmap_lab/configs/tcp-many-open.env
+./ft_nmap_lab/configs/udp-many-open.env
+./ft_nmap_lab/docker-compose.yml
+./ft_nmap_lab/Makefile
+./ft_nmap_lab/ports-interesting.txt
+./ft_nmap_lab/README.md
+./ft_nmap_lab/target/Dockerfile
+./ft_nmap_lab/target/entrypoint.sh
+./ft_nmap_lab/target/service_lab.py
+./ft_nmap_lab/targets.txt
+./ft_nmap_lab/toto
+./.gitignore
+./inc/config.h
+./inc/ft_nmap.h
+./inc/ip_addr.h
+./inc/README.md
+./inc/runtime.h
+./make_docker_context.txt
+./Makefile
+./nmap_udp_6.strace
+./nmap_udp.strace
+./PARSING_TODO.MD
+./PlanGlobal.md
+./PLanMoteur.md
+./README.md
+./srcs/cleanup/cleanup.c
+./srcs/debug/debug.c
+./srcs/debug/debug.h
+./srcs/debug/profilage.c
+./srcs/init/init.c
+./srcs/init/prepare_scan_config.c
+./srcs/init/targets.c
+./srcs/main.c
+./srcs/net/address.c
+./srcs/net/address.h
+./srcs/net/pcap.c
+./srcs/net/route.c
+./srcs/net/socket.c
+./srcs/net/target.c
+./srcs/output/report.c
+./srcs/packet/checksum.c
+./srcs/packet/ipv4.c
+./srcs/packet/ipv6.c
+./srcs/packet/link_offset.c
+./srcs/packet/packet.h
+./srcs/packet/parse.c
+./srcs/packet/README.md
+./srcs/packet/send.c
+./srcs/packet/tcp.c
+./srcs/packet/udp.c
+./srcs/packet/wire.h
+./srcs/parsing/pars_bool.c
+./srcs/parsing/pars_file.c
+./srcs/parsing/pars_flags.c
+./srcs/parsing/parsing.c
+./srcs/parsing/parsing_utils.c
+./srcs/parsing/pars_ip.c
+./srcs/parsing/pars_port.c
+./srcs/parsing/pars_probes.c
+./srcs/parsing/pars_retries.c
+./srcs/parsing/pars_scan.c
+./srcs/parsing/pars_speedup.c
+./srcs/parsing/pars_timeout.c
+./srcs/run.c
+./srcs/runtime/classify.c
+./srcs/runtime/common.c
+./srcs/runtime/expire.c
+./srcs/runtime/init.c
+./srcs/runtime/match.c
+./srcs/runtime/README.md
+./srcs/runtime/recv.c
+./srcs/runtime/runtime_internal.h
+./srcs/runtime/scheduler.c
+./srcs/runtime/wait.c
+./srcs/runtime/worker.c
+./srcs/runtime/worker.h
+./srcs/signal/signal.c
+./targets.txt
+./tot.py
+./tot.sh
+
+================================================================
+FILE: Makefile
+================================================================
+
+.DEFAULT_GOAL := all
+
+# **************************************************************************** #
+#                                  PROGRAM                                     #
+# **************************************************************************** #
+
+NAME := ft_nmap
+
+# **************************************************************************** #
+#                                  COMPILER                                    #
+# **************************************************************************** #
+
+CC := cc
+CFLAGS := -Wall -Wextra -Werror
+CPPFLAGS := -Iinc -Isrcs
+DEPFLAGS := -MMD -MP
+RM := rm -rf
+
+# **************************************************************************** #
+#                                  LIBRARIES                                   #
+# **************************************************************************** #
+
+LDLIBS := -lpcap -pthread
+
+# **************************************************************************** #
+#                                DIRECTORIES                                   #
+# **************************************************************************** #
+
+OBJS_DIR := objs
+DEBUG_OBJS_DIR := objs_debug
+PROFILE_OBJS_DIR := objs_profile
+
+# **************************************************************************** #
+#                                  SOURCES                                     #
+# **************************************************************************** #
+
+SRCS := srcs/main.c \
+	srcs/run.c \
+	srcs/init/init.c \
+	srcs/init/prepare_scan_config.c \
+	srcs/init/targets.c \
+	srcs/cleanup/cleanup.c \
+	srcs/signal/signal.c \
+	srcs/net/address.c \
+	srcs/net/target.c \
+	srcs/net/route.c \
+	srcs/net/socket.c \
+	srcs/net/pcap.c \
+	srcs/packet/checksum.c \
+	srcs/packet/ipv4.c \
+	srcs/packet/ipv6.c \
+	srcs/packet/send.c \
+	srcs/packet/tcp.c \
+	srcs/packet/udp.c \
+	srcs/packet/link_offset.c \
+	srcs/packet/parse.c \
+	srcs/runtime/common.c \
+	srcs/runtime/init.c \
+	srcs/runtime/match.c \
+	srcs/runtime/classify.c \
+	srcs/runtime/recv.c \
+	srcs/runtime/expire.c \
+	srcs/runtime/scheduler.c \
+	srcs/runtime/worker.c \
+	srcs/runtime/wait.c \
+	srcs/output/report.c \
+	srcs/parsing/pars_port.c \
+	srcs/parsing/parsing_utils.c \
+	srcs/parsing/pars_flags.c \
+	srcs/parsing/pars_speedup.c \
+	srcs/parsing/pars_scan.c \
+	srcs/parsing/pars_ip.c \
+	srcs/parsing/pars_timeout.c \
+	srcs/parsing/pars_probes.c \
+	srcs/parsing/pars_retries.c \
+	srcs/parsing/pars_file.c \
+	srcs/parsing/pars_bool.c \
+	srcs/parsing/parsing.c
+
+DEBUG_SRCS := $(SRCS) srcs/debug/debug.c
+PROFILE_SRCS := $(SRCS) srcs/debug/profilage.c
+
+# **************************************************************************** #
+#                                  OBJECTS                                     #
+# **************************************************************************** #
+
+OBJS := $(patsubst %.c,$(OBJS_DIR)/%.o,$(SRCS))
+DEBUG_OBJS := $(patsubst %.c,$(DEBUG_OBJS_DIR)/%.o,$(DEBUG_SRCS))
+PROFILE_OBJS := $(patsubst %.c,$(PROFILE_OBJS_DIR)/%.o,$(PROFILE_SRCS))
+
+DEPS := $(OBJS:.o=.d)
+DEBUG_DEPS := $(DEBUG_OBJS:.o=.d)
+PROFILE_DEPS := $(PROFILE_OBJS:.o=.d)
+
+# **************************************************************************** #
+#                                   RULES                                      #
+# **************************************************************************** #
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)
+
+debug: $(DEBUG_OBJS)
+	$(CC) $(CFLAGS) -DDEBUG $(DEBUG_OBJS) $(LDLIBS) -o $(NAME)
+
+profile: $(PROFILE_OBJS)
+	$(CC) $(CFLAGS) -DPROFILE $(PROFILE_OBJS) $(LDLIBS) -o $(NAME)
+
+$(OBJS_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+
+$(DEBUG_OBJS_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DDEBUG $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+
+$(PROFILE_OBJS_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DPROFILE $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+
+clean:
+	$(RM) $(OBJS_DIR) $(DEBUG_OBJS_DIR) $(PROFILE_OBJS_DIR)
+
+fclean: clean
+	$(RM) $(NAME)
+
+re: fclean all
+
+run: all
+	sudo ./$(NAME)
+
+debug-run: debug
+	sudo ./$(NAME)
+
+profile-run: profile
+	sudo ./$(NAME)
+
+# **************************************************************************** #
+#                                  DOCKER LAB                                  #
+# **************************************************************************** #
+
+LAB_DIR := ft_nmap_lab
+
+lab: lab-up
+
+lab-up:
+	$(MAKE) -C $(LAB_DIR) up
+
+lab-down:
+	$(MAKE) -C $(LAB_DIR) down
+
+lab-re:
+	$(MAKE) -C $(LAB_DIR) re
+
+lab-clean:
+	$(MAKE) -C $(LAB_DIR) clean
+
+lab-logs:
+	$(MAKE) -C $(LAB_DIR) logs
+
+lab-ps:
+	$(MAKE) -C $(LAB_DIR) ps
+
+lab-shell:
+	$(MAKE) -C $(LAB_DIR) shell
+
+lab-profiles:
+	$(MAKE) -C $(LAB_DIR) profiles
+
+lab-default:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=default
+
+lab-tcp-many:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=tcp-many-open
+
+lab-udp-many:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=udp-many-open
+
+lab-mixed:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=mixed
+
+lab-mostly-closed:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=mostly-closed
+
+lab-filtered-heavy:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=filtered-heavy
+
+lab-profile-%:
+	$(MAKE) -C $(LAB_DIR) up PROFILE=$*
+
+# **************************************************************************** #
+#                                DEPENDENCIES                                  #
+# **************************************************************************** #
+
+-include $(DEPS)
+-include $(DEBUG_DEPS)
+-include $(PROFILE_DEPS)
+
+.PHONY: all debug profile clean fclean re run debug-run profile-run \
+	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell \
+	lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed \
+	lab-mostly-closed lab-filtered-heavy
+
+
+================================================================
+FILE: inc/config.h
+================================================================
+
+#ifndef CONFIG_H
+# define CONFIG_H
+
+# include "runtime.h"
+
+# include <pcap/pcap.h>
+# include <pthread.h>
+# include <stddef.h>
+# include <stdint.h>
+# include <stdio.h>
+# include <string.h>
+
+# define NMAP_MAX_PORTS 1024
+# define NMAP_MAX_TARGETS 1024
+# define NMAP_TARGET_INITIAL_CAPACITY 16
+# define NMAP_MAX_THREADS 250
+# define NMAP_IFACE_NAME_MAX 64
+
+/**
+ * @brief Scan families required by the ft_nmap subject.
+ */
+typedef enum e_nmap_scan_type
+{
+	NMAP_SCAN_SYN = 1 << 0,
+	NMAP_SCAN_NULL = 1 << 1,
+	NMAP_SCAN_FIN = 1 << 2,
+	NMAP_SCAN_XMAS = 1 << 3,
+	NMAP_SCAN_ACK = 1 << 4,
+	NMAP_SCAN_UDP = 1 << 5
+}	t_nmap_scan_type;
+
+typedef struct s_nmap_worker	t_nmap_worker;
+
+/**
+ * @brief One sender-pool job.
+ *
+ * @note dispatch_id invalidates stale queued jobs when a logical probe changes
+ *       generation (for example after a late reply or retransmission cycle).
+ */
+typedef struct s_nmap_send_job
+{
+	t_probe		*probe;
+	uint32_t	dispatch_id;
+}	t_nmap_send_job;
+
+/**
+ * @brief Shared producer/consumer queue for sender threads.
+ *
+ * @note Workers only build/send packets. They never read pcap, classify a
+ *       reply, expire a probe, or choose which probe should be scheduled.
+ */
+typedef struct s_nmap_sender_pool
+{
+	t_nmap_worker	*workers;
+	int				worker_count;
+
+	t_nmap_send_job	*queue;
+	size_t			queue_capacity;
+	size_t			queue_head;
+	size_t			queue_tail;
+	size_t			queue_count;
+
+	pthread_mutex_t	lock;
+	pthread_cond_t	cond;
+	int				initialized;
+	int				stop_requested;
+	int				send_error;
+}	t_nmap_sender_pool;
+
+/**
+ * @brief Raw options explicitly supplied through the command line.
+ *
+ * @note The parser only records user intent here. Runtime/network policy is
+ *       normalized later by nmap_prepare_scan_config().
+ */
+typedef struct s_nmap_cli
+{
+	const char	*program_name;
+	const char	*target;
+	const char	*target_file;
+	const char	*ports_arg;
+	const char	*scan_arg;
+
+	uint32_t	scan_mask;
+
+	int			help;
+	int			no_dns;
+	int			version_detection;
+	int			os_detection;
+	int			open_only;
+	int			show_reason;
+
+	int			speedup;
+	int			retries;
+	int			timeout_ms;
+	int			probes_per_thread;
+
+	int			ip_specified;
+	int			file_specified;
+	int			ports_specified;
+	int			scan_specified;
+	int			speedup_specified;
+	int			retries_specified;
+	int			timeout_specified;
+	int			probes_per_thread_specified;
+}	t_nmap_cli;
+
+/**
+ * @brief Owned list of target strings prepared from --ip or --file.
+ */
+typedef struct s_nmap_targets
+{
+	char	**items;
+	size_t	count;
+	size_t	capacity;
+}	t_nmap_targets;
+
+/**
+ * @brief One currently resolved target.
+ */
+typedef struct s_nmap_target
+{
+	const char		*name;
+	t_nmap_ip_addr	addr;
+	char			ip[NMAP_ADDR_TEXT_MAX];
+	int				error;
+	int				gai_error;
+}	t_nmap_target;
+
+/**
+ * @brief Route selected by the kernel for the current target.
+ */
+typedef struct s_nmap_route
+{
+	char			iface[NMAP_IFACE_NAME_MAX];
+	unsigned int	ifindex;
+	t_nmap_ip_addr	src_addr;
+	char			src_ip[NMAP_ADDR_TEXT_MAX];
+	int				error;
+}	t_nmap_route;
+
+/**
+ * @brief Raw send socket for the current target family.
+ */
+typedef struct s_nmap_socket
+{
+	int			send_fd;
+	sa_family_t	family;
+	int			error;
+}	t_nmap_socket;
+
+/**
+ * @brief Pcap state owned by the main thread.
+ */
+typedef struct s_nmap_capture
+{
+	pcap_t	*handle;
+	char	errbuf[PCAP_ERRBUF_SIZE];
+	int		fd;
+	int		datalink;
+	int		error;
+}	t_nmap_capture;
+
+/**
+ * @brief Effective immutable scan configuration consumed by the engine.
+ *
+ * @note window_size is the current global outstanding/queued capacity. It is a
+ *       fixed window for now; the timing policy remains centralized outside
+ *       workers so adaptive Nmap-like control can be added later.
+ */
+typedef struct s_nmap_scan
+{
+	uint16_t	ports[NMAP_MAX_PORTS];
+	size_t		port_count;
+	uint32_t	scan_mask;
+
+	int			thread_count;
+	int			retries;
+	int			tcp_timeout_ms;
+	int			udp_timeout_ms;
+
+	int			window_size;
+	int			udp_window_size;
+	int			udp_dispatch_gap_ms;
+
+	int			no_dns;
+	int			version_detection;
+	int			os_detection;
+	int			open_only;
+	int			show_reason;
+}	t_nmap_scan;
+
+/**
+ * @brief Complete process state.
+ *
+ * Parsing/options are global. target/route/socket/capture/runtime/sender_pool
+ * are prepared and cleaned for each concrete resolved target.
+ */
+typedef struct s_nmap_config
+{
+	t_nmap_cli			cli;
+	t_nmap_targets		targets;
+	t_nmap_target		target;
+	t_nmap_route		route;
+	t_nmap_socket		socket;
+	t_nmap_capture		capture;
+	t_nmap_scan			scan;
+	t_nmap_runtime		runtime;
+	t_nmap_sender_pool	sender_pool;
+}	t_nmap_config;
+
+#endif
+
+
+================================================================
+FILE: inc/ft_nmap.h
+================================================================
+
+#ifndef FT_NMAP_H
+# define FT_NMAP_H
+
+# include "config.h"
+
+/* config */
+int		nmap_init_config(t_nmap_config *config, const char *program_name,
+			int *exit_status);
+int		nmap_prepare_scan_config(t_nmap_config *config, int *exit_status);
+int		nmap_prepare_targets(t_nmap_config *config, int *exit_status);
+void	nmap_cleanup_current_target(t_nmap_config *config);
+void	nmap_cleanup_config(t_nmap_config *config);
+
+/* target / network */
+int		nmap_prepare_target(t_nmap_config *config, const char *target_name,
+			int *exit_status);
+int		nmap_prepare_route(t_nmap_config *config, int *exit_status);
+int		nmap_prepare_send_socket(t_nmap_config *config, int *exit_status);
+int		nmap_prepare_pcap(t_nmap_config *config, int *exit_status);
+
+/* run */
+int		nmap_run(t_nmap_config *config, int *exit_status);
+
+/* runtime */
+int		nmap_prepare_runtime(t_nmap_config *config, int *exit_status);
+int		nmap_runtime_is_finished(t_nmap_config *config);
+int		nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status);
+void	nmap_runtime_expire_probes(t_nmap_config *config);
+int		nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status);
+int		nmap_runtime_wait(t_nmap_config *config, int *exit_status);
+int		nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status);
+void	nmap_stop_sender_pool(t_nmap_config *config);
+int		nmap_sender_pool_has_error(t_nmap_config *config);
+
+/* output */
+void	nmap_print_report(t_nmap_config *config);
+
+/* parsing */
+int		nmap_parse_ports(t_nmap_config *config, const char *arg);
+int		parse_flag(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_ip(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_port(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_scan(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_speedup(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_timeout(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_probes_per_thread(t_nmap_config *config,
+			int argc, char **argv, int *i);
+int		parse_retries(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_file(t_nmap_config *config, int argc, char **argv, int *i);
+int		parse_bool_flag(t_nmap_config *config, const char *flag);
+int		nmap_parse_cli(t_nmap_config *config, int argc, char **argv,
+			int *exit_status);
+int		scan_name_to_mask(const char *name, uint32_t *mask);
+
+/* parsing utils */
+int		nmap_streq(const char *a, const char *b);
+int		nmap_is_number(const char *s);
+int		nmap_parse_int(const char *s, int *out);
+
+/* signal */
+int		nmap_signal_setup(int *exit_status);
+int		nmap_signal_stop_requested(void);
+
+#endif
+
+
+================================================================
+FILE: inc/ip_addr.h
+================================================================
+
+#ifndef NMAP_IP_ADDR_H
+# define NMAP_IP_ADDR_H
+
+# include <netinet/in.h>
+# include <stddef.h>
+# include <stdint.h>
+# include <sys/socket.h>
+
+# define NMAP_ADDR_TEXT_MAX 128
+
+/**
+ * @brief Protocol-independent IP address used by the scanner core.
+ *
+ * @note sockaddr_storage is intentionally kept at system-call boundaries.
+ *       The runtime manipulates this smaller semantic type instead, so the
+ *       scan engine never needs sockaddr_in/sockaddr_in6 casts.
+ *
+ * @note scope_id is meaningful for scoped IPv6 addresses such as link-local
+ *       destinations. It is not part of the 128-bit address present on wire.
+ */
+typedef struct s_nmap_ip_addr
+{
+	sa_family_t	family;
+	union
+	{
+		struct in_addr	v4;
+		struct in6_addr	v6;
+	} addr;
+	uint32_t	scope_id;
+}	t_nmap_ip_addr;
+
+#endif
+
+
+================================================================
+FILE: inc/runtime.h
+================================================================
+
+#ifndef NMAP_RUNTIME_H
+# define NMAP_RUNTIME_H
+
+# include "ip_addr.h"
+
+# include <pthread.h>
+# include <stddef.h>
+# include <stdint.h>
+
+/**
+ * @brief Runtime lifecycle of one logical probe.
+ *
+ * PENDING      ready for the scheduler.
+ * QUEUED       reserved and waiting in the sender pool.
+ * OUTSTANDING  at least one packet was sent and a reply may still match.
+ * DONE         final scan result has been produced.
+ *
+ * @note A logical probe survives retransmissions. A retry does not allocate a
+ *       second probe object; the same probe returns to PENDING.
+ */
+typedef enum e_probe_state
+{
+	PROBE_PENDING = 0,
+	PROBE_QUEUED,
+	PROBE_OUTSTANDING,
+	PROBE_DONE
+}	t_probe_state;
+
+/**
+ * @brief Final semantic states exposed by the scanner.
+ */
+typedef enum e_scan_result
+{
+	SCAN_RESULT_UNKNOWN = 0,
+	SCAN_RESULT_OPEN,
+	SCAN_RESULT_CLOSED,
+	SCAN_RESULT_FILTERED,
+	SCAN_RESULT_UNFILTERED,
+	SCAN_RESULT_OPEN_FILTERED
+}	t_scan_result;
+
+/**
+ * @brief Event that justified a final scan classification.
+ *
+ * @note IPv4/IPv6 ICMP details remain stored in the parsed reply while the
+ *       probe keeps only the stable report-level reason category.
+ */
+typedef enum e_scan_reason
+{
+	SCAN_REASON_NONE = 0,
+	SCAN_REASON_SYN_ACK,
+	SCAN_REASON_SYN,
+	SCAN_REASON_RST,
+	SCAN_REASON_UDP_REPLY,
+	SCAN_REASON_ICMP4,
+	SCAN_REASON_ICMP6,
+	SCAN_REASON_NO_RESPONSE,
+	SCAN_REASON_SEND_ERROR
+}	t_scan_reason;
+
+/**
+ * @brief One logical scan probe for one destination port and scan type.
+ *
+ * @note Target/source IP addresses deliberately do not live here. The current
+ *       runtime scans one resolved target at a time; family/address ownership
+ *       belongs to config.target/config.route instead of being duplicated in
+ *       every probe.
+ */
+typedef struct s_probe
+{
+	uint16_t		dst_port;
+	uint16_t		src_port;
+	uint32_t		seq;
+	uint32_t		scan_type;
+	uint64_t		sent_at_ms;
+	uint8_t			attempts_sent;
+	uint32_t		dispatch_id;
+	t_probe_state	state;
+	t_scan_result	result;
+	t_scan_reason	reason;
+}	t_probe;
+
+/**
+ * @brief Parsed network reply kind.
+ *
+ * ICMPv4 and ICMPv6 stay distinct here because their wire type/code spaces are
+ * different. Classification later maps both protocols to scanner semantics.
+ */
+typedef enum e_nmap_reply_type
+{
+	NMAP_REPLY_NONE = 0,
+	NMAP_REPLY_TCP,
+	NMAP_REPLY_UDP,
+	NMAP_REPLY_ICMP4,
+	NMAP_REPLY_ICMP6
+}	t_nmap_reply_type;
+
+/**
+ * @brief Protocol-independent parsed representation of one captured reply.
+ *
+ * Direct TCP/UDP replies fill src/dst addresses and ports. ICMP errors also
+ * fill the embedded original packet fields, which are required to match the
+ * error back to the exact logical probe.
+ */
+typedef struct s_nmap_reply
+{
+	t_nmap_reply_type	type;
+
+	t_nmap_ip_addr		src_addr;
+	t_nmap_ip_addr		dst_addr;
+	uint16_t			src_port;
+	uint16_t			dst_port;
+
+	uint8_t				tcp_flags;
+	uint32_t			tcp_seq;
+	uint32_t			tcp_ack;
+
+	uint8_t				icmp_type;
+	uint8_t				icmp_code;
+
+	uint8_t				original_protocol;
+	t_nmap_ip_addr		original_src_addr;
+	t_nmap_ip_addr		original_dst_addr;
+	uint16_t			original_src_port;
+	uint16_t			original_dst_port;
+	uint32_t			original_tcp_seq;
+	int					has_original_tcp_seq;
+}	t_nmap_reply;
+
+/**
+ * @brief Runtime state owned by the main scan engine.
+ *
+ * @note probe_by_src_port gives O(1) candidate lookup. The candidate is still
+ *       fully validated before a captured packet is accepted.
+ */
+typedef struct s_nmap_runtime
+{
+	t_probe			*probes;
+	t_probe			**probe_by_src_port;
+	size_t			probe_count;
+
+	size_t			done_count;
+	size_t			queued_count;
+	size_t			outstanding_count;
+	size_t			udp_queued_count;
+	size_t			udp_outstanding_count;
+
+	uint16_t		source_port_base;
+	uint64_t		last_udp_dispatch_ms;
+
+	pthread_mutex_t	lock;
+	int				lock_initialized;
+}	t_nmap_runtime;
+
+#endif
+
+
+================================================================
+FILE: srcs/cleanup/cleanup.c
+================================================================
+
+#include "config.h"
+#include "runtime/worker.h"
+
+#include <pcap/pcap.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/**
+ * @brief Release allocations and synchronization state owned by the runtime.
+ */
+static void	cleanup_runtime(t_nmap_runtime *runtime)
+{
+	if (!runtime)
+		return ;
+	free(runtime->probe_by_src_port);
+	free(runtime->probes);
+	if (runtime->lock_initialized)
+		pthread_mutex_destroy(&runtime->lock);
+	memset(runtime, 0, sizeof(*runtime));
+}
+
+/**
+ * @brief Release resources owned by the current resolved target.
+ *
+ * @note Unlike the old IPv4-only design, the raw socket is target-scoped: its
+ *       address family depends on the current resolved target.
+ */
+void	nmap_cleanup_current_target(t_nmap_config *config)
+{
+	if (!config)
+		return ;
+	nmap_stop_sender_pool(config);
+	if (config->capture.handle)
+		pcap_close(config->capture.handle);
+	if (config->socket.send_fd >= 0)
+		close(config->socket.send_fd);
+	cleanup_runtime(&config->runtime);
+	memset(&config->target, 0, sizeof(config->target));
+	memset(&config->route, 0, sizeof(config->route));
+	memset(&config->socket, 0, sizeof(config->socket));
+	memset(&config->capture, 0, sizeof(config->capture));
+	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+	config->socket.send_fd = -1;
+	config->capture.fd = -1;
+	config->capture.datalink = -1;
+}
+
+/**
+ * @brief Release all process-owned resources.
+ */
+void	nmap_cleanup_config(t_nmap_config *config)
+{
+	size_t	i;
+
+	if (!config)
+		return ;
+	nmap_cleanup_current_target(config);
+	i = 0;
+	while (i < config->targets.count)
+	{
+		free(config->targets.items[i]);
+		i++;
+	}
+	free(config->targets.items);
+	memset(config, 0, sizeof(*config));
+	config->socket.send_fd = -1;
+	config->capture.fd = -1;
+	config->capture.datalink = -1;
+}
+
+
+================================================================
+FILE: srcs/debug/debug.c
+================================================================
+
+#include "debug/debug.h"
+#include "net/address.h"
+
+#ifdef DEBUG
+
+# include <ctype.h>
+# include <stdio.h>
+
+/** Return a readable scan-type name for debug output. */
+static const char	*debug_scan_type_name(uint32_t scan_type)
+{
+	if (scan_type == NMAP_SCAN_SYN)
+		return ("SYN");
+	if (scan_type == NMAP_SCAN_NULL)
+		return ("NULL");
+	if (scan_type == NMAP_SCAN_FIN)
+		return ("FIN");
+	if (scan_type == NMAP_SCAN_XMAS)
+		return ("XMAS");
+	if (scan_type == NMAP_SCAN_ACK)
+		return ("ACK");
+	if (scan_type == NMAP_SCAN_UDP)
+		return ("UDP");
+	return ("UNKNOWN");
+}
+
+/** Return a readable probe-lifecycle state name. */
+static const char	*debug_probe_state_name(t_probe_state state)
+{
+	if (state == PROBE_PENDING)
+		return ("PENDING");
+	if (state == PROBE_QUEUED)
+		return ("QUEUED");
+	if (state == PROBE_OUTSTANDING)
+		return ("OUTSTANDING");
+	if (state == PROBE_DONE)
+		return ("DONE");
+	return ("UNKNOWN");
+}
+
+/** Return a readable scan result name. */
+static const char	*debug_scan_result_name(t_scan_result result)
+{
+	if (result == SCAN_RESULT_UNKNOWN)
+		return ("unknown");
+	if (result == SCAN_RESULT_OPEN)
+		return ("open");
+	if (result == SCAN_RESULT_CLOSED)
+		return ("closed");
+	if (result == SCAN_RESULT_FILTERED)
+		return ("filtered");
+	if (result == SCAN_RESULT_UNFILTERED)
+		return ("unfiltered");
+	if (result == SCAN_RESULT_OPEN_FILTERED)
+		return ("open|filtered");
+	return ("unknown");
+}
+
+/** Print resolved target, route and effective scan policy. */
+void	nmap_debug_dev_config(const t_nmap_config *config)
+{
+	if (!config)
+		return ;
+	fprintf(stderr, "[debug][config] target=%s target_ip=%s family=%d\n",
+		config->target.name, config->target.ip, config->target.addr.family);
+	fprintf(stderr, "[debug][config] iface=%s ifindex=%u src_ip=%s\n",
+		config->route.iface, config->route.ifindex, config->route.src_ip);
+	fprintf(stderr,
+		"[debug][config] ports=%zu scan_mask=0x%x retries=%d tcp_timeout=%d udp_timeout=%d\n",
+		config->scan.port_count, config->scan.scan_mask, config->scan.retries,
+		config->scan.tcp_timeout_ms, config->scan.udp_timeout_ms);
+	fprintf(stderr,
+		"[debug][config] threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
+		config->scan.thread_count, config->scan.window_size,
+		config->scan.udp_window_size, config->scan.udp_dispatch_gap_ms);
+}
+
+/** Print raw socket state. */
+void	nmap_debug_socket(const t_nmap_config *config)
+{
+	if (!config)
+		return ;
+	fprintf(stderr, "[debug][socket] send_fd=%d family=%d\n",
+		config->socket.send_fd, config->socket.family);
+}
+
+/** Print pcap state. */
+void	nmap_debug_pcap(const t_nmap_config *config)
+{
+	if (!config)
+		return ;
+	fprintf(stderr, "[debug][pcap] handle=%p fd=%d datalink=%d\n",
+		(void *)config->capture.handle, config->capture.fd,
+		config->capture.datalink);
+}
+
+/** Print aggregate runtime counters. */
+void	nmap_debug_runtime(const t_nmap_config *config)
+{
+	if (!config)
+		return ;
+	fprintf(stderr,
+		"[debug][runtime] probes=%zu done=%zu queued=%zu outstanding=%zu src_base=%u\n",
+		config->runtime.probe_count, config->runtime.done_count,
+		config->runtime.queued_count, config->runtime.outstanding_count,
+		config->runtime.source_port_base);
+}
+
+/** Print one send attempt. */
+void	nmap_debug_probe_send(const t_probe *probe)
+{
+	if (!probe)
+		return ;
+	fprintf(stderr,
+		"[debug][send][probe] dst_port=%u src_port=%u scan=%s seq=%u attempt=%u state=%s dispatch=%u\n",
+		probe->dst_port, probe->src_port, debug_scan_type_name(probe->scan_type),
+		probe->seq, probe->attempts_sent,
+		debug_probe_state_name(probe->state), probe->dispatch_id);
+}
+
+/** Print one attempt timeout. */
+void	nmap_debug_probe_timeout(const t_probe *probe)
+{
+	if (!probe)
+		return ;
+	fprintf(stderr,
+		"[debug][timeout][probe] dst_port=%u src_port=%u scan=%s attempt=%u sent_at_ms=%llu\n",
+		probe->dst_port, probe->src_port, debug_scan_type_name(probe->scan_type),
+		probe->attempts_sent, (unsigned long long)probe->sent_at_ms);
+}
+
+/** Print one final logical probe result. */
+void	nmap_debug_probe_result(const t_probe *probe, const char *reason)
+{
+	if (!probe)
+		return ;
+	fprintf(stderr,
+		"[debug][result][probe] dst_port=%u src_port=%u scan=%s result=%s reason=%s\n",
+		probe->dst_port, probe->src_port, debug_scan_type_name(probe->scan_type),
+		debug_scan_result_name(probe->result), reason ? reason : "unknown");
+}
+
+/** Print an exact packet buffer in classic 16-byte hexdump form. */
+void	nmap_debug_hexdump(const char *title, const void *data, size_t len)
+{
+	const unsigned char	*bytes;
+	size_t				i;
+	size_t				j;
+
+	if (!data)
+		return ;
+	bytes = (const unsigned char *)data;
+	fprintf(stderr, "%s len=%zu\n", title, len);
+	i = 0;
+	while (i < len)
+	{
+		fprintf(stderr, "  %04zx  ", i);
+		j = 0;
+		while (j < 16)
+		{
+			if (i + j < len)
+				fprintf(stderr, "%02x ", bytes[i + j]);
+			else
+				fprintf(stderr, "   ");
+			if (j == 7)
+				fprintf(stderr, " ");
+			j++;
+		}
+		fprintf(stderr, " |");
+		j = 0;
+		while (j < 16 && i + j < len)
+		{
+			if (isprint(bytes[i + j]))
+				fprintf(stderr, "%c", bytes[i + j]);
+			else
+				fprintf(stderr, ".");
+			j++;
+		}
+		fprintf(stderr, "|\n");
+		i += 16;
+	}
+}
+
+#endif
+
+
+================================================================
+FILE: srcs/debug/debug.h
+================================================================
+
+#ifndef NMAP_DEBUG_H
+# define NMAP_DEBUG_H
+
+# include "config.h"
+# include <stddef.h>
+# include <stdint.h>
+
+# ifndef NMAP_PROFILING_SECTION
+#  define NMAP_PROFILING_SECTION
+
+/**
+ * @brief Fine-grained timing/counter slots used by the optional profile build.
+ */
+typedef enum e_nmap_prof_event
+{
+	NMAP_PROF_SELECT_REQUESTED = 0,
+	NMAP_PROF_SELECT_WAIT,
+	NMAP_PROF_PCAP_NEXT_EX,
+	NMAP_PROF_PACKET_PARSE_TOTAL,
+	NMAP_PROF_LINK_OFFSET,
+	NMAP_PROF_IPV4_PARSE,
+	NMAP_PROF_IPV6_PARSE,
+	NMAP_PROF_MATCH_PROBE,
+	NMAP_PROF_CLASSIFY,
+	NMAP_PROF_EXPIRE,
+	NMAP_PROF_SEND_BUILD,
+	NMAP_PROF_SEND_SENDTO,
+
+	NMAP_PROF_PACKET_SEEN,
+	NMAP_PROF_PACKET_PARSED,
+	NMAP_PROF_PACKET_IGNORED,
+	NMAP_PROF_PACKET_MATCHED,
+	NMAP_PROF_PACKET_TIMEOUT,
+	NMAP_PROF_PROBE_SENT,
+	NMAP_PROF_PROBE_RETRIED,
+
+	NMAP_PROF_EVENT_COUNT
+}	t_nmap_prof_event;
+
+#  ifdef PROFILE
+
+uint64_t	nmap_prof_now_us(void);
+void		nmap_prof_add(t_nmap_prof_event event, uint64_t start_us);
+void		nmap_prof_add_value(t_nmap_prof_event event, uint64_t elapsed_us);
+void		nmap_prof_count(t_nmap_prof_event event);
+void		nmap_prof_report(void);
+
+#   define PROF_START() nmap_prof_now_us()
+#   define PROF_ADD(event, start_us) nmap_prof_add((event), (start_us))
+#   define PROF_ADD_VALUE(event, elapsed_us) \
+	nmap_prof_add_value((event), (elapsed_us))
+#   define PROF_COUNT(event) nmap_prof_count((event))
+#   define PROF_REPORT() nmap_prof_report()
+
+#  else
+
+#   define PROF_START() ((uint64_t)0)
+#   define PROF_ADD(event, start_us) ((void)(event), (void)(start_us))
+#   define PROF_ADD_VALUE(event, elapsed_us) \
+	((void)(event), (void)(elapsed_us))
+#   define PROF_COUNT(event) ((void)(event))
+#   define PROF_REPORT() ((void)0)
+
+#  endif
+# endif
+
+# ifdef DEBUG
+
+void	nmap_debug_dev_config(const t_nmap_config *config);
+void	nmap_debug_socket(const t_nmap_config *config);
+void	nmap_debug_pcap(const t_nmap_config *config);
+void	nmap_debug_runtime(const t_nmap_config *config);
+
+void	nmap_debug_probe_send(const t_probe *probe);
+void	nmap_debug_probe_timeout(const t_probe *probe);
+void	nmap_debug_probe_result(const t_probe *probe, const char *reason);
+void	nmap_debug_hexdump(const char *title, const void *data, size_t len);
+
+#  define DEBUG_DEV_CONFIG(config) nmap_debug_dev_config(config)
+#  define DEBUG_SOCKET(config) nmap_debug_socket(config)
+#  define DEBUG_PCAP(config) nmap_debug_pcap(config)
+#  define DEBUG_RUNTIME(config) nmap_debug_runtime(config)
+#  define DEBUG_PROBE_SEND(probe) nmap_debug_probe_send(probe)
+#  define DEBUG_PROBE_TIMEOUT(probe) nmap_debug_probe_timeout(probe)
+#  define DEBUG_PROBE_RESULT(probe, reason) \
+	nmap_debug_probe_result((probe), (reason))
+#  define DEBUG_SEND_PACKET(data, len) \
+	nmap_debug_hexdump("[debug][send][packet]", (data), (len))
+#  define DEBUG_RECV_PACKET(data, len) \
+	nmap_debug_hexdump("[debug][recv][packet]", (data), (len))
+
+# else
+
+#  define DEBUG_DEV_CONFIG(config) ((void)(config))
+#  define DEBUG_SOCKET(config) ((void)(config))
+#  define DEBUG_PCAP(config) ((void)(config))
+#  define DEBUG_RUNTIME(config) ((void)(config))
+#  define DEBUG_PROBE_SEND(probe) ((void)(probe))
+#  define DEBUG_PROBE_TIMEOUT(probe) ((void)(probe))
+#  define DEBUG_PROBE_RESULT(probe, reason) ((void)(probe), (void)(reason))
+#  define DEBUG_SEND_PACKET(data, len) ((void)(data), (void)(len))
+#  define DEBUG_RECV_PACKET(data, len) ((void)(data), (void)(len))
+
+# endif
+
+#endif
+
+
+================================================================
+FILE: srcs/debug/profilage.c
+================================================================
+
+#include "debug/debug.h"
+
+#ifdef PROFILE
+
+# include <stdio.h>
+# include <sys/time.h>
+
+/** One profiling slot, used either as a timer or a simple counter. */
+typedef struct s_prof_slot
+{
+	const char	*name;
+	uint64_t	calls;
+	uint64_t	total_us;
+	uint64_t	min_us;
+	uint64_t	max_us;
+}	t_prof_slot;
+
+static t_prof_slot	g_prof[NMAP_PROF_EVENT_COUNT] = {
+	[NMAP_PROF_SELECT_REQUESTED] = {"select requested", 0, 0, 0, 0},
+	[NMAP_PROF_SELECT_WAIT] = {"select wait", 0, 0, 0, 0},
+	[NMAP_PROF_PCAP_NEXT_EX] = {"pcap_next_ex", 0, 0, 0, 0},
+	[NMAP_PROF_PACKET_PARSE_TOTAL] = {"packet parse total", 0, 0, 0, 0},
+	[NMAP_PROF_LINK_OFFSET] = {"link offset", 0, 0, 0, 0},
+	[NMAP_PROF_IPV4_PARSE] = {"ipv4 parse", 0, 0, 0, 0},
+	[NMAP_PROF_IPV6_PARSE] = {"ipv6 parse", 0, 0, 0, 0},
+	[NMAP_PROF_MATCH_PROBE] = {"match probe", 0, 0, 0, 0},
+	[NMAP_PROF_CLASSIFY] = {"classify", 0, 0, 0, 0},
+	[NMAP_PROF_EXPIRE] = {"expire", 0, 0, 0, 0},
+	[NMAP_PROF_SEND_BUILD] = {"send build", 0, 0, 0, 0},
+	[NMAP_PROF_SEND_SENDTO] = {"sendto", 0, 0, 0, 0},
+
+	[NMAP_PROF_PACKET_SEEN] = {"packets seen", 0, 0, 0, 0},
+	[NMAP_PROF_PACKET_PARSED] = {"packets parsed", 0, 0, 0, 0},
+	[NMAP_PROF_PACKET_IGNORED] = {"packets ignored", 0, 0, 0, 0},
+	[NMAP_PROF_PACKET_MATCHED] = {"packets matched", 0, 0, 0, 0},
+	[NMAP_PROF_PACKET_TIMEOUT] = {"probe timeouts", 0, 0, 0, 0},
+	[NMAP_PROF_PROBE_SENT] = {"probes sent", 0, 0, 0, 0},
+	[NMAP_PROF_PROBE_RETRIED] = {"probes retried", 0, 0, 0, 0},
+};
+
+uint64_t	nmap_prof_now_us(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return ((uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec);
+}
+
+void	nmap_prof_add_value(t_nmap_prof_event event, uint64_t elapsed_us)
+{
+	t_prof_slot	*slot;
+
+	if ((int)event < 0 || event >= NMAP_PROF_EVENT_COUNT)
+		return ;
+	slot = &g_prof[event];
+	slot->calls++;
+	slot->total_us += elapsed_us;
+	if (slot->calls == 1 || elapsed_us < slot->min_us)
+		slot->min_us = elapsed_us;
+	if (elapsed_us > slot->max_us)
+		slot->max_us = elapsed_us;
+}
+
+void	nmap_prof_add(t_nmap_prof_event event, uint64_t start_us)
+{
+	nmap_prof_add_value(event, nmap_prof_now_us() - start_us);
+}
+
+void	nmap_prof_count(t_nmap_prof_event event)
+{
+	if ((int)event < 0 || event >= NMAP_PROF_EVENT_COUNT)
+		return ;
+	g_prof[event].calls++;
+}
+
+static void	print_timed_slot(const t_prof_slot *slot)
+{
+	double	total_ms;
+	double	avg_us;
+
+	if (slot->calls == 0)
+		return ;
+	total_ms = (double)slot->total_us / 1000.0;
+	avg_us = (double)slot->total_us / (double)slot->calls;
+	fprintf(stderr,
+		"[profile] %-20s calls=%-8llu total=%10.3f ms avg=%10.3f us min=%-8llu max=%-8llu\n",
+		slot->name, (unsigned long long)slot->calls, total_ms, avg_us,
+		(unsigned long long)slot->min_us,
+		(unsigned long long)slot->max_us);
+}
+
+static void	print_counter_slot(const t_prof_slot *slot)
+{
+	if (slot->calls == 0)
+		return ;
+	fprintf(stderr, "[profile] %-20s count=%llu\n",
+		slot->name, (unsigned long long)slot->calls);
+}
+
+void	nmap_prof_report(void)
+{
+	int	i;
+
+	fprintf(stderr, "\n[profile] ===== ft_nmap profiling report =====\n");
+	i = 0;
+	while (i < NMAP_PROF_EVENT_COUNT)
+	{
+		if (i >= NMAP_PROF_PACKET_SEEN)
+			print_counter_slot(&g_prof[i]);
+		else
+			print_timed_slot(&g_prof[i]);
+		i++;
+	}
+	fprintf(stderr, "[profile] ====================================\n");
+}
+
+#endif
+
+
+================================================================
+FILE: srcs/init/init.c
+================================================================
+
+#include "config.h"
+
+#include <string.h>
+
+/**
+ * @brief Initialize global process state and invalid file-descriptor sentinels.
+ *
+ * @param config Global nmap configuration.
+ * @param program_name Executable name received from argv[0].
+ * @param exit_status Output status set on invalid input.
+ *
+ * @return 1 on success, 0 on failure.
+ *
+ * @note Effective scan defaults are intentionally applied later by
+ *       nmap_prepare_scan_config().
+ */
+int	nmap_init_config(t_nmap_config *config, const char *program_name,
+		int *exit_status)
+{
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	memset(config, 0, sizeof(*config));
+	config->socket.send_fd = -1;
+	config->capture.fd = -1;
+	config->capture.datalink = -1;
+	config->cli.program_name = program_name;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/init/prepare_scan_config.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   prepare_scan_config.c                              :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/03 16:09:40 by eric              #+#    #+#             */
+/*   Updated: 2026/08/20 14:55:51 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "config.h"
+
+#include <limits.h>
+#include <stdio.h>
+
+#define NMAP_DEFAULT_RETRIES 1
+#define NMAP_MAX_RETRIES 10
+#define NMAP_DEFAULT_TCP_TIMEOUT_MS 1000
+#define NMAP_DEFAULT_UDP_TIMEOUT_MS 2500
+#define NMAP_DEFAULT_WINDOW_PER_SENDER 50
+#define NMAP_MAX_WINDOW_PER_SENDER 4096
+#define NMAP_DEFAULT_UDP_WINDOW 10
+#define NMAP_DEFAULT_UDP_DISPATCH_GAP_MS 50
+
+#define NMAP_ALL_SCAN_TYPES \
+	(NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN \
+		| NMAP_SCAN_XMAS | NMAP_SCAN_ACK | NMAP_SCAN_UDP)
+
+/**
+ * @brief Fill the mandatory default port range.
+ */
+static void	set_default_ports(t_nmap_scan *scan)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < NMAP_MAX_PORTS)
+	{
+		scan->ports[i] = (uint16_t)(i + 1);
+		i++;
+	}
+	scan->port_count = NMAP_MAX_PORTS;
+}
+
+/**
+ * @brief Normalize the requested port and scan selections.
+ */
+static int	prepare_selection(t_nmap_config *config)
+{
+	if (config->scan.port_count == 0)
+		set_default_ports(&config->scan);
+	if (config->scan.port_count > NMAP_MAX_PORTS)
+	{
+		fprintf(stderr, "ft_nmap: too many ports\n");
+		return (0);
+	}
+	if (config->cli.scan_specified)
+		config->scan.scan_mask = config->cli.scan_mask;
+	else
+		config->scan.scan_mask = NMAP_ALL_SCAN_TYPES;
+	if (config->scan.scan_mask == 0
+		|| (config->scan.scan_mask & ~NMAP_ALL_SCAN_TYPES) != 0)
+	{
+		fprintf(stderr, "ft_nmap: invalid scan mask\n");
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Build the fixed timing/window policy consumed by the runtime.
+ *
+ * @note The window is deliberately centralized here instead of in workers.
+ *       A later adaptive congestion controller can replace this policy without
+ *       changing packet senders or thread ownership.
+ */
+static int	prepare_timing(t_nmap_config *config)
+{
+	int	senders;
+	int	per_sender;
+
+	if (config->cli.speedup < 0 || config->cli.speedup > NMAP_MAX_THREADS)
+	{
+		fprintf(stderr, "ft_nmap: speedup must be between 0 and %d\n",
+			NMAP_MAX_THREADS);
+		return (0);
+	}
+	config->scan.thread_count = config->cli.speedup;
+	if (config->cli.retries_specified)
+		config->scan.retries = config->cli.retries;
+	else
+		config->scan.retries = NMAP_DEFAULT_RETRIES;
+	if (config->scan.retries < 0 || config->scan.retries > NMAP_MAX_RETRIES)
+	{
+		fprintf(stderr, "ft_nmap: retries must be between 0 and %d\n",
+			NMAP_MAX_RETRIES);
+		return (0);
+	}
+	if (config->cli.timeout_specified)
+	{
+		if (config->cli.timeout_ms <= 0)
+		{
+			fprintf(stderr, "ft_nmap: timeout must be positive\n");
+			return (0);
+		}
+		config->scan.tcp_timeout_ms = config->cli.timeout_ms;
+		config->scan.udp_timeout_ms = config->cli.timeout_ms;
+	}
+	else
+	{
+		config->scan.tcp_timeout_ms = NMAP_DEFAULT_TCP_TIMEOUT_MS;
+		config->scan.udp_timeout_ms = NMAP_DEFAULT_UDP_TIMEOUT_MS;
+	}
+	if (config->cli.probes_per_thread_specified)
+		per_sender = config->cli.probes_per_thread;
+	else
+		per_sender = NMAP_DEFAULT_WINDOW_PER_SENDER;
+	if (per_sender <= 0 || per_sender > NMAP_MAX_WINDOW_PER_SENDER)
+	{
+		fprintf(stderr, "ft_nmap: invalid probes-per-thread value\n");
+		return (0);
+	}
+	senders = config->scan.thread_count;
+	if (senders == 0)
+		senders = 1;
+	if (per_sender > INT_MAX / senders)
+	{
+		fprintf(stderr, "ft_nmap: send window overflow\n");
+		return (0);
+	}
+	config->scan.window_size = per_sender * senders;
+	config->scan.udp_window_size = NMAP_DEFAULT_UDP_WINDOW;
+	if (config->scan.udp_window_size > config->scan.window_size)
+		config->scan.udp_window_size = config->scan.window_size;
+	config->scan.udp_dispatch_gap_ms = NMAP_DEFAULT_UDP_DISPATCH_GAP_MS;
+	return (1);
+}
+
+/**
+ * @brief Copy optional feature flags into the effective scan configuration.
+ */
+static void	prepare_features(t_nmap_config *config)
+{
+	config->scan.no_dns = config->cli.no_dns;
+	config->scan.version_detection = config->cli.version_detection;
+	config->scan.os_detection = config->cli.os_detection;
+	config->scan.open_only = config->cli.open_only;
+	config->scan.show_reason = config->cli.show_reason;
+}
+
+/**
+ * @brief Convert parsed CLI values into the immutable scan plan.
+ */
+int	nmap_prepare_scan_config(t_nmap_config *config, int *exit_status)
+{
+	if (!config || !prepare_selection(config) || !prepare_timing(config))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	prepare_features(config);
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/init/targets.c
+================================================================
+
+#include "config.h"
+
+#include <ctype.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+
+/** Release a partially prepared target list. */
+static void	clear_targets(t_nmap_targets *targets)
+{
+	size_t	i;
+
+	if (!targets)
+		return ;
+	i = 0;
+	while (i < targets->count)
+	{
+		free(targets->items[i]);
+		i++;
+	}
+	free(targets->items);
+	memset(targets, 0, sizeof(*targets));
+}
+
+/** Return whether the exact target string is already present. */
+static int	target_exists(const t_nmap_targets *targets, const char *value)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < targets->count)
+	{
+		if (strcmp(targets->items[i], value) == 0)
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/** Grow the owned target-pointer array while respecting the project limit. */
+static int	grow_targets(t_nmap_targets *targets)
+{
+	char	**new_items;
+	size_t	new_capacity;
+
+	if (targets->capacity == 0)
+		new_capacity = NMAP_TARGET_INITIAL_CAPACITY;
+	else
+		new_capacity = targets->capacity * 2;
+	if (new_capacity > NMAP_MAX_TARGETS)
+		new_capacity = NMAP_MAX_TARGETS;
+	if (new_capacity <= targets->capacity)
+		return (0);
+	new_items = realloc(targets->items,
+			new_capacity * sizeof(*new_items));
+	if (!new_items)
+		return (0);
+	targets->items = new_items;
+	targets->capacity = new_capacity;
+	return (1);
+}
+
+/**
+ * @brief Append one owned target string, silently ignoring duplicates.
+ *
+ * @note Target syntax is deliberately not restricted here. IPv4, IPv6,
+ *       scoped IPv6 and hostnames are validated/resolved later by getaddrinfo.
+ */
+static int	add_target(t_nmap_targets *targets, const char *value)
+{
+	char	*copy;
+
+	if (!value || value[0] == '\0')
+		return (0);
+	if (target_exists(targets, value))
+		return (1);
+	if (targets->count >= NMAP_MAX_TARGETS)
+		return (0);
+	if (targets->count == targets->capacity && !grow_targets(targets))
+		return (0);
+	copy = strdup(value);
+	if (!copy)
+		return (0);
+	targets->items[targets->count] = copy;
+	targets->count++;
+	return (1);
+}
+
+/** Trim leading and trailing whitespace in place. */
+static char	*trim_line(char *line)
+{
+	char	*start;
+	char	*end;
+
+	start = line;
+	while (*start && isspace((unsigned char)*start))
+		start++;
+	end = start + strlen(start);
+	while (end > start && isspace((unsigned char)end[-1]))
+		end--;
+	*end = '\0';
+	return (start);
+}
+
+/** Load target strings from a file, with useful line-number diagnostics. */
+static int	load_target_file(t_nmap_targets *targets, const char *path)
+{
+	FILE	*file;
+	char	*line;
+	char	*target;
+	size_t	line_capacity;
+	size_t	line_number;
+	ssize_t	line_length;
+
+	file = fopen(path, "r");
+	if (!file)
+	{
+		fprintf(stderr, "ft_nmap: cannot open %s: %s\n",
+			path, strerror(errno));
+		return (0);
+	}
+	line = NULL;
+	line_capacity = 0;
+	line_number = 0;
+	while (1)
+	{
+		errno = 0;
+		line_length = getline(&line, &line_capacity, file);
+		if (line_length < 0)
+			break ;
+		line_number++;
+		target = trim_line(line);
+		if (target[0] != '\0' && target[0] != '#'
+			&& !add_target(targets, target))
+		{
+			fprintf(stderr, "ft_nmap: cannot add target at line %zu\n",
+				line_number);
+			free(line);
+			fclose(file);
+			return (0);
+		}
+	}
+	free(line);
+	if (ferror(file))
+	{
+		fprintf(stderr, "ft_nmap: error reading %s: %s\n",
+			path, strerror(errno));
+		fclose(file);
+		return (0);
+	}
+	if (fclose(file) != 0)
+	{
+		fprintf(stderr, "ft_nmap: cannot close %s: %s\n",
+			path, strerror(errno));
+		return (0);
+	}
+	if (targets->count == 0)
+	{
+		fprintf(stderr, "ft_nmap: no valid targets in %s\n", path);
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Prepare an owned target list from the already validated CLI choice.
+ */
+int	nmap_prepare_targets(t_nmap_config *config, int *exit_status)
+{
+	int	success;
+
+	if (!config)
+		goto fail;
+	memset(&config->targets, 0, sizeof(config->targets));
+	if (config->cli.ip_specified)
+		success = add_target(&config->targets, config->cli.target);
+	else if (config->cli.file_specified)
+		success = load_target_file(&config->targets, config->cli.target_file);
+	else
+		success = 0;
+	if (success)
+		return (1);
+	clear_targets(&config->targets);
+fail:
+	if (exit_status)
+		*exit_status = 1;
+	return (0);
+}
+
+
+================================================================
+FILE: srcs/main.c
+================================================================
+
+#include "ft_nmap.h"
+#include "debug/debug.h"
+
+/** Print the command-line options supported by the current parser. */
+static void	print_help(const char *progname)
+{
+	printf("Usage: %s [OPTIONS]\n\n", progname);
+	printf("Options:\n");
+	printf("  --help                     Show this help message\n");
+	printf("  --ip <host>                Target host (IP or hostname)\n");
+	printf("  --file <file>              Read targets from file\n");
+	printf("  --ports <list|range>       Ports to scan (default: 1-1024)\n");
+	printf("  --scan <types>             SYN,NULL,FIN,XMAS,ACK,UDP\n");
+	printf("  --speedup <0-250>          Number of sender workers\n");
+	printf("  --timeout <ms>             Override TCP/UDP probe timeout\n");
+	printf("  --retries <count>          Number of retransmissions\n");
+	printf("  --probes-per-thread <n>    Send-window capacity per sender\n");
+	printf("  --no-dns                   Disable reverse DNS lookups\n");
+	printf("  --version                  Enable service version detection\n");
+	printf("  --os                       Enable OS detection\n");
+	printf("  --open                     Show only open/open|filtered ports\n");
+	printf("  --reason                   Show the reason for each state\n");
+}
+
+/**
+ * @brief Program entry point.
+ *
+ * @note High-level orchestration intentionally fits in main.c + run.c so the
+ *       complete control flow remains easy to explain during correction.
+ */
+int	main(int ac, char **av)
+{
+	t_nmap_config	config;
+	int				exit_status;
+
+	exit_status = 0;
+	if (!nmap_init_config(&config, av[0], &exit_status))
+		return (exit_status);
+	if (!nmap_signal_setup(&exit_status))
+		goto cleanup;
+	if (!nmap_parse_cli(&config, ac, av, &exit_status))
+		goto cleanup;
+	if (config.cli.help)
+	{
+		print_help(config.cli.program_name);
+		goto cleanup;
+	}
+	if (!nmap_prepare_scan_config(&config, &exit_status))
+		goto cleanup;
+	if (!nmap_prepare_targets(&config, &exit_status))
+		goto cleanup;
+	nmap_run(&config, &exit_status);
+	PROF_REPORT();
+cleanup:
+	nmap_cleanup_config(&config);
+	return (exit_status);
+}
+
+
+================================================================
+FILE: srcs/net/address.c
+================================================================
+
+#include "net/address.h"
+
+#include <arpa/inet.h>
+#include <string.h>
+
+/**
+ * @brief Normalize sockaddr_in/sockaddr_in6 into t_nmap_ip_addr.
+ *
+ * @param dst Destination semantic address.
+ * @param src Source sockaddr returned by a system API.
+ * @param src_len Size of src.
+ *
+ * @return 1 for AF_INET/AF_INET6, 0 for unsupported/truncated addresses.
+ */
+int	nmap_ip_from_sockaddr(t_nmap_ip_addr *dst,
+		const struct sockaddr *src, socklen_t src_len)
+{
+	const struct sockaddr_in	*src4;
+	const struct sockaddr_in6	*src6;
+
+	if (!dst || !src)
+		return (0);
+	memset(dst, 0, sizeof(*dst));
+	if (src->sa_family == AF_INET
+		&& src_len >= (socklen_t)sizeof(struct sockaddr_in))
+	{
+		src4 = (const struct sockaddr_in *)src;
+		dst->family = AF_INET;
+		dst->addr.v4 = src4->sin_addr;
+		return (1);
+	}
+	if (src->sa_family == AF_INET6
+		&& src_len >= (socklen_t)sizeof(struct sockaddr_in6))
+	{
+		src6 = (const struct sockaddr_in6 *)src;
+		dst->family = AF_INET6;
+		dst->addr.v6 = src6->sin6_addr;
+		dst->scope_id = src6->sin6_scope_id;
+		return (1);
+	}
+	return (0);
+}
+
+/**
+ * @brief Build a sockaddr_storage for connect()/sendto()/other socket APIs.
+ *
+ * @param src Scanner semantic address.
+ * @param port Host-order transport port to store in the sockaddr.
+ * @param dst Destination storage.
+ * @param dst_len Output concrete sockaddr size.
+ *
+ * @return 1 on success, 0 for unsupported families.
+ */
+int	nmap_ip_to_sockaddr(const t_nmap_ip_addr *src, uint16_t port,
+		struct sockaddr_storage *dst, socklen_t *dst_len)
+{
+	struct sockaddr_in	*dst4;
+	struct sockaddr_in6	*dst6;
+
+	if (!src || !dst || !dst_len)
+		return (0);
+	memset(dst, 0, sizeof(*dst));
+	if (src->family == AF_INET)
+	{
+		dst4 = (struct sockaddr_in *)dst;
+		dst4->sin_family = AF_INET;
+		dst4->sin_port = htons(port);
+		dst4->sin_addr = src->addr.v4;
+		*dst_len = sizeof(*dst4);
+		return (1);
+	}
+	if (src->family == AF_INET6)
+	{
+		dst6 = (struct sockaddr_in6 *)dst;
+		dst6->sin6_family = AF_INET6;
+		dst6->sin6_port = htons(port);
+		dst6->sin6_addr = src->addr.v6;
+		dst6->sin6_scope_id = src->scope_id;
+		*dst_len = sizeof(*dst6);
+		return (1);
+	}
+	return (0);
+}
+
+/**
+ * @brief Compare two IP addresses independently of IPv6 scope metadata.
+ *
+ * @note The scope id selects a local interface for scoped IPv6 destinations;
+ *       it is not part of the source/destination address carried by a packet.
+ */
+int	nmap_ip_equal(const t_nmap_ip_addr *a, const t_nmap_ip_addr *b)
+{
+	if (!a || !b || a->family != b->family)
+		return (0);
+	if (a->family == AF_INET)
+		return (memcmp(&a->addr.v4, &b->addr.v4,
+				sizeof(a->addr.v4)) == 0);
+	if (a->family == AF_INET6)
+		return (memcmp(&a->addr.v6, &b->addr.v6,
+				sizeof(a->addr.v6)) == 0);
+	return (0);
+}
+
+/**
+ * @brief Convert a scanner IP address to printable presentation form.
+ */
+int	nmap_ip_ntop(const t_nmap_ip_addr *addr, char *dst, size_t dst_size)
+{
+	const void	*src;
+
+	if (!addr || !dst || dst_size == 0)
+		return (0);
+	if (addr->family == AF_INET)
+		src = &addr->addr.v4;
+	else if (addr->family == AF_INET6)
+		src = &addr->addr.v6;
+	else
+		return (0);
+	return (inet_ntop(addr->family, src, dst, dst_size) != NULL);
+}
+
+
+================================================================
+FILE: srcs/net/address.h
+================================================================
+
+#ifndef NMAP_NET_ADDRESS_H
+# define NMAP_NET_ADDRESS_H
+
+# include "ip_addr.h"
+
+/** Convert a system sockaddr representation into the scanner IP type. */
+int	nmap_ip_from_sockaddr(t_nmap_ip_addr *dst,
+		const struct sockaddr *src, socklen_t src_len);
+
+/** Convert the scanner IP type to a sockaddr suitable for socket APIs. */
+int	nmap_ip_to_sockaddr(const t_nmap_ip_addr *src, uint16_t port,
+		struct sockaddr_storage *dst, socklen_t *dst_len);
+
+/** Compare only the IP address/family present on wire (not IPv6 scope_id). */
+int	nmap_ip_equal(const t_nmap_ip_addr *a, const t_nmap_ip_addr *b);
+
+/** Render one IPv4/IPv6 address to text. */
+int	nmap_ip_ntop(const t_nmap_ip_addr *addr, char *dst, size_t dst_size);
+
+#endif
+
+
+================================================================
+FILE: srcs/net/pcap.c
+================================================================
+
+#include "config.h"
+
+#include <pcap/pcap.h>
+#include <stdio.h>
+#include <string.h>
+
+#define NMAP_PCAP_SNAPLEN 65535
+#define NMAP_PCAP_TIMEOUT_MS 1
+#define NMAP_PCAP_FILTER_SIZE 1024
+
+/**
+ * @brief Build the target-family BPF capture filter.
+ *
+ * @note Direct replies are restricted to target -> local traffic. ICMP errors
+ *       may come from intermediate routers, so the error branch only requires
+ *       the packet to be addressed to the local source address.
+ */
+static int	build_pcap_filter(const t_nmap_config *config,
+		char *filter, size_t filter_size)
+{
+	int	ret;
+
+	if (config->target.addr.family == AF_INET)
+	{
+		ret = snprintf(filter, filter_size,
+				"((ip and src host %s and dst host %s)"
+				" or (icmp and dst host %s))",
+				config->target.ip, config->route.src_ip,
+				config->route.src_ip);
+	}
+	else if (config->target.addr.family == AF_INET6)
+	{
+		ret = snprintf(filter, filter_size,
+				"((ip6 and src host %s and dst host %s)"
+				" or (icmp6 and dst host %s))",
+				config->target.ip, config->route.src_ip,
+				config->route.src_ip);
+	}
+	else
+		return (0);
+	return (ret >= 0 && (size_t)ret < filter_size);
+}
+
+/**
+ * @brief Apply capture settings before activation.
+ */
+static int	apply_pcap_settings(pcap_t *handle)
+{
+	if (pcap_set_snaplen(handle, NMAP_PCAP_SNAPLEN) < 0)
+		return (0);
+	if (pcap_set_promisc(handle, 0) < 0)
+		return (0);
+	if (pcap_set_timeout(handle, NMAP_PCAP_TIMEOUT_MS) < 0)
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Create and activate the pcap handle on the selected route interface.
+ */
+static int	open_pcap_handle(t_nmap_config *config)
+{
+	pcap_t	*handle;
+
+	memset(config->capture.errbuf, 0, sizeof(config->capture.errbuf));
+	handle = pcap_create(config->route.iface, config->capture.errbuf);
+	if (!handle)
+	{
+		fprintf(stderr, "ft_nmap: pcap_create: %s\n",
+			config->capture.errbuf);
+		return (0);
+	}
+	if (!apply_pcap_settings(handle))
+	{
+		fprintf(stderr, "ft_nmap: pcap settings: %s\n", pcap_geterr(handle));
+		pcap_close(handle);
+		return (0);
+	}
+	if (pcap_activate(handle) < 0)
+	{
+		fprintf(stderr, "ft_nmap: pcap_activate: %s\n", pcap_geterr(handle));
+		pcap_close(handle);
+		return (0);
+	}
+	config->capture.handle = handle;
+	return (1);
+}
+
+/**
+ * @brief Compile and install the capture filter.
+ */
+static int	install_pcap_filter(t_nmap_config *config)
+{
+	struct bpf_program	program;
+	char				filter[NMAP_PCAP_FILTER_SIZE];
+
+	if (!build_pcap_filter(config, filter, sizeof(filter)))
+	{
+		fprintf(stderr, "ft_nmap: pcap filter too long\n");
+		return (0);
+	}
+	if (pcap_compile(config->capture.handle, &program,
+			filter, 1, PCAP_NETMASK_UNKNOWN) < 0)
+	{
+		fprintf(stderr, "ft_nmap: pcap_compile: %s\n",
+			pcap_geterr(config->capture.handle));
+		return (0);
+	}
+	if (pcap_setfilter(config->capture.handle, &program) < 0)
+	{
+		fprintf(stderr, "ft_nmap: pcap_setfilter: %s\n",
+			pcap_geterr(config->capture.handle));
+		pcap_freecode(&program);
+		return (0);
+	}
+	pcap_freecode(&program);
+	return (1);
+}
+
+/**
+ * @brief Expose pcap as a non-blocking selectable fd for the event loop.
+ */
+static int	prepare_pcap_fd(t_nmap_config *config)
+{
+	config->capture.fd = pcap_get_selectable_fd(config->capture.handle);
+	if (config->capture.fd < 0)
+	{
+		fprintf(stderr, "ft_nmap: pcap fd is not selectable\n");
+		return (0);
+	}
+	if (pcap_setnonblock(config->capture.handle, 1,
+			config->capture.errbuf) < 0)
+	{
+		fprintf(stderr, "ft_nmap: pcap_setnonblock: %s\n",
+			config->capture.errbuf);
+		return (0);
+	}
+	config->capture.datalink = pcap_datalink(config->capture.handle);
+	return (1);
+}
+
+/**
+ * @brief Prepare packet capture before the first probe is scheduled.
+ */
+int	nmap_prepare_pcap(t_nmap_config *config, int *exit_status)
+{
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	memset(&config->capture, 0, sizeof(config->capture));
+	config->capture.fd = -1;
+	config->capture.datalink = -1;
+	if (!open_pcap_handle(config)
+		|| !install_pcap_filter(config)
+		|| !prepare_pcap_fd(config))
+	{
+		if (config->capture.handle)
+			pcap_close(config->capture.handle);
+		config->capture.handle = NULL;
+		config->capture.fd = -1;
+		config->capture.datalink = -1;
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/net/route.c
+================================================================
+
+#include "config.h"
+#include "net/address.h"
+
+#include <errno.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+/**
+ * @brief Ask the kernel which source address it would route to the target.
+ *
+ * @param target Resolved IPv4/IPv6 destination.
+ * @param src_addr Output source address selected by the kernel.
+ * @param saved_error Output errno-style error on failure.
+ *
+ * @return 1 on success, 0 on failure.
+ *
+ * @note Connecting this UDP socket does not perform the scan and normally sends
+ *       no datagram. It delegates route/source-address selection to the kernel.
+ */
+static int	find_source_address(const t_nmap_target *target,
+		t_nmap_ip_addr *src_addr, int *saved_error)
+{
+	struct sockaddr_storage	dst;
+	struct sockaddr_storage	local;
+	socklen_t				dst_len;
+	socklen_t				local_len;
+	int						fd;
+	int						error;
+
+	if (!nmap_ip_to_sockaddr(&target->addr, 1, &dst, &dst_len))
+	{
+		*saved_error = EAFNOSUPPORT;
+		return (0);
+	}
+	fd = socket(target->addr.family, SOCK_DGRAM, IPPROTO_UDP);
+	if (fd < 0)
+	{
+		*saved_error = errno;
+		return (0);
+	}
+	if (connect(fd, (struct sockaddr *)&dst, dst_len) < 0)
+	{
+		error = errno;
+		close(fd);
+		*saved_error = error;
+		return (0);
+	}
+	memset(&local, 0, sizeof(local));
+	local_len = sizeof(local);
+	if (getsockname(fd, (struct sockaddr *)&local, &local_len) < 0)
+	{
+		error = errno;
+		close(fd);
+		*saved_error = error;
+		return (0);
+	}
+	close(fd);
+	if (!nmap_ip_from_sockaddr(src_addr,
+			(struct sockaddr *)&local, local_len))
+	{
+		*saved_error = EAFNOSUPPORT;
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Find the interface owning the selected source address.
+ *
+ * @note For IPv6 this also gives an ifindex, required to use link-local scoped
+ *       addresses correctly.
+ */
+static int	find_source_interface(const t_nmap_ip_addr *src_addr,
+		char *iface, size_t iface_size, unsigned int *ifindex,
+		int *saved_error)
+{
+	struct ifaddrs	*ifaddr;
+	struct ifaddrs	*current;
+	t_nmap_ip_addr	current_addr;
+	size_t			name_len;
+	socklen_t		addr_len;
+	int				found;
+
+	ifaddr = NULL;
+	if (getifaddrs(&ifaddr) < 0)
+	{
+		*saved_error = errno;
+		return (0);
+	}
+	found = 0;
+	current = ifaddr;
+	while (current)
+	{
+		if (src_addr->family == AF_INET)
+			addr_len = sizeof(struct sockaddr_in);
+		else
+			addr_len = sizeof(struct sockaddr_in6);
+		if (current->ifa_name && current->ifa_addr
+			&& (current->ifa_flags & IFF_UP)
+			&& current->ifa_addr->sa_family == src_addr->family
+			&& nmap_ip_from_sockaddr(&current_addr,
+				current->ifa_addr, addr_len)
+			&& nmap_ip_equal(src_addr, &current_addr))
+		{
+			name_len = strlen(current->ifa_name);
+			if (name_len >= iface_size)
+			{
+				freeifaddrs(ifaddr);
+				*saved_error = ENAMETOOLONG;
+				return (0);
+			}
+			memcpy(iface, current->ifa_name, name_len + 1);
+			*ifindex = if_nametoindex(current->ifa_name);
+			if (*ifindex == 0)
+			{
+				freeifaddrs(ifaddr);
+				*saved_error = errno ? errno : ENODEV;
+				return (0);
+			}
+			found = 1;
+			break ;
+		}
+		current = current->ifa_next;
+	}
+	freeifaddrs(ifaddr);
+	if (!found)
+	{
+		*saved_error = ENODEV;
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Prepare source address, interface and scope for the current target.
+ */
+int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
+{
+	int	error;
+
+	if (!config || (config->target.addr.family != AF_INET
+			&& config->target.addr.family != AF_INET6))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	memset(&config->route, 0, sizeof(config->route));
+	error = 0;
+	if (!find_source_address(&config->target,
+			&config->route.src_addr, &error))
+	{
+		config->route.error = error;
+		fprintf(stderr, "ft_nmap: no route to %s: %s\n",
+			config->target.ip, strerror(error));
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (!nmap_ip_ntop(&config->route.src_addr,
+			config->route.src_ip, sizeof(config->route.src_ip)))
+	{
+		config->route.error = errno;
+		perror("ft_nmap: inet_ntop route source");
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (!find_source_interface(&config->route.src_addr,
+			config->route.iface, sizeof(config->route.iface),
+			&config->route.ifindex, &error))
+	{
+		config->route.error = error;
+		fprintf(stderr, "ft_nmap: cannot find interface for source %s: %s\n",
+			config->route.src_ip, strerror(error));
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	/* A naked fe80:: address needs the outgoing link to become usable. */
+	if (config->target.addr.family == AF_INET6
+		&& config->target.addr.scope_id == 0
+		&& IN6_IS_ADDR_LINKLOCAL(&config->target.addr.addr.v6))
+		config->target.addr.scope_id = config->route.ifindex;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/net/socket.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   socket.c                                           :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/10 15:59:39 by ertrigna          #+#    #+#             */
+/*   Updated: 2026/06/24 12:03:15 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "config.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#ifndef IPV6_HDRINCL
+# define IPV6_HDRINCL 36
+#endif
+
+/**
+ * @brief Open an IPv4 raw socket accepting a complete user-built IP header.
+ */
+static int	prepare_ipv4_socket(t_nmap_socket *sock)
+{
+	int	on;
+
+	sock->send_fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+	if (sock->send_fd < 0)
+		return (0);
+	on = 1;
+	if (setsockopt(sock->send_fd, IPPROTO_IP,
+			IP_HDRINCL, &on, sizeof(on)) < 0)
+		return (0);
+	sock->family = AF_INET;
+	return (1);
+}
+
+/**
+ * @brief Open an IPv6 raw socket accepting a complete user-built IPv6 header.
+ */
+static int	prepare_ipv6_socket(t_nmap_socket *sock)
+{
+	int	on;
+
+	sock->send_fd = socket(AF_INET6, SOCK_RAW, IPPROTO_RAW);
+	if (sock->send_fd < 0)
+		return (0);
+	on = 1;
+	if (setsockopt(sock->send_fd, IPPROTO_IPV6,
+			IPV6_HDRINCL, &on, sizeof(on)) < 0)
+		return (0);
+	sock->family = AF_INET6;
+	return (1);
+}
+
+/**
+ * @brief Prepare the family-specific raw socket for the current target.
+ *
+ * @note Socket lifetime is target-scoped because a target list may contain a
+ *       mix of IPv4 and IPv6 destinations.
+ */
+int	nmap_prepare_send_socket(t_nmap_config *config, int *exit_status)
+{
+	int	ok;
+	int	saved_error;
+
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	memset(&config->socket, 0, sizeof(config->socket));
+	config->socket.send_fd = -1;
+	if (config->target.addr.family == AF_INET)
+		ok = prepare_ipv4_socket(&config->socket);
+	else if (config->target.addr.family == AF_INET6)
+		ok = prepare_ipv6_socket(&config->socket);
+	else
+	{
+		errno = EAFNOSUPPORT;
+		ok = 0;
+	}
+	if (!ok)
+	{
+		saved_error = errno;
+		if (config->socket.send_fd >= 0)
+			close(config->socket.send_fd);
+		config->socket.send_fd = -1;
+		config->socket.error = saved_error;
+		fprintf(stderr, "ft_nmap: raw socket: %s\n",
+			strerror(saved_error));
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/net/target.c
+================================================================
+
+#include "config.h"
+#include "net/address.h"
+
+#include <errno.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <string.h>
+
+/**
+ * @brief Resolve one target name into the first usable IPv4/IPv6 address.
+ *
+ * @param target Destination structure to fill.
+ * @param target_name IPv4, IPv6, hostname or FQDN supplied by the parser.
+ *
+ * @return 1 on success, 0 on resolution failure.
+ *
+ * @note AF_UNSPEC is intentional. Address-family policy is now a network-layer
+ *       concern instead of an IPv4 assumption embedded in the parser/runtime.
+ */
+static int	resolve_host(t_nmap_target *target, const char *target_name)
+{
+	struct addrinfo	hints;
+	struct addrinfo	*results;
+	struct addrinfo	*current;
+	int				status;
+
+	if (!target || !target_name || target_name[0] == '\0')
+		return (0);
+	memset(target, 0, sizeof(*target));
+	target->name = target_name;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+	results = NULL;
+	status = getaddrinfo(target_name, NULL, &hints, &results);
+	if (status != 0)
+	{
+		target->gai_error = status;
+		fprintf(stderr, "ft_nmap: %s: %s\n",
+			target_name, gai_strerror(status));
+		return (0);
+	}
+	current = results;
+	while (current)
+	{
+		if (current->ai_addr
+			&& (current->ai_family == AF_INET
+				|| current->ai_family == AF_INET6)
+			&& nmap_ip_from_sockaddr(&target->addr,
+				current->ai_addr, current->ai_addrlen))
+			break ;
+		current = current->ai_next;
+	}
+	if (!current)
+	{
+		fprintf(stderr, "ft_nmap: %s: no usable IPv4/IPv6 address\n",
+			target_name);
+		freeaddrinfo(results);
+		return (0);
+	}
+	if (!nmap_ip_ntop(&target->addr, target->ip, sizeof(target->ip)))
+	{
+		target->error = errno;
+		perror("ft_nmap: inet_ntop target");
+		freeaddrinfo(results);
+		return (0);
+	}
+	freeaddrinfo(results);
+	return (1);
+}
+
+/**
+ * @brief Prepare one current target from the owned target list.
+ */
+int	nmap_prepare_target(t_nmap_config *config, const char *target_name,
+		int *exit_status)
+{
+	if (!config || !resolve_host(&config->target, target_name))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/output/report.c
+================================================================
+
+#include "config.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/** Return the display name for one concrete scan type. */
+static const char	*scan_type_name(uint32_t scan_type)
+{
+	if (scan_type == NMAP_SCAN_SYN)
+		return ("SYN");
+	if (scan_type == NMAP_SCAN_NULL)
+		return ("NULL");
+	if (scan_type == NMAP_SCAN_FIN)
+		return ("FIN");
+	if (scan_type == NMAP_SCAN_XMAS)
+		return ("XMAS");
+	if (scan_type == NMAP_SCAN_ACK)
+		return ("ACK");
+	if (scan_type == NMAP_SCAN_UDP)
+		return ("UDP");
+	return ("UNKNOWN");
+}
+
+/** Return the display name for one final scan result. */
+static const char	*scan_result_name(t_scan_result result)
+{
+	if (result == SCAN_RESULT_OPEN)
+		return ("open");
+	if (result == SCAN_RESULT_CLOSED)
+		return ("closed");
+	if (result == SCAN_RESULT_FILTERED)
+		return ("filtered");
+	if (result == SCAN_RESULT_UNFILTERED)
+		return ("unfiltered");
+	if (result == SCAN_RESULT_OPEN_FILTERED)
+		return ("open|filtered");
+	return ("unknown");
+}
+
+/** Return the display name for one non-final runtime state. */
+static const char	*probe_state_name(t_probe_state state)
+{
+	if (state == PROBE_PENDING)
+		return ("pending");
+	if (state == PROBE_QUEUED)
+		return ("queued");
+	if (state == PROBE_OUTSTANDING)
+		return ("outstanding");
+	if (state == PROBE_DONE)
+		return ("done");
+	return ("unknown");
+}
+
+/** Return a concise report name for the event that produced the result. */
+static const char	*scan_reason_name(t_scan_reason reason)
+{
+	if (reason == SCAN_REASON_SYN_ACK)
+		return ("syn-ack");
+	if (reason == SCAN_REASON_SYN)
+		return ("syn");
+	if (reason == SCAN_REASON_RST)
+		return ("reset");
+	if (reason == SCAN_REASON_UDP_REPLY)
+		return ("udp-response");
+	if (reason == SCAN_REASON_ICMP4)
+		return ("icmp");
+	if (reason == SCAN_REASON_ICMP6)
+		return ("icmp6");
+	if (reason == SCAN_REASON_NO_RESPONSE)
+		return ("no-response");
+	if (reason == SCAN_REASON_SEND_ERROR)
+		return ("send-error");
+	return ("none");
+}
+
+/** Check whether one scan column is enabled. */
+static int	scan_enabled(const t_nmap_config *config, uint32_t scan_type)
+{
+	return ((config->scan.scan_mask & scan_type) != 0);
+}
+
+/** Find one logical probe by destination port and scan type. */
+static t_probe	*find_probe(t_nmap_config *config,
+		uint16_t port, uint32_t scan_type)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].dst_port == port
+			&& config->runtime.probes[i].scan_type == scan_type)
+			return (&config->runtime.probes[i]);
+		i++;
+	}
+	return (NULL);
+}
+
+/** Display a final result when DONE, otherwise the live runtime state. */
+static const char	*probe_display(const t_probe *probe)
+{
+	if (!probe)
+		return ("unknown");
+	if (probe->state != PROBE_DONE)
+		return (probe_state_name(probe->state));
+	return (scan_result_name(probe->result));
+}
+
+/** Return whether a DONE result counts as open-like for --open filtering. */
+static int	probe_is_open_like(const t_probe *probe)
+{
+	if (!probe || probe->state != PROBE_DONE)
+		return (0);
+	return (probe->result == SCAN_RESULT_OPEN
+		|| probe->result == SCAN_RESULT_OPEN_FILTERED);
+}
+
+/** Check whether any enabled scan keeps one port visible in --open mode. */
+static int	port_is_open_like(t_nmap_config *config, uint16_t port)
+{
+	static const uint32_t	types[] = {
+		NMAP_SCAN_SYN, NMAP_SCAN_NULL, NMAP_SCAN_FIN,
+		NMAP_SCAN_XMAS, NMAP_SCAN_ACK, NMAP_SCAN_UDP
+	};
+	size_t				i;
+
+	i = 0;
+	while (i < sizeof(types) / sizeof(types[0]))
+	{
+		if (scan_enabled(config, types[i])
+			&& probe_is_open_like(find_probe(config, port, types[i])))
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/** Print one enabled result-table header column. */
+static void	print_header_column(const t_nmap_config *config, uint32_t type)
+{
+	if (scan_enabled(config, type))
+		printf("%-24s", scan_type_name(type));
+}
+
+/** Print one enabled result-table cell, optionally with --reason. */
+static void	print_result_column(t_nmap_config *config,
+		uint16_t port, uint32_t type)
+{
+	t_probe		*probe;
+	char		cell[64];
+
+	if (!scan_enabled(config, type))
+		return ;
+	probe = find_probe(config, port, type);
+	if (!config->scan.show_reason || !probe || probe->state != PROBE_DONE)
+	{
+		printf("%-24s", probe_display(probe));
+		return ;
+	}
+	snprintf(cell, sizeof(cell), "%s(%s)", probe_display(probe),
+		scan_reason_name(probe->reason));
+	printf("%-24s", cell);
+}
+
+/** Print the report table header in stable scan order. */
+static void	print_header(const t_nmap_config *config)
+{
+	printf("%-8s", "PORT");
+	print_header_column(config, NMAP_SCAN_SYN);
+	print_header_column(config, NMAP_SCAN_NULL);
+	print_header_column(config, NMAP_SCAN_FIN);
+	print_header_column(config, NMAP_SCAN_XMAS);
+	print_header_column(config, NMAP_SCAN_ACK);
+	print_header_column(config, NMAP_SCAN_UDP);
+	printf("\n");
+}
+
+/** Print all enabled scan results for one destination port. */
+static void	print_port(t_nmap_config *config, uint16_t port)
+{
+	printf("%-8u", port);
+	print_result_column(config, port, NMAP_SCAN_SYN);
+	print_result_column(config, port, NMAP_SCAN_NULL);
+	print_result_column(config, port, NMAP_SCAN_FIN);
+	print_result_column(config, port, NMAP_SCAN_XMAS);
+	print_result_column(config, port, NMAP_SCAN_ACK);
+	print_result_column(config, port, NMAP_SCAN_UDP);
+	printf("\n");
+}
+
+/** @brief Print the current-target scan report without modifying runtime state. */
+void	nmap_print_report(t_nmap_config *config)
+{
+	size_t	i;
+
+	if (!config)
+		return ;
+	printf("Scan report for %s (%s)\n",
+		config->target.name, config->target.ip);
+	printf("Probes: %zu total, %zu done, %zu queued, %zu outstanding\n\n",
+		config->runtime.probe_count,
+		config->runtime.done_count,
+		config->runtime.queued_count,
+		config->runtime.outstanding_count);
+	print_header(config);
+	i = 0;
+	while (i < config->scan.port_count)
+	{
+		if (!config->scan.open_only
+			|| port_is_open_like(config, config->scan.ports[i]))
+			print_port(config, config->scan.ports[i]);
+		i++;
+	}
+}
+
+
+================================================================
+FILE: srcs/packet/checksum.c
+================================================================
+
+#include "packet/packet.h"
+
+#include <arpa/inet.h>
+
+/**
+ * @brief Add one byte buffer to a running Internet-checksum accumulator.
+ *
+ * @param sum Existing non-folded accumulator.
+ * @param data Buffer to add.
+ * @param len Buffer length in bytes.
+ *
+ * @return Updated non-folded accumulator.
+ *
+ * @note Keeping add/finalize separate lets IPv4/IPv6 pseudo headers and the
+ *       transport segment be checksummed without building a temporary concat
+ *       buffer.
+ */
+uint32_t	nmap_checksum_add(uint32_t sum, const void *data, size_t len)
+{
+	const uint8_t	*bytes;
+
+	bytes = (const uint8_t *)data;
+	while (len > 1)
+	{
+		sum += ((uint16_t)bytes[0] << 8) | bytes[1];
+		bytes += 2;
+		len -= 2;
+	}
+	if (len == 1)
+		sum += ((uint16_t)bytes[0] << 8);
+	return (sum);
+}
+
+/**
+ * @brief Fold, one's-complement and convert a checksum accumulator to wire.
+ */
+uint16_t	nmap_checksum_finish(uint32_t sum)
+{
+	while (sum >> 16)
+		sum = (sum & 0xffffU) + (sum >> 16);
+	return (htons((uint16_t)(~sum)));
+}
+
+/**
+ * @brief Compute a complete Internet checksum over one contiguous buffer.
+ */
+uint16_t	nmap_checksum(const void *data, size_t len)
+{
+	return (nmap_checksum_finish(nmap_checksum_add(0, data, len)));
+}
+
+
+================================================================
+FILE: srcs/packet/ipv4.c
+================================================================
+
+#include "packet/packet.h"
+
+#include <arpa/inet.h>
+#include <string.h>
+
+/**
+ * @brief IPv4 pseudo header used by TCP and UDP checksums.
+ */
+typedef struct __attribute__((packed)) s_ipv4_pseudo_header
+{
+	struct in_addr	src;
+	struct in_addr	dst;
+	uint8_t			zero;
+	uint8_t			protocol;
+	uint16_t		length;
+}	t_ipv4_pseudo_header;
+
+/**
+ * @brief Fill the IPv4 header surrounding one transport probe.
+ *
+ * @param config Current target/route state.
+ * @param probe Logical probe used to derive a stable identification value.
+ * @param ip Destination wire header.
+ * @param protocol Upper-layer protocol (TCP/UDP).
+ * @param payload_len Upper-layer byte length.
+ */
+void	nmap_build_ipv4_header(t_nmap_config *config, t_probe *probe,
+		t_nmap_ipv4_header *ip, uint8_t protocol, size_t payload_len)
+{
+	memset(ip, 0, sizeof(*ip));
+	ip->version_ihl = 0x45;
+	ip->total_length = htons((uint16_t)(NMAP_IPV4_HEADER_LEN + payload_len));
+	ip->identification = htons(probe->src_port);
+	ip->ttl = 64;
+	ip->protocol = protocol;
+	ip->src = config->route.src_addr.addr.v4;
+	ip->dst = config->target.addr.addr.v4;
+	ip->checksum = nmap_checksum(ip, sizeof(*ip));
+}
+
+/**
+ * @brief Compute a TCP/UDP checksum using the IPv4 pseudo header.
+ */
+uint16_t	nmap_transport_checksum_ipv4(const t_nmap_config *config,
+		uint8_t protocol, const void *transport, size_t len)
+{
+	t_ipv4_pseudo_header	pseudo;
+	uint32_t				sum;
+
+	memset(&pseudo, 0, sizeof(pseudo));
+	pseudo.src = config->route.src_addr.addr.v4;
+	pseudo.dst = config->target.addr.addr.v4;
+	pseudo.protocol = protocol;
+	pseudo.length = htons((uint16_t)len);
+	sum = nmap_checksum_add(0, &pseudo, sizeof(pseudo));
+	sum = nmap_checksum_add(sum, transport, len);
+	return (nmap_checksum_finish(sum));
+}
+
+
+================================================================
+FILE: srcs/packet/ipv6.c
+================================================================
+
+#include "packet/packet.h"
+
+#include <arpa/inet.h>
+#include <string.h>
+
+/**
+ * @brief IPv6 pseudo header used by TCP and UDP checksums.
+ *
+ * IPv6 has no checksum on its base IP header, but upper-layer checksums cover
+ * the 128-bit source/destination addresses through this pseudo header.
+ */
+typedef struct __attribute__((packed)) s_ipv6_pseudo_header
+{
+	struct in6_addr	src;
+	struct in6_addr	dst;
+	uint32_t		length;
+	uint8_t			zero[3];
+	uint8_t			next_header;
+}	t_ipv6_pseudo_header;
+
+/**
+ * @brief Fill the fixed 40-byte IPv6 base header for one transport probe.
+ */
+void	nmap_build_ipv6_header(t_nmap_config *config,
+		t_nmap_ipv6_header *ip, uint8_t next_header, size_t payload_len)
+{
+	memset(ip, 0, sizeof(*ip));
+	ip->version_tc_flow = htonl(6U << 28);
+	ip->payload_length = htons((uint16_t)payload_len);
+	ip->next_header = next_header;
+	ip->hop_limit = 64;
+	ip->src = config->route.src_addr.addr.v6;
+	ip->dst = config->target.addr.addr.v6;
+}
+
+/**
+ * @brief Compute a TCP/UDP checksum using the IPv6 pseudo header.
+ */
+uint16_t	nmap_transport_checksum_ipv6(const t_nmap_config *config,
+		uint8_t next_header, const void *transport, size_t len)
+{
+	t_ipv6_pseudo_header	pseudo;
+	uint32_t				sum;
+
+	memset(&pseudo, 0, sizeof(pseudo));
+	pseudo.src = config->route.src_addr.addr.v6;
+	pseudo.dst = config->target.addr.addr.v6;
+	pseudo.length = htonl((uint32_t)len);
+	pseudo.next_header = next_header;
+	sum = nmap_checksum_add(0, &pseudo, sizeof(pseudo));
+	sum = nmap_checksum_add(sum, transport, len);
+	return (nmap_checksum_finish(sum));
+}
+
+
+================================================================
+FILE: srcs/packet/link_offset.c
+================================================================
+
+#include <pcap/pcap.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/socket.h>
+
+#define NMAP_ETHERNET_HEADER_LEN 14
+#define NMAP_LINUX_SLL_HEADER_LEN 16
+#define NMAP_LINUX_SLL2_HEADER_LEN 20
+#define NMAP_LOOPBACK_HEADER_LEN 4
+#define NMAP_RADIOTAP_MIN_LEN 8
+#define NMAP_80211_BASE_HEADER_LEN 24
+#define NMAP_80211_ADDR4_LEN 6
+#define NMAP_80211_QOS_LEN 2
+#define NMAP_80211_HT_CONTROL_LEN 4
+#define NMAP_LLC_SNAP_LEN 8
+#define NMAP_ETHERTYPE_IPV4 0x0800
+#define NMAP_ETHERTYPE_IPV6 0x86dd
+#define NMAP_ETHERTYPE_VLAN 0x8100
+#define NMAP_ETHERTYPE_QINQ 0x88a8
+
+/** Read a network-order uint16_t without assuming packet alignment. */
+static uint16_t	read_be16(const unsigned char *data)
+{
+	return (((uint16_t)data[0] << 8) | data[1]);
+}
+
+/** Read a little-endian uint16_t without assuming packet alignment. */
+static uint16_t	read_le16(const unsigned char *data)
+{
+	return (((uint16_t)data[1] << 8) | data[0]);
+}
+
+/**
+ * @brief Convert an Ethernet protocol value to an address family.
+ */
+static int	family_from_ethertype(uint16_t ethertype, sa_family_t *family)
+{
+	if (ethertype == NMAP_ETHERTYPE_IPV4)
+		*family = AF_INET;
+	else if (ethertype == NMAP_ETHERTYPE_IPV6)
+		*family = AF_INET6;
+	else
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Validate that one candidate offset points to the expected IP version.
+ */
+static int	family_from_version(const unsigned char *packet,
+		size_t len, size_t offset, sa_family_t *family)
+{
+	uint8_t	version;
+
+	if (len <= offset)
+		return (0);
+	version = packet[offset] >> 4;
+	if (version == 4)
+		*family = AF_INET;
+	else if (version == 6)
+		*family = AF_INET6;
+	else
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Locate IPv4/IPv6 after an Ethernet header and optional VLAN tags.
+ */
+static int	get_ethernet_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
+{
+	size_t		pos;
+	uint16_t	ethertype;
+
+	if (len < NMAP_ETHERNET_HEADER_LEN)
+		return (0);
+	pos = 12;
+	ethertype = read_be16(packet + pos);
+	pos += 2;
+	while (ethertype == NMAP_ETHERTYPE_VLAN
+		|| ethertype == NMAP_ETHERTYPE_QINQ)
+	{
+		if (len < pos + 4)
+			return (0);
+		ethertype = read_be16(packet + pos + 2);
+		pos += 4;
+	}
+	if (!family_from_ethertype(ethertype, family))
+		return (0);
+	*offset = pos;
+	return (family_from_version(packet, len, *offset, family));
+}
+
+/** Locate IPv4/IPv6 in Linux cooked capture v1. */
+static int	get_sll_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
+{
+	if (len < NMAP_LINUX_SLL_HEADER_LEN
+		|| !family_from_ethertype(read_be16(packet + 14), family))
+		return (0);
+	*offset = NMAP_LINUX_SLL_HEADER_LEN;
+	return (family_from_version(packet, len, *offset, family));
+}
+
+/** Locate IPv4/IPv6 in Linux cooked capture v2. */
+static int	get_sll2_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
+{
+	if (len < NMAP_LINUX_SLL2_HEADER_LEN
+		|| !family_from_ethertype(read_be16(packet), family))
+		return (0);
+	*offset = NMAP_LINUX_SLL2_HEADER_LEN;
+	return (family_from_version(packet, len, *offset, family));
+}
+
+/**
+ * @brief Compute the 802.11 MAC header size for a data frame.
+ */
+static size_t	get_80211_header_len(uint16_t frame_control)
+{
+	size_t	header_len;
+	uint8_t	type;
+	uint8_t	subtype;
+	int		to_ds;
+	int		from_ds;
+	int		qos;
+	int		order;
+
+	type = (frame_control >> 2) & 0x3;
+	subtype = (frame_control >> 4) & 0xf;
+	to_ds = (frame_control & 0x0100) != 0;
+	from_ds = (frame_control & 0x0200) != 0;
+	order = (frame_control & 0x8000) != 0;
+	if (type != 2)
+		return (0);
+	header_len = NMAP_80211_BASE_HEADER_LEN;
+	if (to_ds && from_ds)
+		header_len += NMAP_80211_ADDR4_LEN;
+	qos = (subtype & 0x08) != 0;
+	if (qos)
+		header_len += NMAP_80211_QOS_LEN;
+	if (order)
+		header_len += NMAP_80211_HT_CONTROL_LEN;
+	return (header_len);
+}
+
+/**
+ * @brief Locate IPv4/IPv6 after an 802.11 data header + LLC/SNAP.
+ */
+static int	get_80211_offset_at(const unsigned char *packet,
+		size_t len, size_t wifi_offset, size_t *offset, sa_family_t *family)
+{
+	uint16_t	frame_control;
+	size_t		wifi_header_len;
+	size_t		llc_offset;
+
+	if (len < wifi_offset + 2)
+		return (0);
+	frame_control = read_le16(packet + wifi_offset);
+	if (frame_control & 0x4000)
+		return (0);
+	wifi_header_len = get_80211_header_len(frame_control);
+	if (wifi_header_len == 0)
+		return (0);
+	llc_offset = wifi_offset + wifi_header_len;
+	if (len < llc_offset + NMAP_LLC_SNAP_LEN)
+		return (0);
+	if (packet[llc_offset] != 0xaa || packet[llc_offset + 1] != 0xaa
+		|| packet[llc_offset + 2] != 0x03)
+		return (0);
+	if (!family_from_ethertype(read_be16(packet + llc_offset + 6), family))
+		return (0);
+	*offset = llc_offset + NMAP_LLC_SNAP_LEN;
+	return (family_from_version(packet, len, *offset, family));
+}
+
+/** Locate IPv4/IPv6 after a Radiotap monitor header. */
+static int	get_radiotap_offset(const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
+{
+	size_t	radiotap_len;
+
+	if (len < NMAP_RADIOTAP_MIN_LEN || packet[0] != 0)
+		return (0);
+	radiotap_len = read_le16(packet + 2);
+	if (radiotap_len < NMAP_RADIOTAP_MIN_LEN || radiotap_len >= len)
+		return (0);
+	return (get_80211_offset_at(packet, len,
+			radiotap_len, offset, family));
+}
+
+/**
+ * @brief Locate the network-layer header in one pcap frame.
+ *
+ * @param datalink Pcap DLT_* type.
+ * @param packet Captured frame.
+ * @param len Captured byte length.
+ * @param offset Output IPv4/IPv6 offset.
+ * @param family Output AF_INET or AF_INET6.
+ *
+ * @return 1 when a supported IPv4/IPv6 frame was located, 0 otherwise.
+ *
+ * @note The old code exposed nmap_get_ipv4_offset(). This function is now a
+ *       true L2 boundary: it knows framing but does not parse IP protocols.
+ */
+int	nmap_get_network_offset(int datalink, const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family)
+{
+	if (!packet || !offset || !family)
+		return (0);
+	if (datalink == DLT_EN10MB)
+		return (get_ethernet_offset(packet, len, offset, family));
+	if (datalink == DLT_LINUX_SLL)
+		return (get_sll_offset(packet, len, offset, family));
+#ifdef DLT_LINUX_SLL2
+	if (datalink == DLT_LINUX_SLL2)
+		return (get_sll2_offset(packet, len, offset, family));
+#endif
+	if (datalink == DLT_RAW)
+	{
+		*offset = 0;
+		return (family_from_version(packet, len, *offset, family));
+	}
+#ifdef DLT_NULL
+	if (datalink == DLT_NULL)
+	{
+		*offset = NMAP_LOOPBACK_HEADER_LEN;
+		return (family_from_version(packet, len, *offset, family));
+	}
+#endif
+#ifdef DLT_LOOP
+	if (datalink == DLT_LOOP)
+	{
+		*offset = NMAP_LOOPBACK_HEADER_LEN;
+		return (family_from_version(packet, len, *offset, family));
+	}
+#endif
+#ifdef DLT_IEEE802_11_RADIO
+	if (datalink == DLT_IEEE802_11_RADIO)
+		return (get_radiotap_offset(packet, len, offset, family));
+#endif
+#ifdef DLT_IEEE802_11
+	if (datalink == DLT_IEEE802_11)
+		return (get_80211_offset_at(packet, len, 0, offset, family));
+#endif
+	return (0);
+}
+
+
+================================================================
+FILE: srcs/packet/packet.h
+================================================================
+
+#ifndef NMAP_PACKET_H
+# define NMAP_PACKET_H
+
+# include "config.h"
+# include "packet/wire.h"
+
+# include <stddef.h>
+# include <stdint.h>
+
+/* packet dispatch / raw send */
+int			nmap_send_probe(t_nmap_config *config, t_probe *probe);
+int			nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe);
+int			nmap_send_udp_probe(t_nmap_config *config, t_probe *probe);
+int			nmap_send_raw_packet(t_nmap_config *config,
+				const unsigned char *packet, size_t packet_len);
+
+/* IP builders / transport pseudo-header checksums */
+void		nmap_build_ipv4_header(t_nmap_config *config, t_probe *probe,
+				t_nmap_ipv4_header *ip, uint8_t protocol, size_t payload_len);
+void		nmap_build_ipv6_header(t_nmap_config *config,
+				t_nmap_ipv6_header *ip, uint8_t next_header,
+				size_t payload_len);
+uint16_t	nmap_transport_checksum_ipv4(const t_nmap_config *config,
+				uint8_t protocol, const void *transport, size_t len);
+uint16_t	nmap_transport_checksum_ipv6(const t_nmap_config *config,
+				uint8_t next_header, const void *transport, size_t len);
+
+/* pcap parser */
+int			nmap_parse_pcap_packet(t_nmap_config *config,
+				const unsigned char *packet, size_t len,
+				t_nmap_reply *reply);
+
+/* Internet-checksum primitives */
+uint32_t	nmap_checksum_add(uint32_t sum, const void *data, size_t len);
+uint16_t	nmap_checksum_finish(uint32_t sum);
+uint16_t	nmap_checksum(const void *data, size_t len);
+
+#endif
+
+
+================================================================
+FILE: srcs/packet/parse.c
+================================================================
+
+#include "packet/packet.h"
+#include "debug/debug.h"
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <string.h>
+
+#define NMAP_ICMP_HEADER_LEN 8
+#define NMAP_IPV6_FRAGMENT_HEADER_LEN 8
+
+int	nmap_get_network_offset(int datalink, const unsigned char *packet,
+		size_t len, size_t *offset, sa_family_t *family);
+
+/** Read a network-order uint16_t from possibly unaligned packet bytes. */
+static uint16_t	read_u16(const unsigned char *data)
+{
+	uint16_t	value;
+
+	memcpy(&value, data, sizeof(value));
+	return (ntohs(value));
+}
+
+/** Read a network-order uint32_t from possibly unaligned packet bytes. */
+static uint32_t	read_u32(const unsigned char *data)
+{
+	uint32_t	value;
+
+	memcpy(&value, data, sizeof(value));
+	return (ntohl(value));
+}
+
+/** Normalize four packet bytes into a semantic IPv4 address. */
+static void	set_ipv4_addr(t_nmap_ip_addr *addr, const unsigned char *bytes)
+{
+	memset(addr, 0, sizeof(*addr));
+	addr->family = AF_INET;
+	memcpy(&addr->addr.v4, bytes, sizeof(addr->addr.v4));
+}
+
+/** Normalize sixteen packet bytes into a semantic IPv6 address. */
+static void	set_ipv6_addr(t_nmap_ip_addr *addr, const unsigned char *bytes)
+{
+	memset(addr, 0, sizeof(*addr));
+	addr->family = AF_INET6;
+	memcpy(&addr->addr.v6, bytes, sizeof(addr->addr.v6));
+}
+
+/**
+ * @brief Parse the fields required from a direct TCP reply.
+ */
+static int	parse_tcp(const unsigned char *packet, size_t end,
+		size_t offset, t_nmap_reply *reply)
+{
+	if (end < offset + NMAP_TCP_HEADER_LEN)
+		return (0);
+	reply->type = NMAP_REPLY_TCP;
+	reply->src_port = read_u16(packet + offset);
+	reply->dst_port = read_u16(packet + offset + 2);
+	reply->tcp_seq = read_u32(packet + offset + 4);
+	reply->tcp_ack = read_u32(packet + offset + 8);
+	reply->tcp_flags = packet[offset + 13];
+	return (1);
+}
+
+/**
+ * @brief Parse the fields required from a direct UDP reply.
+ */
+static int	parse_udp(const unsigned char *packet, size_t end,
+		size_t offset, t_nmap_reply *reply)
+{
+	if (end < offset + NMAP_UDP_HEADER_LEN)
+		return (0);
+	reply->type = NMAP_REPLY_UDP;
+	reply->src_port = read_u16(packet + offset);
+	reply->dst_port = read_u16(packet + offset + 2);
+	return (1);
+}
+
+/**
+ * @brief Parse the beginning of the original transport header quoted by ICMP.
+ *
+ * @note ICMP errors may quote only the beginning of the offending packet. TCP
+ *       matching only requires ports and, when available here, the sequence
+ *       number. A full 20-byte original TCP header is not required.
+ */
+static int	parse_original_transport(const unsigned char *packet,
+		size_t end, size_t offset, uint8_t protocol, t_nmap_reply *reply)
+{
+	if (protocol == IPPROTO_TCP)
+	{
+		if (end < offset + 8)
+			return (0);
+		reply->original_src_port = read_u16(packet + offset);
+		reply->original_dst_port = read_u16(packet + offset + 2);
+		reply->original_tcp_seq = read_u32(packet + offset + 4);
+		reply->has_original_tcp_seq = 1;
+		return (1);
+	}
+	if (protocol == IPPROTO_UDP)
+	{
+		if (end < offset + NMAP_UDP_HEADER_LEN)
+			return (0);
+		reply->original_src_port = read_u16(packet + offset);
+		reply->original_dst_port = read_u16(packet + offset + 2);
+		return (1);
+	}
+	return (0);
+}
+
+/**
+ * @brief Validate an IPv4 header and compute its captured logical bounds.
+ *
+ * @note Non-initial IPv4 fragments are ignored because they do not carry the
+ *       transport header needed for reliable probe matching.
+ */
+static int	ipv4_bounds(const unsigned char *packet, size_t len,
+		size_t ip_offset, size_t *header_len, size_t *end)
+{
+	uint16_t	total_len;
+	uint16_t	fragment;
+
+	if (len < ip_offset + NMAP_IPV4_HEADER_LEN
+		|| (packet[ip_offset] >> 4) != 4)
+		return (0);
+	*header_len = (size_t)(packet[ip_offset] & 0x0f) * 4;
+	if (*header_len < NMAP_IPV4_HEADER_LEN
+		|| len < ip_offset + *header_len)
+		return (0);
+	total_len = read_u16(packet + ip_offset + 2);
+	if (total_len < *header_len)
+		return (0);
+	*end = ip_offset + total_len;
+	if (*end > len)
+		*end = len;
+	fragment = read_u16(packet + ip_offset + 6);
+	if ((fragment & 0x1fffU) != 0)
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Parse the original IPv4 packet embedded in an ICMPv4 error.
+ */
+static int	parse_original_ipv4(const unsigned char *packet,
+		size_t len, size_t offset, t_nmap_reply *reply)
+{
+	size_t	header_len;
+	size_t	end;
+	uint8_t	protocol;
+
+	if (!ipv4_bounds(packet, len, offset, &header_len, &end))
+		return (0);
+	protocol = packet[offset + 9];
+	reply->original_protocol = protocol;
+	set_ipv4_addr(&reply->original_src_addr, packet + offset + 12);
+	set_ipv4_addr(&reply->original_dst_addr, packet + offset + 16);
+	return (parse_original_transport(packet, end,
+			offset + header_len, protocol, reply));
+}
+
+/**
+ * @brief Parse an ICMPv4 error carrying an original IPv4 TCP/UDP probe.
+ *
+ * @note Only Destination Unreachable (3) and Time Exceeded (11) are useful to
+ *       the current scan decision trees. Other ICMP types are ignored here.
+ */
+static int	parse_icmp4(const unsigned char *packet, size_t end,
+		size_t offset, t_nmap_reply *reply)
+{
+	if (end < offset + NMAP_ICMP_HEADER_LEN + NMAP_IPV4_HEADER_LEN)
+		return (0);
+	reply->type = NMAP_REPLY_ICMP4;
+	reply->icmp_type = packet[offset];
+	reply->icmp_code = packet[offset + 1];
+	if (reply->icmp_type != 3 && reply->icmp_type != 11)
+		return (0);
+	return (parse_original_ipv4(packet, end,
+			offset + NMAP_ICMP_HEADER_LEN, reply));
+}
+
+/**
+ * @brief Parse one captured IPv4 packet into t_nmap_reply.
+ */
+static int	parse_ipv4_packet(const unsigned char *packet,
+		size_t len, size_t ip_offset, t_nmap_reply *reply)
+{
+	size_t	header_len;
+	size_t	end;
+	uint8_t	protocol;
+
+	if (!ipv4_bounds(packet, len, ip_offset, &header_len, &end))
+		return (0);
+	set_ipv4_addr(&reply->src_addr, packet + ip_offset + 12);
+	set_ipv4_addr(&reply->dst_addr, packet + ip_offset + 16);
+	protocol = packet[ip_offset + 9];
+	if (protocol == IPPROTO_TCP)
+		return (parse_tcp(packet, end, ip_offset + header_len, reply));
+	if (protocol == IPPROTO_UDP)
+		return (parse_udp(packet, end, ip_offset + header_len, reply));
+	if (protocol == IPPROTO_ICMP)
+		return (parse_icmp4(packet, end, ip_offset + header_len, reply));
+	return (0);
+}
+
+/** Skip Hop-by-Hop/Routing/Destination Options extension headers. */
+static int	ipv6_skip_options(const unsigned char *packet, size_t end,
+		size_t *offset, uint8_t *next_header)
+{
+	size_t	header_len;
+
+	if (end < *offset + 2)
+		return (0);
+	header_len = ((size_t)packet[*offset + 1] + 1) * 8;
+	if (header_len < 8 || end < *offset + header_len)
+		return (0);
+	*next_header = packet[*offset];
+	*offset += header_len;
+	return (1);
+}
+
+/**
+ * @brief Skip an IPv6 Fragment header when it is the first fragment.
+ *
+ * @note Non-zero fragment offsets cannot contain the beginning of TCP/UDP and
+ *       therefore cannot be matched by this scanner without reassembly.
+ */
+static int	ipv6_skip_fragment(const unsigned char *packet, size_t end,
+		size_t *offset, uint8_t *next_header)
+{
+	uint16_t	fragment;
+
+	if (end < *offset + NMAP_IPV6_FRAGMENT_HEADER_LEN)
+		return (0);
+	fragment = read_u16(packet + *offset + 2);
+	if ((fragment & 0xfff8U) != 0)
+		return (0);
+	*next_header = packet[*offset];
+	*offset += NMAP_IPV6_FRAGMENT_HEADER_LEN;
+	return (1);
+}
+
+/** Skip an IPv6 Authentication Header using its protocol-defined length. */
+static int	ipv6_skip_ah(const unsigned char *packet, size_t end,
+		size_t *offset, uint8_t *next_header)
+{
+	size_t	header_len;
+
+	if (end < *offset + 2)
+		return (0);
+	header_len = ((size_t)packet[*offset + 1] + 2) * 4;
+	if (header_len < 8 || end < *offset + header_len)
+		return (0);
+	*next_header = packet[*offset];
+	*offset += header_len;
+	return (1);
+}
+
+/**
+ * @brief Walk the IPv6 Next Header chain until TCP, UDP or ICMPv6.
+ *
+ * @return 1 when a supported upper layer is found, 0 for malformed,
+ *         unsupported or non-initial-fragment chains.
+ */
+static int	ipv6_find_upper(const unsigned char *packet, size_t end,
+		size_t start, uint8_t first_header, size_t *upper_offset,
+		uint8_t *upper_protocol)
+{
+	size_t	offset;
+	uint8_t	next_header;
+
+	offset = start;
+	next_header = first_header;
+	while (1)
+	{
+		if (next_header == IPPROTO_TCP || next_header == IPPROTO_UDP
+			|| next_header == IPPROTO_ICMPV6)
+		{
+			*upper_offset = offset;
+			*upper_protocol = next_header;
+			return (1);
+		}
+		if (next_header == IPPROTO_HOPOPTS || next_header == IPPROTO_ROUTING
+			|| next_header == IPPROTO_DSTOPTS)
+		{
+			if (!ipv6_skip_options(packet, end, &offset, &next_header))
+				return (0);
+		}
+		else if (next_header == IPPROTO_FRAGMENT)
+		{
+			if (!ipv6_skip_fragment(packet, end, &offset, &next_header))
+				return (0);
+		}
+		else if (next_header == IPPROTO_AH)
+		{
+			if (!ipv6_skip_ah(packet, end, &offset, &next_header))
+				return (0);
+		}
+		else
+			return (0);
+	}
+}
+
+/** Validate an IPv6 base header and compute its captured logical end. */
+static int	ipv6_bounds(const unsigned char *packet, size_t len,
+		size_t ip_offset, size_t *end)
+{
+	uint16_t	payload_len;
+
+	if (len < ip_offset + NMAP_IPV6_HEADER_LEN
+		|| (packet[ip_offset] >> 4) != 6)
+		return (0);
+	payload_len = read_u16(packet + ip_offset + 4);
+	*end = ip_offset + NMAP_IPV6_HEADER_LEN + payload_len;
+	if (*end > len)
+		*end = len;
+	return (1);
+}
+
+/**
+ * @brief Parse the original IPv6 packet embedded in an ICMPv6 error.
+ */
+static int	parse_original_ipv6(const unsigned char *packet,
+		size_t len, size_t offset, t_nmap_reply *reply)
+{
+	size_t	end;
+	size_t	upper_offset;
+	uint8_t	protocol;
+
+	if (!ipv6_bounds(packet, len, offset, &end))
+		return (0);
+	set_ipv6_addr(&reply->original_src_addr, packet + offset + 8);
+	set_ipv6_addr(&reply->original_dst_addr, packet + offset + 24);
+	if (!ipv6_find_upper(packet, end, offset + NMAP_IPV6_HEADER_LEN,
+			packet[offset + 6], &upper_offset, &protocol))
+		return (0);
+	reply->original_protocol = protocol;
+	return (parse_original_transport(packet, end,
+			upper_offset, protocol, reply));
+}
+
+/**
+ * @brief Parse an ICMPv6 error and its embedded original IPv6 probe.
+ *
+ * @note ICMPv6 error messages use types 1 through 4. Classification decides
+ *       which type/code pairs are useful for a given scan.
+ */
+static int	parse_icmp6(const unsigned char *packet, size_t end,
+		size_t offset, t_nmap_reply *reply)
+{
+	if (end < offset + NMAP_ICMP_HEADER_LEN + NMAP_IPV6_HEADER_LEN)
+		return (0);
+	reply->type = NMAP_REPLY_ICMP6;
+	reply->icmp_type = packet[offset];
+	reply->icmp_code = packet[offset + 1];
+	if (reply->icmp_type < 1 || reply->icmp_type > 4)
+		return (0);
+	return (parse_original_ipv6(packet, end,
+			offset + NMAP_ICMP_HEADER_LEN, reply));
+}
+
+/**
+ * @brief Parse one captured IPv6 packet, including extension-header walking.
+ */
+static int	parse_ipv6_packet(const unsigned char *packet,
+		size_t len, size_t ip_offset, t_nmap_reply *reply)
+{
+	size_t	end;
+	size_t	upper_offset;
+	uint8_t	protocol;
+
+	if (!ipv6_bounds(packet, len, ip_offset, &end))
+		return (0);
+	set_ipv6_addr(&reply->src_addr, packet + ip_offset + 8);
+	set_ipv6_addr(&reply->dst_addr, packet + ip_offset + 24);
+	if (!ipv6_find_upper(packet, end, ip_offset + NMAP_IPV6_HEADER_LEN,
+			packet[ip_offset + 6], &upper_offset, &protocol))
+		return (0);
+	if (protocol == IPPROTO_TCP)
+		return (parse_tcp(packet, end, upper_offset, reply));
+	if (protocol == IPPROTO_UDP)
+		return (parse_udp(packet, end, upper_offset, reply));
+	if (protocol == IPPROTO_ICMPV6)
+		return (parse_icmp6(packet, end, upper_offset, reply));
+	return (0);
+}
+
+/**
+ * @brief Parse one pcap frame into the common t_nmap_reply representation.
+ *
+ * @note Datalink location, IP-version parsing and runtime classification are
+ *       deliberately separate layers. This function only normalizes wire data.
+ */
+int	nmap_parse_pcap_packet(t_nmap_config *config, const unsigned char *packet,
+		size_t len, t_nmap_reply *reply)
+{
+	size_t		ip_offset;
+	sa_family_t	family;
+	uint64_t	prof_start;
+	int			ret;
+
+	if (!config || !packet || !reply)
+		return (0);
+	memset(reply, 0, sizeof(*reply));
+	prof_start = PROF_START();
+	if (!nmap_get_network_offset(config->capture.datalink,
+			packet, len, &ip_offset, &family))
+	{
+		PROF_ADD(NMAP_PROF_LINK_OFFSET, prof_start);
+		return (0);
+	}
+	PROF_ADD(NMAP_PROF_LINK_OFFSET, prof_start);
+	prof_start = PROF_START();
+	if (family == AF_INET)
+	{
+		ret = parse_ipv4_packet(packet, len, ip_offset, reply);
+		PROF_ADD(NMAP_PROF_IPV4_PARSE, prof_start);
+		return (ret);
+	}
+	if (family == AF_INET6)
+	{
+		ret = parse_ipv6_packet(packet, len, ip_offset, reply);
+		PROF_ADD(NMAP_PROF_IPV6_PARSE, prof_start);
+		return (ret);
+	}
+	return (0);
+}
+
+
+================================================================
+FILE: srcs/packet/send.c
+================================================================
+
+#include "packet/packet.h"
+#include "debug/debug.h"
+#include "net/address.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+
+/**
+ * @brief Return whether a scan type is transported over TCP.
+ */
+static int	is_tcp_scan(uint32_t scan_type)
+{
+	return (scan_type == NMAP_SCAN_SYN
+		|| scan_type == NMAP_SCAN_NULL
+		|| scan_type == NMAP_SCAN_FIN
+		|| scan_type == NMAP_SCAN_XMAS
+		|| scan_type == NMAP_SCAN_ACK);
+}
+
+/**
+ * @brief Send one already-built complete IPv4/IPv6 packet.
+ *
+ * @note This is the only packet-layer function that calls sendto(). Builders
+ *       remain testable without a live raw socket.
+ */
+int	nmap_send_raw_packet(t_nmap_config *config,
+		const unsigned char *packet, size_t packet_len)
+{
+	struct sockaddr_storage	dst;
+	socklen_t				dst_len;
+	ssize_t					sent;
+	uint64_t				prof_start;
+
+	if (!config || !packet || packet_len == 0
+		|| config->socket.send_fd < 0
+		|| config->socket.family != config->target.addr.family)
+		return (0);
+	if (!nmap_ip_to_sockaddr(&config->target.addr, 0, &dst, &dst_len))
+		return (0);
+	DEBUG_SEND_PACKET(packet, packet_len);
+	prof_start = PROF_START();
+	sent = sendto(config->socket.send_fd, packet, packet_len, 0,
+			(struct sockaddr *)&dst, dst_len);
+	PROF_ADD(NMAP_PROF_SEND_SENDTO, prof_start);
+	if (sent < 0 || (size_t)sent != packet_len)
+	{
+		fprintf(stderr, "ft_nmap: sendto: %s\n", strerror(errno));
+		return (0);
+	}
+	PROF_COUNT(NMAP_PROF_PROBE_SENT);
+	return (1);
+}
+
+/**
+ * @brief Dispatch one runtime probe to its TCP or UDP packet builder.
+ *
+ * @note IP version is deliberately not selected here. TCP/UDP builders inspect
+ *       the current target family and call the appropriate IP encapsulation.
+ */
+int	nmap_send_probe(t_nmap_config *config, t_probe *probe)
+{
+	if (!config || !probe)
+		return (0);
+	if (is_tcp_scan(probe->scan_type))
+		return (nmap_send_tcp_probe(config, probe));
+	if (probe->scan_type == NMAP_SCAN_UDP)
+		return (nmap_send_udp_probe(config, probe));
+	fprintf(stderr, "ft_nmap: invalid scan type: 0x%x\n", probe->scan_type);
+	return (0);
+}
+
+
+================================================================
+FILE: srcs/packet/tcp.c
+================================================================
+
+#include "packet/packet.h"
+#include "debug/debug.h"
+
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <string.h>
+
+/**
+ * @brief Translate one TCP scan type into the exact outgoing TCP flags byte.
+ */
+static int	tcp_flags_for_scan(uint32_t scan_type, uint8_t *flags)
+{
+	if (scan_type == NMAP_SCAN_SYN)
+		*flags = NMAP_TCP_SYN;
+	else if (scan_type == NMAP_SCAN_NULL)
+		*flags = 0;
+	else if (scan_type == NMAP_SCAN_FIN)
+		*flags = NMAP_TCP_FIN;
+	else if (scan_type == NMAP_SCAN_XMAS)
+		*flags = NMAP_TCP_FIN | NMAP_TCP_PSH | NMAP_TCP_URG;
+	else if (scan_type == NMAP_SCAN_ACK)
+		*flags = NMAP_TCP_ACK;
+	else
+		return (0);
+	return (1);
+}
+
+/**
+ * @brief Fill the protocol-independent TCP header for one logical probe.
+ */
+static int	build_tcp_header(const t_probe *probe, t_nmap_tcp_header *tcp)
+{
+	uint8_t	flags;
+
+	if (!tcp_flags_for_scan(probe->scan_type, &flags))
+		return (0);
+	memset(tcp, 0, sizeof(*tcp));
+	tcp->src_port = htons(probe->src_port);
+	tcp->dst_port = htons(probe->dst_port);
+	tcp->seq = htonl(probe->seq);
+	tcp->data_offset = 5U << 4;
+	tcp->flags = flags;
+	tcp->window = htons(1024);
+	return (1);
+}
+
+/**
+ * @brief Build a complete raw IPv4 + TCP scan packet.
+ */
+static size_t	build_ipv4_tcp_packet(t_nmap_config *config, t_probe *probe,
+		unsigned char *packet)
+{
+	t_nmap_ipv4_header	*ip;
+	t_nmap_tcp_header	*tcp;
+
+	ip = (t_nmap_ipv4_header *)packet;
+	tcp = (t_nmap_tcp_header *)(packet + NMAP_IPV4_HEADER_LEN);
+	if (!build_tcp_header(probe, tcp))
+		return (0);
+	tcp->checksum = nmap_transport_checksum_ipv4(config,
+			IPPROTO_TCP, tcp, sizeof(*tcp));
+	nmap_build_ipv4_header(config, probe, ip,
+		IPPROTO_TCP, sizeof(*tcp));
+	return (NMAP_IPV4_HEADER_LEN + sizeof(*tcp));
+}
+
+/**
+ * @brief Build a complete raw IPv6 + TCP scan packet.
+ */
+static size_t	build_ipv6_tcp_packet(t_nmap_config *config, t_probe *probe,
+		unsigned char *packet)
+{
+	t_nmap_ipv6_header	*ip;
+	t_nmap_tcp_header	*tcp;
+
+	ip = (t_nmap_ipv6_header *)packet;
+	tcp = (t_nmap_tcp_header *)(packet + NMAP_IPV6_HEADER_LEN);
+	if (!build_tcp_header(probe, tcp))
+		return (0);
+	tcp->checksum = nmap_transport_checksum_ipv6(config,
+			IPPROTO_TCP, tcp, sizeof(*tcp));
+	nmap_build_ipv6_header(config, ip, IPPROTO_TCP, sizeof(*tcp));
+	return (NMAP_IPV6_HEADER_LEN + sizeof(*tcp));
+}
+
+/**
+ * @brief Build and send one SYN/NULL/FIN/XMAS/ACK probe.
+ */
+int	nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe)
+{
+	unsigned char	packet[NMAP_IPV6_HEADER_LEN + NMAP_TCP_HEADER_LEN];
+	size_t			packet_len;
+	uint64_t		prof_start;
+
+	if (!config || !probe)
+		return (0);
+	memset(packet, 0, sizeof(packet));
+	prof_start = PROF_START();
+	if (config->target.addr.family == AF_INET)
+		packet_len = build_ipv4_tcp_packet(config, probe, packet);
+	else if (config->target.addr.family == AF_INET6)
+		packet_len = build_ipv6_tcp_packet(config, probe, packet);
+	else
+		packet_len = 0;
+	PROF_ADD(NMAP_PROF_SEND_BUILD, prof_start);
+	if (packet_len == 0)
+	{
+		fprintf(stderr, "ft_nmap: cannot build TCP probe\n");
+		return (0);
+	}
+	return (nmap_send_raw_packet(config, packet, packet_len));
+}
+
+
+================================================================
+FILE: srcs/packet/udp.c
+================================================================
+
+#include "packet/packet.h"
+#include "debug/debug.h"
+
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <string.h>
+
+/**
+ * @brief Fill the generic empty UDP datagram header.
+ *
+ * @note Protocol-specific UDP payload profiles can later be appended without
+ *       changing scheduler/thread ownership.
+ */
+static void	build_udp_header(const t_probe *probe, t_nmap_udp_header *udp)
+{
+	memset(udp, 0, sizeof(*udp));
+	udp->src_port = htons(probe->src_port);
+	udp->dst_port = htons(probe->dst_port);
+	udp->length = htons(sizeof(*udp));
+}
+
+/**
+ * @brief Build a complete raw IPv4 + UDP probe.
+ */
+static size_t	build_ipv4_udp_packet(t_nmap_config *config, t_probe *probe,
+		unsigned char *packet)
+{
+	t_nmap_ipv4_header	*ip;
+	t_nmap_udp_header	*udp;
+
+	ip = (t_nmap_ipv4_header *)packet;
+	udp = (t_nmap_udp_header *)(packet + NMAP_IPV4_HEADER_LEN);
+	build_udp_header(probe, udp);
+	udp->checksum = nmap_transport_checksum_ipv4(config,
+			IPPROTO_UDP, udp, sizeof(*udp));
+	if (udp->checksum == 0)
+		udp->checksum = 0xffff;
+	nmap_build_ipv4_header(config, probe, ip,
+		IPPROTO_UDP, sizeof(*udp));
+	return (NMAP_IPV4_HEADER_LEN + sizeof(*udp));
+}
+
+/**
+ * @brief Build a complete raw IPv6 + UDP probe.
+ *
+ * @note UDP checksums are mandatory for normal IPv6 UDP traffic, so the
+ *       pseudo-header checksum is always generated here.
+ */
+static size_t	build_ipv6_udp_packet(t_nmap_config *config, t_probe *probe,
+		unsigned char *packet)
+{
+	t_nmap_ipv6_header	*ip;
+	t_nmap_udp_header	*udp;
+
+	ip = (t_nmap_ipv6_header *)packet;
+	udp = (t_nmap_udp_header *)(packet + NMAP_IPV6_HEADER_LEN);
+	build_udp_header(probe, udp);
+	udp->checksum = nmap_transport_checksum_ipv6(config,
+			IPPROTO_UDP, udp, sizeof(*udp));
+	if (udp->checksum == 0)
+		udp->checksum = 0xffff;
+	nmap_build_ipv6_header(config, ip, IPPROTO_UDP, sizeof(*udp));
+	return (NMAP_IPV6_HEADER_LEN + sizeof(*udp));
+}
+
+/**
+ * @brief Build and send one generic UDP probe.
+ */
+int	nmap_send_udp_probe(t_nmap_config *config, t_probe *probe)
+{
+	unsigned char	packet[NMAP_IPV6_HEADER_LEN + NMAP_UDP_HEADER_LEN];
+	size_t			packet_len;
+	uint64_t		prof_start;
+
+	if (!config || !probe)
+		return (0);
+	memset(packet, 0, sizeof(packet));
+	prof_start = PROF_START();
+	if (config->target.addr.family == AF_INET)
+		packet_len = build_ipv4_udp_packet(config, probe, packet);
+	else if (config->target.addr.family == AF_INET6)
+		packet_len = build_ipv6_udp_packet(config, probe, packet);
+	else
+		packet_len = 0;
+	PROF_ADD(NMAP_PROF_SEND_BUILD, prof_start);
+	if (packet_len == 0)
+	{
+		fprintf(stderr, "ft_nmap: cannot build UDP probe\n");
+		return (0);
+	}
+	return (nmap_send_raw_packet(config, packet, packet_len));
+}
+
+
+================================================================
+FILE: srcs/packet/wire.h
+================================================================
+
+#ifndef NMAP_PACKET_WIRE_H
+# define NMAP_PACKET_WIRE_H
+
+# include <netinet/in.h>
+# include <stdint.h>
+
+# define NMAP_IPV4_HEADER_LEN 20
+# define NMAP_IPV6_HEADER_LEN 40
+# define NMAP_TCP_HEADER_LEN 20
+# define NMAP_UDP_HEADER_LEN 8
+
+# define NMAP_TCP_FIN 0x01
+# define NMAP_TCP_SYN 0x02
+# define NMAP_TCP_RST 0x04
+# define NMAP_TCP_PSH 0x08
+# define NMAP_TCP_ACK 0x10
+# define NMAP_TCP_URG 0x20
+
+/**
+ * @brief Minimal IPv4 header written directly to the raw send buffer.
+ *
+ * @note Wire structs are packed and compile-time size checked. Runtime/business
+ *       structures must not depend on this representation.
+ */
+typedef struct __attribute__((packed)) s_nmap_ipv4_header
+{
+	uint8_t			version_ihl;
+	uint8_t			tos;
+	uint16_t		total_length;
+	uint16_t		identification;
+	uint16_t		fragment_offset;
+	uint8_t			ttl;
+	uint8_t			protocol;
+	uint16_t		checksum;
+	struct in_addr	src;
+	struct in_addr	dst;
+}	t_nmap_ipv4_header;
+
+/**
+ * @brief Fixed 40-byte IPv6 base header.
+ */
+typedef struct __attribute__((packed)) s_nmap_ipv6_header
+{
+	uint32_t		version_tc_flow;
+	uint16_t		payload_length;
+	uint8_t			next_header;
+	uint8_t			hop_limit;
+	struct in6_addr	src;
+	struct in6_addr	dst;
+}	t_nmap_ipv6_header;
+
+/**
+ * @brief Minimal TCP header used by all TCP scan types.
+ */
+typedef struct __attribute__((packed)) s_nmap_tcp_header
+{
+	uint16_t	src_port;
+	uint16_t	dst_port;
+	uint32_t	seq;
+	uint32_t	ack;
+	uint8_t		data_offset;
+	uint8_t		flags;
+	uint16_t	window;
+	uint16_t	checksum;
+	uint16_t	urgent;
+}	t_nmap_tcp_header;
+
+/**
+ * @brief UDP header used by the generic empty UDP probe.
+ */
+typedef struct __attribute__((packed)) s_nmap_udp_header
+{
+	uint16_t	src_port;
+	uint16_t	dst_port;
+	uint16_t	length;
+	uint16_t	checksum;
+}	t_nmap_udp_header;
+
+_Static_assert(sizeof(t_nmap_ipv4_header) == NMAP_IPV4_HEADER_LEN,
+	"invalid IPv4 wire header size");
+_Static_assert(sizeof(t_nmap_ipv6_header) == NMAP_IPV6_HEADER_LEN,
+	"invalid IPv6 wire header size");
+_Static_assert(sizeof(t_nmap_tcp_header) == NMAP_TCP_HEADER_LEN,
+	"invalid TCP wire header size");
+_Static_assert(sizeof(t_nmap_udp_header) == NMAP_UDP_HEADER_LEN,
+	"invalid UDP wire header size");
+
+#endif
+
+
+================================================================
+FILE: srcs/parsing/pars_bool.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_bool.c                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/22 13:49:14 by ertrigna          #+#    #+#             */
+/*   Updated: 2026/08/22 13:51:28 by ertrigna         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_bool_flag(t_nmap_config *config, const char *flag)
+{
+	if (!config || !flag)
+		return (0);
+	if (nmap_streq(flag, "--no-dns"))
+		config->cli.no_dns = 1;
+	else if (nmap_streq(flag, "--open"))
+		config->cli.open_only = 1;
+	else if (nmap_streq(flag, "--reason"))
+		config->cli.show_reason = 1;
+	else if (nmap_streq(flag, "--version"))
+		config->cli.version_detection = 1;
+	else if (nmap_streq(flag, "--os"))
+		config->cli.os_detection = 1;
+	else
+		return (0);
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_file.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_file.c                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/03 12:02:13 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 12:05:06 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_file(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --file\n");
+		return (0);
+	}
+	if (config->cli.file_specified)
+	{
+		fprintf(stderr, "ft_nmap: --file specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (argv[*i][0] == '\0')
+	{
+		fprintf(stderr, "ft_nmap: empty file path\n");
+		return (0);
+	}
+	config->cli.target_file = argv[*i];
+	config->cli.file_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_flags.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_flags.c                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ertrigna <ertrigna@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/30 08:32:39 by eric              #+#    #+#             */
+/*   Updated: 2026/08/22 13:53:52 by ertrigna         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_flag(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	if (nmap_streq(argv[*i], "--help"))
+	{
+		config->cli.help = 1;
+		return (1);
+	}
+	if (nmap_streq(argv[*i], "--ip"))
+		return (parse_ip(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--speedup"))
+		return (parse_speedup(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--timeout"))
+		return (parse_timeout(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--port") || nmap_streq(argv[*i], "--ports"))
+		return (parse_port(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--file"))
+		return (parse_file(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--scan"))
+		return (parse_scan(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--probes-per-thread"))
+		return (parse_probes_per_thread(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--retries"))
+		return (parse_retries(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--no-dns") || nmap_streq(argv[*i], "--open") || nmap_streq(argv[*i], "--reason") || nmap_streq(argv[*i], "--version") || nmap_streq(argv[*i], "--os"))
+		return (parse_bool_flag(config, argv[*i]));
+	fprintf(stderr, "ft_nmap: unknown flag: %s\n", argv[*i]);
+	return (0);
+}
+
+
+================================================================
+FILE: srcs/parsing/parsing.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   parsing.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/30 08:31:43 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 11:39:38 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+static int	check_required_args(t_nmap_config *config)
+{
+	if (config->cli.help)
+		return (1);
+	if (config->cli.ip_specified && config->cli.file_specified)
+	{
+		fprintf(stderr,
+			"ft_nmap: --ip and --file are mutually exclusive\n");
+		return (0);
+	}
+	if (!config->cli.ip_specified && !config->cli.file_specified)
+	{
+		fprintf(stderr,
+			"ft_nmap: one of --ip or --file is required\n");
+		return (0);
+	}
+	return (1);
+}
+
+int	nmap_parse_cli(t_nmap_config *config, int argc, char **argv, int *exit_status)
+{
+	int i;
+
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+
+	i = 1;
+	while (i < argc)
+	{
+		if (!parse_flag(config, argc, argv, &i))
+		{
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
+		i++;
+	}
+	if (!check_required_args(config))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/parsing_utils.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   parsing_utils.c                                    :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/30 08:32:39 by eric              #+#    #+#             */
+/*   Updated: 2026/06/30 08:43:30 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+int	nmap_streq(const char *a, const char *b)
+{
+	if (!a || !b)
+		return (0);
+	return (strcmp(a, b) == 0);
+}
+
+int	nmap_is_number(const char *s)
+{
+	int	i;
+
+	if (!s || !s[0])
+		return (0);
+	i = 0;
+	while (s[i])
+	{
+		if (!isdigit((unsigned char)s[i]))
+			return (0);
+		i++;
+	}
+	return (1);
+}
+
+int	nmap_parse_int(const char *s, int *out)
+{
+	long	value;
+	char	*end;
+
+	if (!s || !out)
+		return (0);
+	value = strtol(s, &end, 10);
+	if (*end != '\0')
+		return (0);
+	if (value < 0 || value > 65535)
+		return (0);
+	*out = (int)value;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_ip.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_ip.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/27 11:16:00 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 11:40:44 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_ip(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --ip\n");
+		return (0);
+	}
+	if (config->cli.target)
+	{
+		fprintf(stderr, "ft_nmap: --ip specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (argv[*i][0] == '\0')
+	{
+		fprintf(stderr, "ft_nmap: empty target\n");
+		return (0);
+	}
+	config->cli.target = argv[*i];
+	config->cli.ip_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_port.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_port.c                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/30 08:42:33 by eric              #+#    #+#             */
+/*   Updated: 2026/08/20 14:35:46 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+static int	port_exists(t_nmap_config *config, uint16_t port)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->scan.port_count)
+	{
+		if (config->scan.ports[i] == port)
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+static int	add_port(t_nmap_config *config, int port)
+{
+	if (port < 1 || port > 65535)
+		return (0);
+	if (port_exists(config, (uint16_t)port))
+		return (1);
+	if (config->scan.port_count >= NMAP_MAX_PORTS)
+		return (0);
+	config->scan.ports[config->scan.port_count] = (uint16_t)port;
+	config->scan.port_count++;
+	return (1);
+}
+
+static int	parse_single_port(t_nmap_config *config, const char *token)
+{
+	int	port;
+
+	if (!nmap_parse_int(token, &port))
+		return (0);
+	return (add_port(config, port));
+}
+
+static int	parse_port_range(t_nmap_config *config, const char *token)
+{
+	char	*dash;
+	int		start;
+	int		end;
+	int		port;
+
+	dash = strchr(token, '-');
+	if (!dash || dash == token || dash[1] == '\0')
+		return (0);
+	*dash = '\0';
+	if (!nmap_parse_int(token, &start) || !nmap_parse_int(dash + 1, &end))
+		return (0);
+	if (start > end)
+		return (0);
+	port = start;
+	while (port <= end)
+	{
+		if (!add_port(config, port))
+			return (0);
+		port++;
+	}
+	return (1);
+}
+
+static int	parse_port_token(t_nmap_config *config, char *token)
+{
+	if (!token || token[0] == '\0')
+		return (0);
+	if (strchr(token, '-'))
+		return (parse_port_range(config, token));
+	return (parse_single_port(config, token));
+}
+
+int	nmap_parse_ports(t_nmap_config *config, const char *arg)
+{
+	char	*copy;
+	char	*token;
+	char	*saveptr;
+
+	if (!config || !arg || arg[0] == '\0')
+		return (0);
+	config->scan.port_count = 0;
+	copy = strdup(arg);
+	if (!copy)
+		return (0);
+	token = strtok_r(copy, ",", &saveptr);
+	while (token)
+	{
+		if (!parse_port_token(config, token))
+		{
+			free(copy);
+			return (0);
+		}
+		token = strtok_r(NULL, ",", &saveptr);
+	}
+	free(copy);
+	return (config->scan.port_count > 0);
+}
+
+int	parse_port(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --ports\n");
+		return (0);
+	}
+	if (config->cli.ports_arg)
+	{
+		fprintf(stderr, "ft_nmap: --ports specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_ports(config, argv[*i]))
+	{
+		fprintf(stderr, "ft_nmap: invalid ports: %s\n", argv[*i]);
+		return (0);
+	}
+	config->cli.ports_arg = argv[*i];
+	config->cli.ports_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_probes.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_probes.c                                      :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/20 14:20:07 by eric              #+#    #+#             */
+/*   Updated: 2026/08/20 14:45:02 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_probes_per_thread(t_nmap_config *config,
+		int argc, char **argv, int *i)
+{
+	int	value;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr,
+			"ft_nmap: missing argument for --probes-per-thread\n");
+		return (0);
+	}
+	if (config->cli.probes_per_thread_specified)
+	{
+		fprintf(stderr,
+			"ft_nmap: --probes-per-thread specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_int(argv[*i], &value) || value <= 0)
+	{
+		fprintf(stderr,
+			"ft_nmap: invalid probes-per-thread value: %s\n",
+			argv[*i]);
+		return (0);
+	}
+	config->cli.probes_per_thread = value;
+	config->cli.probes_per_thread_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_retries.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_retries.c                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/20 14:44:58 by eric              #+#    #+#             */
+/*   Updated: 2026/08/20 14:48:02 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_retries(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	int	retries;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --retries\n");
+		return (0);
+	}
+	if (config->cli.retries_specified)
+	{
+		fprintf(stderr, "ft_nmap: --retries specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_int(argv[*i], &retries))
+	{
+		fprintf(stderr, "ft_nmap: invalid retries value: %s\n", argv[*i]);
+		return (0);
+	}
+	config->cli.retries = retries;
+	config->cli.retries_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_scan.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_scan.c                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/03 16:02:14 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 16:04:23 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+
+#include "ft_nmap.h"
+#include <stdlib.h>
+
+int	scan_name_to_mask(const char *name, uint32_t *mask)
+{
+	if (!name || !mask)
+		return (0);
+	if (nmap_streq(name, "SYN"))
+		*mask = NMAP_SCAN_SYN;
+	else if (nmap_streq(name, "NULL"))
+		*mask = NMAP_SCAN_NULL;
+	else if (nmap_streq(name, "FIN"))
+		*mask = NMAP_SCAN_FIN;
+	else if (nmap_streq(name, "XMAS"))
+		*mask = NMAP_SCAN_XMAS;
+	else if (nmap_streq(name, "ACK"))
+		*mask = NMAP_SCAN_ACK;
+	else if (nmap_streq(name, "UDP"))
+		*mask = NMAP_SCAN_UDP;
+	else
+		return (0);
+	return (1);
+}
+
+static int	scan_list_is_valid(const char *arg)
+{
+	size_t	i;
+
+	if (!arg || arg[0] == '\0')
+		return (0);
+	if (arg[0] == ',' || arg[strlen(arg) - 1] == ',')
+		return (0);
+	i = 0;
+	while (arg[i])
+	{
+		if (arg[i] == ',' && arg[i + 1] == ',')
+			return (0);
+		i++;
+	}
+	return (1);
+}
+
+static int	parse_scan_list(const char *arg, uint32_t *scan_mask)
+{
+	char		*copy;
+	char		*token;
+	char		*saveptr;
+	uint32_t	mask;
+
+	if (!scan_list_is_valid(arg))
+		return (0);
+	copy = strdup(arg);
+	if (!copy)
+		return (0);
+	*scan_mask = 0;
+	token = strtok_r(copy, ",", &saveptr);
+	while (token)
+	{
+		mask = 0;
+		if (!scan_name_to_mask(token, &mask))
+		{
+			free(copy);
+			return (0);
+		}
+		*scan_mask |= mask;
+		token = strtok_r(NULL, ",", &saveptr);
+	}
+	free(copy);
+	return (*scan_mask != 0);
+}
+
+int	parse_scan(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	uint32_t	mask;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --scan\n");
+		return (0);
+	}
+	if (config->cli.scan_specified)
+	{
+		fprintf(stderr, "ft_nmap: --scan specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!parse_scan_list(argv[*i], &mask))
+	{
+		fprintf(stderr, "ft_nmap: invalid scan type list: %s\n",
+			argv[*i]);
+		return (0);
+	}
+	config->cli.scan_arg = argv[*i];
+	config->cli.scan_mask = mask;
+	config->cli.scan_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/parsing/pars_speedup.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_speedup.c                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/06/30 08:31:43 by eric              #+#    #+#             */
+/*   Updated: 2026/08/03 15:58:20 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_speedup(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	int	speedup;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --speedup\n");
+		return (0);
+	}
+	if (config->cli.speedup_specified)
+	{
+		fprintf(stderr, "ft_nmap: --speedup specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_int(argv[*i], &speedup)
+		|| speedup < 0
+		|| speedup > 250)
+	{
+		fprintf(stderr, "ft_nmap: invalid speedup value: %s\n",
+			argv[*i]);
+		return (0);
+	}
+	config->cli.speedup = speedup;
+	config->cli.speedup_specified = 1;
+	return (1);
+}
+
+================================================================
+FILE: srcs/parsing/pars_timeout.c
+================================================================
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   pars_timeout.c                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: eric <eric@student.42.fr>                  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/08/20 14:04:48 by eric              #+#    #+#             */
+/*   Updated: 2026/08/20 14:05:02 by eric             ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "ft_nmap.h"
+
+int	parse_timeout(t_nmap_config *config, int argc, char **argv, int *i)
+{
+	int	timeout;
+
+	if (!config || !argv || !i)
+		return (0);
+	if (*i + 1 >= argc)
+	{
+		fprintf(stderr, "ft_nmap: missing argument for --timeout\n");
+		return (0);
+	}
+	if (config->cli.timeout_specified)
+	{
+		fprintf(stderr, "ft_nmap: --timeout specified more than once\n");
+		return (0);
+	}
+	(*i)++;
+	if (!nmap_parse_int(argv[*i], &timeout) || timeout <= 0)
+	{
+		fprintf(stderr, "ft_nmap: invalid timeout value: %s\n",
+			argv[*i]);
+		return (0);
+	}
+	config->cli.timeout_ms = timeout;
+	config->cli.timeout_specified = 1;
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/run.c
+================================================================
+
+#include "ft_nmap.h"
+#include "debug/debug.h"
+
+/**
+ * @brief Execute the main event loop for the current resolved target.
+ *
+ * @note The main thread owns receive/match/classify/expire/schedule/wait.
+ *       Sender workers only execute jobs selected by the scheduler.
+ */
+static int	run_scan_loop(t_nmap_config *config, int *exit_status)
+{
+	while (!nmap_signal_stop_requested()
+		&& !nmap_runtime_is_finished(config))
+	{
+		/* Consume replies before expiration to favor packets arriving on time. */
+		if (!nmap_runtime_drain_replies(config, exit_status))
+			return (0);
+		nmap_runtime_expire_probes(config);
+		if (!nmap_runtime_schedule_ready(config, exit_status))
+			return (0);
+		if (nmap_sender_pool_has_error(config))
+		{
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
+		if (!nmap_runtime_wait(config, exit_status))
+			return (0);
+	}
+	if (nmap_signal_stop_requested())
+	{
+		if (exit_status)
+			*exit_status = 130;
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Prepare, scan, report and clean one target.
+ */
+static int	run_target(t_nmap_config *config, const char *target,
+		int *exit_status)
+{
+	int	success;
+
+	success = 0;
+	if (!nmap_prepare_target(config, target, exit_status)
+		|| !nmap_prepare_route(config, exit_status)
+		|| !nmap_prepare_send_socket(config, exit_status)
+		|| !nmap_prepare_pcap(config, exit_status)
+		|| !nmap_prepare_runtime(config, exit_status)
+		|| !nmap_prepare_sender_pool(config, exit_status))
+		goto cleanup;
+	DEBUG_DEV_CONFIG(config);
+	DEBUG_SOCKET(config);
+	DEBUG_PCAP(config);
+	DEBUG_RUNTIME(config);
+	if (!run_scan_loop(config, exit_status))
+		goto cleanup;
+	/* Workers must be joined before report/cleanup can inspect/free probes. */
+	nmap_stop_sender_pool(config);
+	nmap_print_report(config);
+	success = 1;
+cleanup:
+	nmap_cleanup_current_target(config);
+	return (success);
+}
+
+/**
+ * @brief Scan every prepared target and continue after target-local failures.
+ *
+ * @note This preserves the useful multi-target behavior from the parsing
+ *       branch: one bad host does not prevent later file entries from running.
+ */
+int	nmap_run(t_nmap_config *config, int *exit_status)
+{
+	size_t	i;
+	int		had_error;
+
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	i = 0;
+	had_error = 0;
+	while (i < config->targets.count)
+	{
+		if (nmap_signal_stop_requested())
+		{
+			if (exit_status)
+				*exit_status = 130;
+			return (0);
+		}
+		if (!run_target(config, config->targets.items[i], exit_status))
+		{
+			if (exit_status && *exit_status == 130)
+				return (0);
+			had_error = 1;
+			if (exit_status)
+				*exit_status = 0;
+		}
+		i++;
+	}
+	if (had_error && exit_status)
+		*exit_status = 1;
+	return (!had_error);
+}
+
+
+================================================================
+FILE: srcs/runtime/classify.c
+================================================================
+
+#include "runtime/runtime_internal.h"
+#include "net/address.h"
+#include "packet/wire.h"
+
+/**
+ * @brief Return whether an ICMPv4 Destination Unreachable code participates in
+ *        the scan decision trees.
+ */
+static int	icmp4_unreachable_code_is_known(uint8_t code)
+{
+	return (code == 0 || code == 1 || code == 2 || code == 3
+		|| code == 9 || code == 10 || code == 13);
+}
+
+/**
+ * @brief Classify a matched direct TCP response according to scan type.
+ */
+static t_scan_result	classify_tcp_packet(const t_probe *probe,
+		const t_nmap_reply *reply)
+{
+	uint8_t	flags;
+
+	flags = reply->tcp_flags;
+	if (probe->scan_type == NMAP_SCAN_SYN)
+	{
+		if ((flags & NMAP_TCP_SYN) && (flags & NMAP_TCP_ACK))
+			return (SCAN_RESULT_OPEN);
+		if (flags & NMAP_TCP_RST)
+			return (SCAN_RESULT_CLOSED);
+		/* Split-handshake behavior: a matching SYN is evidence of OPEN. */
+		if (flags & NMAP_TCP_SYN)
+			return (SCAN_RESULT_OPEN);
+	}
+	else if (probe->scan_type == NMAP_SCAN_ACK)
+	{
+		if (flags & NMAP_TCP_RST)
+			return (SCAN_RESULT_UNFILTERED);
+	}
+	else if (probe->scan_type == NMAP_SCAN_NULL
+		|| probe->scan_type == NMAP_SCAN_FIN
+		|| probe->scan_type == NMAP_SCAN_XMAS)
+	{
+		if (flags & NMAP_TCP_RST)
+			return (SCAN_RESULT_CLOSED);
+	}
+	return (SCAN_RESULT_UNKNOWN);
+}
+
+/**
+ * @brief Classify one matched ICMPv4 error.
+ *
+ * @note Unknown type/code pairs return UNKNOWN: they do not finalize the probe,
+ *       so the runtime continues waiting/retransmitting according to policy.
+ */
+static t_scan_result	classify_icmp4(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
+{
+	if (reply->icmp_type == 11)
+		return (SCAN_RESULT_FILTERED);
+	if (reply->icmp_type != 3
+		|| !icmp4_unreachable_code_is_known(reply->icmp_code))
+		return (SCAN_RESULT_UNKNOWN);
+	if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 3)
+	{
+		if (nmap_ip_equal(&reply->src_addr, &config->target.addr))
+			return (SCAN_RESULT_CLOSED);
+		return (SCAN_RESULT_FILTERED);
+	}
+	return (SCAN_RESULT_FILTERED);
+}
+
+/**
+ * @brief Classify one matched ICMPv6 error.
+ *
+ * Destination Unreachable (type 1) codes 0..6 are filtering/unreachable
+ * evidence, except UDP port-unreachable 1/4 from the target itself -> CLOSED.
+ * Parameter Problem 4/0 is treated as OPEN indication; 4/1 as FILTERED.
+ */
+static t_scan_result	classify_icmp6(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
+{
+	if (reply->icmp_type == 1 && reply->icmp_code <= 6)
+	{
+		if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 4
+			&& nmap_ip_equal(&reply->src_addr, &config->target.addr))
+			return (SCAN_RESULT_CLOSED);
+		return (SCAN_RESULT_FILTERED);
+	}
+	if (reply->icmp_type == 4 && reply->icmp_code == 0)
+		return (SCAN_RESULT_OPEN);
+	if (reply->icmp_type == 4 && reply->icmp_code == 1)
+		return (SCAN_RESULT_FILTERED);
+	return (SCAN_RESULT_UNKNOWN);
+}
+
+/**
+ * @brief Apply the per-scan response decision tree to one already-matched reply.
+ */
+t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
+{
+	if (!config || !probe || !reply)
+		return (SCAN_RESULT_UNKNOWN);
+	if (reply->type == NMAP_REPLY_TCP && probe->scan_type != NMAP_SCAN_UDP)
+		return (classify_tcp_packet(probe, reply));
+	if (reply->type == NMAP_REPLY_UDP && probe->scan_type == NMAP_SCAN_UDP)
+		return (SCAN_RESULT_OPEN);
+	if (reply->type == NMAP_REPLY_ICMP4)
+		return (classify_icmp4(config, probe, reply));
+	if (reply->type == NMAP_REPLY_ICMP6)
+		return (classify_icmp6(config, probe, reply));
+	return (SCAN_RESULT_UNKNOWN);
+}
+
+/**
+ * @brief Classify NO MATCHING RESPONSE AFTER RETRANSMISSION POLICY.
+ */
+t_scan_result	nmap_classify_no_response(uint32_t scan_type)
+{
+	if (scan_type == NMAP_SCAN_SYN || scan_type == NMAP_SCAN_ACK)
+		return (SCAN_RESULT_FILTERED);
+	if (scan_type == NMAP_SCAN_NULL || scan_type == NMAP_SCAN_FIN
+		|| scan_type == NMAP_SCAN_XMAS || scan_type == NMAP_SCAN_UDP)
+		return (SCAN_RESULT_OPEN_FILTERED);
+	return (SCAN_RESULT_UNKNOWN);
+}
+
+
+================================================================
+FILE: srcs/runtime/common.c
+================================================================
+
+#include "runtime/runtime_internal.h"
+#include "debug/debug.h"
+
+#include <sys/time.h>
+
+/** Return current wall-clock time in milliseconds. */
+uint64_t	nmap_now_ms(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return ((uint64_t)tv.tv_sec * 1000ULL
+		+ (uint64_t)tv.tv_usec / 1000ULL);
+}
+
+/** Check whether one probe belongs to the UDP scan family. */
+int	nmap_probe_is_udp(const t_probe *probe)
+{
+	return (probe && probe->scan_type == NMAP_SCAN_UDP);
+}
+
+/**
+ * @brief Check whether an incoming reply may still complete this probe.
+ *
+ * @note PENDING and QUEUED remain matchable after at least one send so a late
+ *       reply from an earlier attempt can still complete the logical probe.
+ */
+int	nmap_probe_can_match(const t_probe *probe)
+{
+	return (probe && probe->state != PROBE_DONE
+		&& probe->attempts_sent > 0);
+}
+
+/**
+ * @brief Atomically move one logical probe to DONE and maintain counters.
+ *
+ * @note The operation is idempotent for late duplicate replies.
+ */
+void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
+		t_scan_result result, t_scan_reason reason, const char *debug_reason)
+{
+	t_probe_state	old_state;
+
+	if (!config || !probe)
+		return ;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->state == PROBE_DONE)
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return ;
+	}
+	old_state = probe->state;
+	if (old_state == PROBE_QUEUED)
+	{
+		if (config->runtime.queued_count > 0)
+			config->runtime.queued_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_queued_count > 0)
+			config->runtime.udp_queued_count--;
+	}
+	else if (old_state == PROBE_OUTSTANDING)
+	{
+		if (config->runtime.outstanding_count > 0)
+			config->runtime.outstanding_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_outstanding_count > 0)
+			config->runtime.udp_outstanding_count--;
+	}
+	probe->state = PROBE_DONE;
+	probe->result = result;
+	probe->reason = reason;
+	config->runtime.done_count++;
+	pthread_mutex_unlock(&config->runtime.lock);
+	DEBUG_PROBE_RESULT(probe, debug_reason);
+}
+
+
+================================================================
+FILE: srcs/runtime/expire.c
+================================================================
+
+#include "config.h"
+#include "debug/debug.h"
+#include "runtime/runtime_internal.h"
+
+/** Return the timeout policy applying to one probe family. */
+static int	probe_timeout_ms(const t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (nmap_probe_is_udp(probe))
+		return (config->scan.udp_timeout_ms);
+	return (config->scan.tcp_timeout_ms);
+}
+
+/** Check whether one OUTSTANDING probe reached its current deadline. */
+static int	probe_expired(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	int			timeout_ms;
+	uint64_t	elapsed;
+
+	if (probe->state != PROBE_OUTSTANDING)
+		return (0);
+	timeout_ms = probe_timeout_ms(config, probe);
+	if (timeout_ms <= 0)
+		return (1);
+	elapsed = now_ms - probe->sent_at_ms;
+	return (elapsed >= (uint64_t)timeout_ms);
+}
+
+/** Remove one probe from outstanding accounting while runtime.lock is held. */
+static void	remove_outstanding_count(t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (config->runtime.outstanding_count > 0)
+		config->runtime.outstanding_count--;
+	if (nmap_probe_is_udp(probe)
+		&& config->runtime.udp_outstanding_count > 0)
+		config->runtime.udp_outstanding_count--;
+}
+
+/**
+ * @brief Apply retransmission policy or final no-response classification.
+ *
+ * @note retries counts additional sends. With retries=1, attempts_sent=1 times
+ *       out back to PENDING; attempts_sent=2 times out to the final result.
+ */
+static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	t_scan_result	result;
+
+	remove_outstanding_count(config, probe);
+	DEBUG_PROBE_TIMEOUT(probe);
+	PROF_COUNT(NMAP_PROF_PACKET_TIMEOUT);
+	if (probe->attempts_sent <= (uint8_t)config->scan.retries)
+	{
+		probe->state = PROBE_PENDING;
+		probe->sent_at_ms = 0;
+		PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
+		return ;
+	}
+	result = nmap_classify_no_response(probe->scan_type);
+	probe->state = PROBE_DONE;
+	probe->result = result;
+	probe->reason = SCAN_REASON_NO_RESPONSE;
+	config->runtime.done_count++;
+	DEBUG_PROBE_RESULT(probe,
+		"no matching response after retransmission policy");
+}
+
+/**
+ * @brief Expire every probe whose current attempt reached its deadline.
+ */
+void	nmap_runtime_expire_probes(t_nmap_config *config)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	uint64_t	prof_start;
+
+	if (!config || !config->runtime.probes)
+		return ;
+	prof_start = PROF_START();
+	now_ms = nmap_now_ms();
+	pthread_mutex_lock(&config->runtime.lock);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (probe_expired(config, &config->runtime.probes[i], now_ms))
+			expire_probe_locked(config, &config->runtime.probes[i]);
+		i++;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+	PROF_ADD(NMAP_PROF_EXPIRE, prof_start);
+}
+
+
+================================================================
+FILE: srcs/runtime/init.c
+================================================================
+
+#include "config.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <sys/random.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#define NMAP_SOURCE_PORT_MIN 32768U
+
+/** Count concrete scan types enabled in one scan mask. */
+static size_t	count_scan_types(uint32_t mask)
+{
+	size_t	count;
+
+	count = 0;
+	if (mask & NMAP_SCAN_SYN)
+		count++;
+	if (mask & NMAP_SCAN_NULL)
+		count++;
+	if (mask & NMAP_SCAN_FIN)
+		count++;
+	if (mask & NMAP_SCAN_XMAS)
+		count++;
+	if (mask & NMAP_SCAN_ACK)
+		count++;
+	if (mask & NMAP_SCAN_UDP)
+		count++;
+	return (count);
+}
+
+/** Return the Nth concrete scan type in stable report order. */
+static uint32_t	scan_type_at(uint32_t mask, size_t index)
+{
+	size_t	current;
+
+	current = 0;
+	if ((mask & NMAP_SCAN_SYN) && current++ == index)
+		return (NMAP_SCAN_SYN);
+	if ((mask & NMAP_SCAN_NULL) && current++ == index)
+		return (NMAP_SCAN_NULL);
+	if ((mask & NMAP_SCAN_FIN) && current++ == index)
+		return (NMAP_SCAN_FIN);
+	if ((mask & NMAP_SCAN_XMAS) && current++ == index)
+		return (NMAP_SCAN_XMAS);
+	if ((mask & NMAP_SCAN_ACK) && current++ == index)
+		return (NMAP_SCAN_ACK);
+	if ((mask & NMAP_SCAN_UDP) && current++ == index)
+		return (NMAP_SCAN_UDP);
+	return (0);
+}
+
+/**
+ * @brief Fallback entropy when getrandom() cannot immediately provide bytes.
+ */
+static uint32_t	fallback_random(void)
+{
+	struct timeval	tv;
+	uint32_t		value;
+
+	gettimeofday(&tv, NULL);
+	value = (uint32_t)tv.tv_sec ^ (uint32_t)tv.tv_usec;
+	value ^= (uint32_t)getpid() * 0x9e3779b9U;
+	value ^= value << 13;
+	value ^= value >> 17;
+	value ^= value << 5;
+	return (value);
+}
+
+/** Return one best-effort random uint32_t for probe identity generation. */
+static uint32_t	random_u32(void)
+{
+	uint32_t	value;
+	ssize_t		ret;
+
+	ret = getrandom(&value, sizeof(value), GRND_NONBLOCK);
+	if (ret == (ssize_t)sizeof(value))
+		return (value);
+	return (fallback_random());
+}
+
+/**
+ * @brief Choose one contiguous ephemeral source-port block for all probes.
+ *
+ * @note Source ports are unique inside the runtime and randomized between
+ *       processes. This preserves O(1) lookup while reducing accidental cross
+ *       matching when multiple scanner instances run simultaneously.
+ */
+static int	choose_source_port_base(t_nmap_runtime *runtime)
+{
+	uint32_t	max_base;
+	uint32_t	span;
+
+	if (runtime->probe_count == 0
+		|| runtime->probe_count > 65535U - NMAP_SOURCE_PORT_MIN + 1U)
+		return (0);
+	max_base = 65535U - (uint32_t)runtime->probe_count + 1U;
+	span = max_base - NMAP_SOURCE_PORT_MIN + 1U;
+	runtime->source_port_base = (uint16_t)(NMAP_SOURCE_PORT_MIN
+		+ random_u32() % span);
+	return (1);
+}
+
+/** Insert a probe in the O(1) source-port candidate index. */
+static int	index_probe(t_nmap_runtime *runtime, t_probe *probe)
+{
+	if (runtime->probe_by_src_port[probe->src_port])
+		return (0);
+	runtime->probe_by_src_port[probe->src_port] = probe;
+	return (1);
+}
+
+/** Initialize one logical probe from the immutable scan plan. */
+static int	init_probe(t_nmap_runtime *runtime, t_probe *probe,
+		uint16_t dst_port, uint32_t scan_type, size_t index,
+		uint32_t seq_seed)
+{
+	uint32_t	src_port;
+
+	src_port = (uint32_t)runtime->source_port_base + (uint32_t)index;
+	if (src_port > 65535U)
+		return (0);
+	memset(probe, 0, sizeof(*probe));
+	probe->dst_port = dst_port;
+	probe->src_port = (uint16_t)src_port;
+	probe->seq = seq_seed + (uint32_t)index * 0x9e3779b9U;
+	probe->scan_type = scan_type;
+	probe->state = PROBE_PENDING;
+	probe->result = SCAN_RESULT_UNKNOWN;
+	return (index_probe(runtime, probe));
+}
+
+/** Fill the complete [port x scan-type] logical probe table. */
+static int	fill_probes(t_nmap_config *config, size_t scan_count)
+{
+	size_t		port_index;
+	size_t		scan_index;
+	size_t		probe_index;
+	uint32_t	scan_type;
+	uint32_t	seq_seed;
+
+	seq_seed = random_u32();
+	probe_index = 0;
+	port_index = 0;
+	while (port_index < config->scan.port_count)
+	{
+		scan_index = 0;
+		while (scan_index < scan_count)
+		{
+			scan_type = scan_type_at(config->scan.scan_mask, scan_index);
+			if (!scan_type || !init_probe(&config->runtime,
+					&config->runtime.probes[probe_index],
+					config->scan.ports[port_index], scan_type,
+					probe_index, seq_seed))
+				return (0);
+			probe_index++;
+			scan_index++;
+		}
+		port_index++;
+	}
+	return (1);
+}
+
+/** Release a partially initialized runtime after setup failure. */
+static void	cleanup_partial_runtime(t_nmap_runtime *runtime)
+{
+	free(runtime->probe_by_src_port);
+	free(runtime->probes);
+	if (runtime->lock_initialized)
+		pthread_mutex_destroy(&runtime->lock);
+	memset(runtime, 0, sizeof(*runtime));
+}
+
+/**
+ * @brief Allocate and initialize the complete runtime for the current target.
+ */
+int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
+{
+	size_t	scan_count;
+	size_t	probe_count;
+
+	if (!config)
+		goto fail;
+	memset(&config->runtime, 0, sizeof(config->runtime));
+	if (pthread_mutex_init(&config->runtime.lock, NULL) != 0)
+		goto fail;
+	config->runtime.lock_initialized = 1;
+	scan_count = count_scan_types(config->scan.scan_mask);
+	if (config->scan.port_count == 0 || scan_count == 0)
+		goto partial_fail;
+	probe_count = config->scan.port_count * scan_count;
+	config->runtime.probe_count = probe_count;
+	if (!choose_source_port_base(&config->runtime))
+		goto partial_fail;
+	config->runtime.probes = calloc(probe_count, sizeof(t_probe));
+	config->runtime.probe_by_src_port = calloc(65536, sizeof(t_probe *));
+	if (!config->runtime.probes || !config->runtime.probe_by_src_port)
+		goto partial_fail;
+	if (!fill_probes(config, scan_count))
+		goto partial_fail;
+	return (1);
+partial_fail:
+	cleanup_partial_runtime(&config->runtime);
+fail:
+	if (exit_status)
+		*exit_status = 1;
+	return (0);
+}
+
+/**
+ * @brief Check whether every logical probe reached DONE.
+ */
+int	nmap_runtime_is_finished(t_nmap_config *config)
+{
+	int	finished;
+
+	if (!config || !config->runtime.lock_initialized)
+		return (1);
+	pthread_mutex_lock(&config->runtime.lock);
+	finished = (config->runtime.done_count >= config->runtime.probe_count);
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (finished);
+}
+
+
+================================================================
+FILE: srcs/runtime/match.c
+================================================================
+
+#include "runtime/runtime_internal.h"
+#include "net/address.h"
+
+#include <netinet/in.h>
+
+/**
+ * @brief Validate a direct TCP/UDP reply against one candidate probe.
+ */
+static int	direct_reply_matches(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
+{
+	if (!nmap_ip_equal(&reply->src_addr, &config->target.addr)
+		|| !nmap_ip_equal(&reply->dst_addr, &config->route.src_addr)
+		|| reply->src_port != probe->dst_port
+		|| reply->dst_port != probe->src_port)
+		return (0);
+	if (reply->type == NMAP_REPLY_TCP && probe->scan_type != NMAP_SCAN_UDP)
+		return (1);
+	if (reply->type == NMAP_REPLY_UDP && probe->scan_type == NMAP_SCAN_UDP)
+		return (1);
+	return (0);
+}
+
+/**
+ * @brief Validate an ICMPv4/ICMPv6 error against its quoted original probe.
+ *
+ * @note The outer ICMP sender is intentionally not required to be the target:
+ *       routers/firewalls may legitimately generate filtered/unreachable
+ *       errors. Classification later uses the outer sender where semantics
+ *       depend on whether the target itself emitted the message.
+ */
+static int	icmp_reply_matches(const t_nmap_config *config,
+		const t_probe *probe, const t_nmap_reply *reply)
+{
+	if (!nmap_ip_equal(&reply->dst_addr, &config->route.src_addr)
+		|| !nmap_ip_equal(&reply->original_src_addr, &config->route.src_addr)
+		|| !nmap_ip_equal(&reply->original_dst_addr, &config->target.addr)
+		|| reply->original_src_port != probe->src_port
+		|| reply->original_dst_port != probe->dst_port)
+		return (0);
+	if (probe->scan_type == NMAP_SCAN_UDP)
+		return (reply->original_protocol == IPPROTO_UDP);
+	if (reply->original_protocol != IPPROTO_TCP)
+		return (0);
+	if (reply->has_original_tcp_seq
+		&& reply->original_tcp_seq != probe->seq)
+		return (0);
+	return (1);
+}
+
+/** Extract the O(1) source-port lookup key carried by one reply. */
+static int	reply_index_key(const t_nmap_reply *reply, uint16_t *key)
+{
+	if (reply->type == NMAP_REPLY_TCP || reply->type == NMAP_REPLY_UDP)
+	{
+		*key = reply->dst_port;
+		return (1);
+	}
+	if (reply->type == NMAP_REPLY_ICMP4 || reply->type == NMAP_REPLY_ICMP6)
+	{
+		*key = reply->original_src_port;
+		return (1);
+	}
+	return (0);
+}
+
+/**
+ * @brief Find the logical probe corresponding to one parsed reply.
+ *
+ * @return Matching probe or NULL when the packet must be ignored.
+ *
+ * @note Lookup is O(1), but no packet is trusted from source-port identity
+ *       alone. All protocol/address/port fields are validated afterwards.
+ */
+t_probe	*nmap_find_matching_probe(t_nmap_config *config, t_nmap_reply *reply)
+{
+	t_probe		*probe;
+	uint16_t	key;
+	int			matches;
+
+	if (!config || !reply || !reply_index_key(reply, &key))
+		return (NULL);
+	pthread_mutex_lock(&config->runtime.lock);
+	probe = config->runtime.probe_by_src_port[key];
+	matches = nmap_probe_can_match(probe);
+	if (matches && (reply->type == NMAP_REPLY_TCP
+			|| reply->type == NMAP_REPLY_UDP))
+		matches = direct_reply_matches(config, probe, reply);
+	else if (matches && (reply->type == NMAP_REPLY_ICMP4
+			|| reply->type == NMAP_REPLY_ICMP6))
+		matches = icmp_reply_matches(config, probe, reply);
+	else
+		matches = 0;
+	pthread_mutex_unlock(&config->runtime.lock);
+	if (!matches)
+		return (NULL);
+	return (probe);
+}
+
+
+================================================================
+FILE: srcs/runtime/recv.c
+================================================================
+
+#include "config.h"
+#include "debug/debug.h"
+#include "packet/packet.h"
+#include "packet/wire.h"
+#include "runtime/runtime_internal.h"
+
+#include <pcap/pcap.h>
+#include <stdio.h>
+
+/** Return the stable report-level reason represented by one matched reply. */
+static t_scan_reason	reply_reason(const t_nmap_reply *reply)
+{
+	if (!reply)
+		return (SCAN_REASON_NONE);
+	if (reply->type == NMAP_REPLY_UDP)
+		return (SCAN_REASON_UDP_REPLY);
+	if (reply->type == NMAP_REPLY_ICMP4)
+		return (SCAN_REASON_ICMP4);
+	if (reply->type == NMAP_REPLY_ICMP6)
+		return (SCAN_REASON_ICMP6);
+	if (reply->type == NMAP_REPLY_TCP)
+	{
+		if ((reply->tcp_flags & NMAP_TCP_SYN)
+			&& (reply->tcp_flags & NMAP_TCP_ACK))
+			return (SCAN_REASON_SYN_ACK);
+		if (reply->tcp_flags & NMAP_TCP_RST)
+			return (SCAN_REASON_RST);
+		if (reply->tcp_flags & NMAP_TCP_SYN)
+			return (SCAN_REASON_SYN);
+	}
+	return (SCAN_REASON_NONE);
+}
+
+/**
+ * @brief Parse, match and classify one captured frame.
+ *
+ * @return 1 when the frame finalized a probe, 0 when it was safely ignored.
+ */
+static int	handle_captured_packet(t_nmap_config *config,
+		const unsigned char *packet, size_t len)
+{
+	t_nmap_reply	reply;
+	t_probe			*probe;
+	t_scan_result	result;
+	uint64_t		prof_start;
+
+	DEBUG_RECV_PACKET(packet, len);
+	prof_start = PROF_START();
+	if (!nmap_parse_pcap_packet(config, packet, len, &reply))
+	{
+		PROF_ADD(NMAP_PROF_PACKET_PARSE_TOTAL, prof_start);
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
+		return (0);
+	}
+	PROF_ADD(NMAP_PROF_PACKET_PARSE_TOTAL, prof_start);
+	PROF_COUNT(NMAP_PROF_PACKET_PARSED);
+	prof_start = PROF_START();
+	probe = nmap_find_matching_probe(config, &reply);
+	PROF_ADD(NMAP_PROF_MATCH_PROBE, prof_start);
+	if (!probe)
+	{
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
+		return (0);
+	}
+	prof_start = PROF_START();
+	result = nmap_classify_reply(config, probe, &reply);
+	PROF_ADD(NMAP_PROF_CLASSIFY, prof_start);
+	if (result == SCAN_RESULT_UNKNOWN)
+	{
+		PROF_COUNT(NMAP_PROF_PACKET_IGNORED);
+		return (0);
+	}
+	PROF_COUNT(NMAP_PROF_PACKET_MATCHED);
+	nmap_mark_probe_done(config, probe, result, reply_reason(&reply), "reply");
+	return (1);
+}
+
+/** @brief Drain every pcap frame currently available without blocking. */
+int	nmap_runtime_drain_replies(t_nmap_config *config, int *exit_status)
+{
+	struct pcap_pkthdr	*header;
+	const unsigned char	*packet;
+	int					ret;
+	uint64_t			prof_start;
+
+	if (!config || !config->capture.handle)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	while (1)
+	{
+		prof_start = PROF_START();
+		ret = pcap_next_ex(config->capture.handle, &header, &packet);
+		PROF_ADD(NMAP_PROF_PCAP_NEXT_EX, prof_start);
+		if (ret == 1)
+		{
+			PROF_COUNT(NMAP_PROF_PACKET_SEEN);
+			handle_captured_packet(config, packet, header->caplen);
+		}
+		else if (ret == 0 || ret == PCAP_ERROR_BREAK)
+			return (1);
+		else
+		{
+			fprintf(stderr, "ft_nmap: pcap_next_ex: %s\n",
+				pcap_geterr(config->capture.handle));
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
+	}
+}
+
+
+================================================================
+FILE: srcs/runtime/runtime_internal.h
+================================================================
+
+#ifndef NMAP_RUNTIME_INTERNAL_H
+# define NMAP_RUNTIME_INTERNAL_H
+
+# include "config.h"
+
+/** Return a millisecond timestamp used by the runtime timing policy. */
+uint64_t		nmap_now_ms(void);
+
+/** Return whether one logical probe belongs to the UDP scan family. */
+int				nmap_probe_is_udp(const t_probe *probe);
+
+/** Return whether a reply may still legally complete this logical probe. */
+int				nmap_probe_can_match(const t_probe *probe);
+
+/** Find and fully validate the logical probe corresponding to one reply. */
+t_probe			*nmap_find_matching_probe(t_nmap_config *config,
+					t_nmap_reply *reply);
+
+/** Classify one already-matched network reply. */
+t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+					const t_probe *probe, const t_nmap_reply *reply);
+
+/** Classify final absence of any useful reply after retransmission policy. */
+t_scan_result	nmap_classify_no_response(uint32_t scan_type);
+
+/** Atomically finalize one logical probe and update runtime counters. */
+void			nmap_mark_probe_done(t_nmap_config *config,
+					t_probe *probe, t_scan_result result,
+					t_scan_reason reason, const char *debug_reason);
+
+#endif
+
+
+================================================================
+FILE: srcs/runtime/scheduler.c
+================================================================
+
+#include "config.h"
+#include "debug/debug.h"
+#include "packet/packet.h"
+#include "runtime/runtime_internal.h"
+#include "runtime/worker.h"
+
+/** Return total queued + outstanding logical probes while runtime.lock is held. */
+static size_t	active_count_locked(const t_nmap_config *config)
+{
+	return (config->runtime.queued_count
+		+ config->runtime.outstanding_count);
+}
+
+/** Return active UDP probes while runtime.lock is held. */
+static size_t	udp_active_count_locked(const t_nmap_config *config)
+{
+	return (config->runtime.udp_queued_count
+		+ config->runtime.udp_outstanding_count);
+}
+
+/** Check whether the global UDP dispatch gap has elapsed. */
+static int	udp_gap_allows_locked(const t_nmap_config *config,
+		uint64_t now_ms)
+{
+	uint64_t	elapsed;
+
+	if (config->scan.udp_dispatch_gap_ms <= 0
+		|| config->runtime.last_udp_dispatch_ms == 0)
+		return (1);
+	elapsed = now_ms - config->runtime.last_udp_dispatch_ms;
+	return (elapsed >= (uint64_t)config->scan.udp_dispatch_gap_ms);
+}
+
+/**
+ * @brief Check whether one PENDING probe can consume scheduler capacity now.
+ */
+static int	probe_can_be_reserved_locked(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	if (probe->state != PROBE_PENDING)
+		return (0);
+	if (active_count_locked(config) >= (size_t)config->scan.window_size)
+		return (0);
+	if (!nmap_probe_is_udp(probe))
+		return (1);
+	if (udp_active_count_locked(config)
+		>= (size_t)config->scan.udp_window_size)
+		return (0);
+	return (udp_gap_allows_locked(config, now_ms));
+}
+
+/** Reserve one threaded send job and create a fresh dispatch generation. */
+static uint32_t	reserve_threaded_locked(t_nmap_config *config,
+		t_probe *probe, uint64_t now_ms)
+{
+	probe->state = PROBE_QUEUED;
+	probe->dispatch_id++;
+	config->runtime.queued_count++;
+	if (nmap_probe_is_udp(probe))
+	{
+		config->runtime.udp_queued_count++;
+		config->runtime.last_udp_dispatch_ms = now_ms;
+	}
+	return (probe->dispatch_id);
+}
+
+/**
+ * @brief Start one inline attempt immediately before the packet-layer send.
+ */
+static void	reserve_inline_locked(t_nmap_config *config,
+		t_probe *probe, uint64_t now_ms)
+{
+	probe->state = PROBE_OUTSTANDING;
+	probe->attempts_sent++;
+	probe->sent_at_ms = now_ms;
+	config->runtime.outstanding_count++;
+	if (nmap_probe_is_udp(probe))
+	{
+		config->runtime.udp_outstanding_count++;
+		config->runtime.last_udp_dispatch_ms = now_ms;
+	}
+}
+
+/** Undo a QUEUED reservation if the sender-pool queue cannot accept the job. */
+static void	revert_threaded_reservation(t_nmap_config *config,
+		t_probe *probe, uint32_t dispatch_id)
+{
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->state == PROBE_QUEUED
+		&& probe->dispatch_id == dispatch_id)
+	{
+		probe->state = PROBE_PENDING;
+		if (config->runtime.queued_count > 0)
+			config->runtime.queued_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_queued_count > 0)
+			config->runtime.udp_queued_count--;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+}
+
+/**
+ * @brief Send one selected probe directly from the main thread.
+ */
+static int	send_inline(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, int *exit_status)
+{
+	pthread_mutex_lock(&config->runtime.lock);
+	if (!probe_can_be_reserved_locked(config, probe, now_ms))
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return (1);
+	}
+	reserve_inline_locked(config, probe, now_ms);
+	pthread_mutex_unlock(&config->runtime.lock);
+	DEBUG_PROBE_SEND(probe);
+	if (!nmap_send_probe(config, probe))
+	{
+		nmap_mark_probe_done(config, probe,
+			SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+/**
+ * @brief Reserve and enqueue one probe for sender-thread execution.
+ */
+static int	queue_threaded(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, int *exit_status)
+{
+	uint32_t	dispatch_id;
+
+	pthread_mutex_lock(&config->runtime.lock);
+	if (!probe_can_be_reserved_locked(config, probe, now_ms))
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return (1);
+	}
+	dispatch_id = reserve_threaded_locked(config, probe, now_ms);
+	pthread_mutex_unlock(&config->runtime.lock);
+	if (!nmap_dispatch_probe_to_sender(config, probe, dispatch_id))
+	{
+		revert_threaded_reservation(config, probe, dispatch_id);
+		if (nmap_sender_pool_has_error(config))
+		{
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
+	}
+	return (1);
+}
+
+/** Check whether the global send window is currently full. */
+static int	global_window_full(t_nmap_config *config)
+{
+	int	full;
+
+	pthread_mutex_lock(&config->runtime.lock);
+	full = (active_count_locked(config)
+			>= (size_t)config->scan.window_size);
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (full);
+}
+
+/**
+ * @brief Schedule every currently eligible PENDING probe while capacity allows.
+ *
+ * @note This function is the only owner of send-order/window policy. Workers
+ *       do not decide what to send and cannot bypass UDP/global limits.
+ */
+int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	int			threaded;
+
+	if (!config || config->scan.window_size <= 0)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (nmap_sender_pool_has_error(config))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	threaded = (config->sender_pool.worker_count > 0);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (global_window_full(config))
+			break ;
+		now_ms = nmap_now_ms();
+		if (threaded)
+		{
+			if (!queue_threaded(config, &config->runtime.probes[i],
+					now_ms, exit_status))
+				return (0);
+		}
+		else if (!send_inline(config, &config->runtime.probes[i],
+				now_ms, exit_status))
+			return (0);
+		i++;
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/runtime/wait.c
+================================================================
+
+#include "config.h"
+#include "debug/debug.h"
+#include "runtime/runtime_internal.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <sys/select.h>
+#include <sys/time.h>
+
+/** Return current wall-clock time in microseconds for profiling/select. */
+static uint64_t	now_us(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return ((uint64_t)tv.tv_sec * 1000000ULL
+		+ (uint64_t)tv.tv_usec);
+}
+
+/** Return the timeout configured for one probe family. */
+static int	probe_timeout_ms(const t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (nmap_probe_is_udp(probe))
+		return (config->scan.udp_timeout_ms);
+	return (config->scan.tcp_timeout_ms);
+}
+
+/** Compute remaining milliseconds before one outstanding probe expires. */
+static uint64_t	remaining_probe_ms(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	uint64_t	elapsed;
+	int			timeout_ms;
+
+	timeout_ms = probe_timeout_ms(config, probe);
+	if (timeout_ms <= 0 || now_ms <= probe->sent_at_ms)
+		return ((timeout_ms <= 0) ? 0 : (uint64_t)timeout_ms);
+	elapsed = now_ms - probe->sent_at_ms;
+	if (elapsed >= (uint64_t)timeout_ms)
+		return (0);
+	return ((uint64_t)timeout_ms - elapsed);
+}
+
+/** Compute remaining global UDP pacing delay. */
+static uint64_t	remaining_udp_gap_ms(const t_nmap_config *config,
+		uint64_t now_ms)
+{
+	uint64_t	elapsed;
+
+	if (config->scan.udp_dispatch_gap_ms <= 0
+		|| config->runtime.last_udp_dispatch_ms == 0)
+		return (0);
+	elapsed = now_ms - config->runtime.last_udp_dispatch_ms;
+	if (elapsed >= (uint64_t)config->scan.udp_dispatch_gap_ms)
+		return (0);
+	return ((uint64_t)config->scan.udp_dispatch_gap_ms - elapsed);
+}
+
+/** Register one candidate duration and preserve the nearest deadline. */
+static void	update_wait(uint64_t *wait_ms, int *found, uint64_t candidate)
+{
+	if (!*found || candidate < *wait_ms)
+		*wait_ms = candidate;
+	*found = 1;
+}
+
+/** Return whether a PENDING UDP probe exists while runtime.lock is held. */
+static int	has_pending_udp_locked(const t_nmap_config *config)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_PENDING
+			&& nmap_probe_is_udp(&config->runtime.probes[i]))
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/**
+ * @brief Compute how long select() may sleep before the next useful event.
+ *
+ * Candidates are outstanding-probe deadlines, queued-worker progress and UDP
+ * pacing. Pcap readability can wake select earlier at any time.
+ */
+static int	get_next_wait_ms(t_nmap_config *config,
+		uint64_t *wait_ms, uint64_t *sample_us)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	uint64_t	remaining;
+	int			found;
+
+	*sample_us = now_us();
+	now_ms = *sample_us / 1000ULL;
+	found = 0;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (config->runtime.queued_count > 0)
+		update_wait(wait_ms, &found, 1);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_OUTSTANDING)
+		{
+			remaining = remaining_probe_ms(config,
+					&config->runtime.probes[i], now_ms);
+			update_wait(wait_ms, &found, remaining);
+		}
+		i++;
+	}
+	if (has_pending_udp_locked(config))
+	{
+		remaining = remaining_udp_gap_ms(config, now_ms);
+		if (remaining > 0)
+			update_wait(wait_ms, &found, remaining);
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (found);
+}
+
+/** Convert a millisecond duration to select() timeval form. */
+static void	set_timeval(uint64_t ms, struct timeval *timeout)
+{
+	timeout->tv_sec = ms / 1000ULL;
+	timeout->tv_usec = (ms % 1000ULL) * 1000ULL;
+}
+
+/**
+ * @brief Block until pcap activity or the nearest runtime deadline.
+ */
+int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
+{
+	fd_set			readfds;
+	struct timeval	timeout;
+	uint64_t		wait_ms;
+	uint64_t		before_us;
+	uint64_t		after_us;
+	int				ret;
+
+	if (!config || config->capture.fd < 0)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (!get_next_wait_ms(config, &wait_ms, &before_us))
+		return (1);
+	FD_ZERO(&readfds);
+	FD_SET(config->capture.fd, &readfds);
+	set_timeval(wait_ms, &timeout);
+	ret = select(config->capture.fd + 1,
+			&readfds, NULL, NULL, &timeout);
+	after_us = now_us();
+	PROF_ADD_VALUE(NMAP_PROF_SELECT_REQUESTED, wait_ms * 1000ULL);
+	PROF_ADD_VALUE(NMAP_PROF_SELECT_WAIT, after_us - before_us);
+	if (ret < 0)
+	{
+		if (errno == EINTR)
+			return (1);
+		perror("ft_nmap: select");
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/runtime/worker.c
+================================================================
+
+#include "runtime/worker.h"
+#include "debug/debug.h"
+#include "packet/packet.h"
+#include "runtime/runtime_internal.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+/**
+ * @brief Pop one job from the shared sender queue, blocking until work/stop.
+ */
+static int	pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
+{
+	pthread_mutex_lock(&pool->lock);
+	while (pool->queue_count == 0 && !pool->stop_requested)
+		pthread_cond_wait(&pool->cond, &pool->lock);
+	if (pool->stop_requested)
+	{
+		pthread_mutex_unlock(&pool->lock);
+		return (0);
+	}
+	*job = pool->queue[pool->queue_head];
+	pool->queue_head = (pool->queue_head + 1) % pool->queue_capacity;
+	pool->queue_count--;
+	pthread_mutex_unlock(&pool->lock);
+	return (1);
+}
+
+/**
+ * @brief Convert a reserved QUEUED job into an actual OUTSTANDING attempt.
+ *
+ * @return 1 when this job generation is still valid, 0 when stale/cancelled.
+ *
+ * @note The timeout clock starts here, immediately before the worker sends.
+ */
+static int	mark_job_outstanding(t_nmap_config *config,
+		const t_nmap_send_job *job)
+{
+	t_probe	*probe;
+
+	probe = job->probe;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (!probe || probe->state != PROBE_QUEUED
+		|| probe->dispatch_id != job->dispatch_id)
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return (0);
+	}
+	if (config->runtime.queued_count > 0)
+		config->runtime.queued_count--;
+	config->runtime.outstanding_count++;
+	if (nmap_probe_is_udp(probe))
+	{
+		if (config->runtime.udp_queued_count > 0)
+			config->runtime.udp_queued_count--;
+		config->runtime.udp_outstanding_count++;
+	}
+	probe->attempts_sent++;
+	probe->sent_at_ms = nmap_now_ms();
+	probe->state = PROBE_OUTSTANDING;
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (1);
+}
+
+/** Record a fatal sender error visible to the main scheduler. */
+static void	set_send_error(t_nmap_sender_pool *pool)
+{
+	pthread_mutex_lock(&pool->lock);
+	pool->send_error = 1;
+	pthread_mutex_unlock(&pool->lock);
+}
+
+/**
+ * @brief Sender worker entry point.
+ *
+ * @note No pcap/matching/classification/expiration code belongs in this loop.
+ */
+static void	*worker_main(void *arg)
+{
+	t_nmap_worker	*worker;
+	t_nmap_send_job	job;
+
+	worker = (t_nmap_worker *)arg;
+	while (pool_pop_job(&worker->config->sender_pool, &job))
+	{
+		if (!mark_job_outstanding(worker->config, &job))
+			continue ;
+		DEBUG_PROBE_SEND(job.probe);
+		if (!nmap_send_probe(worker->config, job.probe))
+		{
+			set_send_error(&worker->config->sender_pool);
+			nmap_mark_probe_done(worker->config, job.probe,
+				SCAN_RESULT_UNKNOWN, SCAN_REASON_SEND_ERROR, "send failure");
+		}
+	}
+	return (NULL);
+}
+
+/** Initialize and start one sender worker. */
+static int	init_worker(t_nmap_config *config, t_nmap_worker *worker,
+		int id)
+{
+	memset(worker, 0, sizeof(*worker));
+	worker->config = config;
+	worker->id = id;
+	if (pthread_create(&worker->thread, NULL, worker_main, worker) != 0)
+		return (0);
+	worker->started = 1;
+	return (1);
+}
+
+/**
+ * @brief Initialize the shared sender queue and requested worker threads.
+ *
+ * @note speedup=0 intentionally keeps an inline main-thread sender and does
+ *       not initialize pool synchronization primitives.
+ */
+int	nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status)
+{
+	int	i;
+
+	if (!config)
+		goto fail;
+	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+	config->sender_pool.worker_count = config->scan.thread_count;
+	if (config->sender_pool.worker_count <= 0)
+	{
+		config->sender_pool.worker_count = 0;
+		return (1);
+	}
+	if (pthread_mutex_init(&config->sender_pool.lock, NULL) != 0)
+		goto fail;
+	if (pthread_cond_init(&config->sender_pool.cond, NULL) != 0)
+	{
+		pthread_mutex_destroy(&config->sender_pool.lock);
+		goto fail;
+	}
+	config->sender_pool.initialized = 1;
+	config->sender_pool.queue_capacity = config->runtime.probe_count;
+	if (config->sender_pool.queue_capacity == 0)
+		goto fail_initialized;
+	config->sender_pool.queue = calloc(config->sender_pool.queue_capacity,
+			sizeof(*config->sender_pool.queue));
+	config->sender_pool.workers = calloc(config->sender_pool.worker_count,
+			sizeof(*config->sender_pool.workers));
+	if (!config->sender_pool.queue || !config->sender_pool.workers)
+		goto fail_initialized;
+	i = 0;
+	while (i < config->sender_pool.worker_count)
+	{
+		if (!init_worker(config, &config->sender_pool.workers[i], i))
+			goto fail_initialized;
+		i++;
+	}
+	return (1);
+fail_initialized:
+	if (exit_status)
+		*exit_status = 1;
+	nmap_stop_sender_pool(config);
+	return (0);
+fail:
+	if (exit_status)
+		*exit_status = 1;
+	return (0);
+}
+
+/**
+ * @brief Stop and join every sender worker, then release pool resources.
+ */
+void	nmap_stop_sender_pool(t_nmap_config *config)
+{
+	int	i;
+
+	if (!config || !config->sender_pool.initialized)
+		return ;
+	pthread_mutex_lock(&config->sender_pool.lock);
+	config->sender_pool.stop_requested = 1;
+	pthread_cond_broadcast(&config->sender_pool.cond);
+	pthread_mutex_unlock(&config->sender_pool.lock);
+	i = 0;
+	while (i < config->sender_pool.worker_count)
+	{
+		if (config->sender_pool.workers
+			&& config->sender_pool.workers[i].started)
+			pthread_join(config->sender_pool.workers[i].thread, NULL);
+		i++;
+	}
+	free(config->sender_pool.workers);
+	free(config->sender_pool.queue);
+	pthread_cond_destroy(&config->sender_pool.cond);
+	pthread_mutex_destroy(&config->sender_pool.lock);
+	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+}
+
+/** Return whether any sender thread reported a fatal send failure. */
+int	nmap_sender_pool_has_error(t_nmap_config *config)
+{
+	int	error;
+
+	if (!config || !config->sender_pool.initialized)
+		return (0);
+	pthread_mutex_lock(&config->sender_pool.lock);
+	error = config->sender_pool.send_error;
+	pthread_mutex_unlock(&config->sender_pool.lock);
+	return (error != 0);
+}
+
+/**
+ * @brief Push one already-reserved probe generation into the shared queue.
+ */
+int	nmap_dispatch_probe_to_sender(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id)
+{
+	t_nmap_sender_pool	*pool;
+
+	if (!config || !probe || !config->sender_pool.initialized)
+		return (0);
+	pool = &config->sender_pool;
+	pthread_mutex_lock(&pool->lock);
+	if (pool->stop_requested || pool->send_error
+		|| pool->queue_count >= pool->queue_capacity)
+	{
+		pthread_mutex_unlock(&pool->lock);
+		return (0);
+	}
+	pool->queue[pool->queue_tail].probe = probe;
+	pool->queue[pool->queue_tail].dispatch_id = dispatch_id;
+	pool->queue_tail = (pool->queue_tail + 1) % pool->queue_capacity;
+	pool->queue_count++;
+	pthread_cond_signal(&pool->cond);
+	pthread_mutex_unlock(&pool->lock);
+	return (1);
+}
+
+
+================================================================
+FILE: srcs/runtime/worker.h
+================================================================
+
+#ifndef NMAP_WORKER_H
+# define NMAP_WORKER_H
+
+# include "config.h"
+
+/**
+ * @brief One sender thread in the shared producer/consumer pool.
+ *
+ * @note A worker has deliberately no pcap handle and no classifier state. Its
+ *       sole responsibility is to consume a reserved send job and execute the
+ *       packet-layer send.
+ */
+struct s_nmap_worker
+{
+	pthread_t		thread;
+	t_nmap_config	*config;
+	int				id;
+	int				started;
+};
+
+int		nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status);
+void	nmap_stop_sender_pool(t_nmap_config *config);
+int		nmap_sender_pool_has_error(t_nmap_config *config);
+
+int		nmap_dispatch_probe_to_sender(t_nmap_config *config,
+			t_probe *probe, uint32_t dispatch_id);
+
+#endif
+
+
+================================================================
+FILE: srcs/signal/signal.c
+================================================================
+
+#include <signal.h>
+#include <string.h>
+
+static volatile sig_atomic_t	g_nmap_stop_requested = 0;
+
+static void	nmap_signal_handle_sigint(int signum)
+{
+	(void)signum;
+	g_nmap_stop_requested = 1;
+}
+
+int	nmap_signal_setup(int *exit_status)
+{
+	struct sigaction	action;
+
+	memset(&action, 0, sizeof(action));
+	action.sa_handler = nmap_signal_handle_sigint;
+	sigemptyset(&action.sa_mask);
+	action.sa_flags = 0;
+	if (sigaction(SIGINT, &action, NULL) < 0)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	return (1);
+}
+
+int	nmap_signal_stop_requested(void)
+{
+	return (g_nmap_stop_requested != 0);
+}
+
+================================================================
+FILE: README.md
+================================================================
+
+# nmap
+                         MAIN THREAD
+
+      PCAP
+        │
+        ▼
+   L2 locator
+        │
+   ┌────┴────┐
+ IPv4       IPv6
+ parser     parser + extension headers
+   │           │
+   └─────┬─────┘
+         ▼
+   t_nmap_reply
+         │
+         ▼
+      MATCH
+         │
+         ▼
+     CLASSIFY
+         │
+         ▼
+      RESULT
+
+
+                    RUNTIME
+
+ PENDING ──► QUEUED ──► OUTSTANDING
+    ▲                       │
+    │                       ├── response ──► DONE
+    │                       │
+    └──── retry ◄── timeout ┘
+                            │
+                            └── retry policy exhausted
+                                      │
+                                      ▼
+                                     DONE
+
+
+                    SENDER THREADS
+
+            shared sender queue
+              /     |      \
+             /      |       \
+        worker 0 worker 1 ... worker N
+
+ Workers:
+   - do not read PCAP
+   - do not classify
+   - do not expire
+   - do not schedule
+   - only transition QUEUED -> OUTSTANDING + send()
+
+================================================================
+FILE: targets.txt
+================================================================
+
+127.0.0.1
+localhost
+192.0.0.1
+intra.42.fr
+pornhub.com
+avaj_laucher.com
+xhamster.com

@@ -1,34 +1,39 @@
+
 #include "config.h"
 #include "debug/debug.h"
 #include "packet/packet.h"
-#include "packet/wire.h"
 #include "runtime/runtime_internal.h"
 
 #include <pcap/pcap.h>
 #include <stdio.h>
 
-/** Return the stable report-level reason represented by one matched reply. */
+/** Return structured report evidence represented by one matched reply. */
 static t_scan_reason	reply_reason(const t_nmap_reply *reply)
 {
+	t_scan_reason	reason;
+
+	reason = (t_scan_reason){0};
 	if (!reply)
-		return (SCAN_REASON_NONE);
+		return (reason);
 	if (reply->type == NMAP_REPLY_UDP)
-		return (SCAN_REASON_UDP_REPLY);
-	if (reply->type == NMAP_REPLY_ICMP4)
-		return (SCAN_REASON_ICMP4);
-	if (reply->type == NMAP_REPLY_ICMP6)
-		return (SCAN_REASON_ICMP6);
-	if (reply->type == NMAP_REPLY_TCP)
+		reason.kind = SCAN_REASON_UDP_REPLY;
+	else if (reply->type == NMAP_REPLY_TCP)
 	{
-		if ((reply->tcp_flags & NMAP_TCP_SYN)
-			&& (reply->tcp_flags & NMAP_TCP_ACK))
-			return (SCAN_REASON_SYN_ACK);
-		if (reply->tcp_flags & NMAP_TCP_RST)
-			return (SCAN_REASON_RST);
-		if (reply->tcp_flags & NMAP_TCP_SYN)
-			return (SCAN_REASON_SYN);
+		reason.kind = SCAN_REASON_TCP;
+		reason.tcp_flags = reply->tcp_flags;
 	}
-	return (SCAN_REASON_NONE);
+	else if (reply->type == NMAP_REPLY_ICMP4
+		|| reply->type == NMAP_REPLY_ICMP6)
+	{
+		reason.kind = SCAN_REASON_ICMP;
+		if (reply->type == NMAP_REPLY_ICMP4)
+			reason.family = AF_INET;
+		else
+			reason.family = AF_INET6;
+		reason.icmp_type = reply->icmp_type;
+		reason.icmp_code = reply->icmp_code;
+	}
+	return (reason);
 }
 
 /**

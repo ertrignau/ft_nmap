@@ -1,3 +1,4 @@
+
 #include "ft_nmap.h"
 #include "debug/debug.h"
 
@@ -5,7 +6,7 @@
  * @brief Execute the main event loop for the current resolved target.
  *
  * @note The main thread owns receive/match/classify/expire/schedule/wait.
- *       Sender workers only execute jobs selected by the scheduler.
+ *       Sender workers only execute generations selected by the scheduler.
  */
 static int	run_scan_loop(t_nmap_config *config, int *exit_status)
 {
@@ -31,6 +32,13 @@ static int	run_scan_loop(t_nmap_config *config, int *exit_status)
 	{
 		if (exit_status)
 			*exit_status = 130;
+		return (0);
+	}
+	/* A last worker may fail while simultaneously completing the final probe. */
+	if (nmap_sender_pool_has_error(config))
+	{
+		if (exit_status)
+			*exit_status = 1;
 		return (0);
 	}
 	return (1);
@@ -69,9 +77,6 @@ cleanup:
 
 /**
  * @brief Scan every prepared target and continue after target-local failures.
- *
- * @note This preserves the useful multi-target behavior from the parsing
- *       branch: one bad host does not prevent later file entries from running.
  */
 int	nmap_run(t_nmap_config *config, int *exit_status)
 {

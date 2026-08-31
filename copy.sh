@@ -1,59 +1,84 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-OUT="ft_nmap_context.txt"
+OUT="ft_nmap_source_context.txt"
 
 : > "$OUT"
 
-add_file()
+write_section()
 {
-	file="$1"
-
-	if [ ! -f "$file" ]; then
-		return
-	fi
-
-	{
-		echo
-		echo "================================================================================"
-		echo "FILE: $file"
-		echo "================================================================================"
-		echo
-		cat "$file"
-		echo
-	} >> "$OUT"
+	echo "" >> "$OUT"
+	echo "================================================================" >> "$OUT"
+	echo "$1" >> "$OUT"
+	echo "================================================================" >> "$OUT"
+	echo "" >> "$OUT"
 }
 
+dump_file()
 {
-	echo "FT_NMAP SOURCE CONTEXT"
-	echo
-	echo "TREE:"
-	echo "--------------------------------------------------------------------------------"
-	tree \
-		-I 'objs|ft_nmap_lab|ft_nmap|debug|*.strace|tot.py|tot.sh|ft_nmap_context.txt' \
-		2>/dev/null
-	echo
-} >> "$OUT"
+	FILE="$1"
 
-add_file "Makefile"
+	write_section "FILE: $FILE"
+	cat "$FILE" >> "$OUT"
+	echo "" >> "$OUT"
+}
 
-for file in inc/*.h
+write_section "FT_NMAP SOURCE CONTEXT"
+
+echo "Generated from: $(pwd)" >> "$OUT"
+echo "Date: $(date)" >> "$OUT"
+
+write_section "GIT STATUS"
+git status --short >> "$OUT" 2>&1
+
+write_section "GIT LOG"
+git log --graph --oneline --decorate -20 >> "$OUT" 2>&1
+
+write_section "PROJECT FILES"
+
+find . \
+	-type f \
+	-not -path './.git/*' \
+	-not -path './objs/*' \
+	-not -path './objs_debug/*' \
+	-not -path './objs_profile/*' \
+	-not -name 'ft_nmap' \
+	-not -name "$OUT" \
+	-not -name 'copy.sh' \
+	-not -name 'parsing_review.txt' \
+	-not -name 'parsing_review_2.txt' \
+	-not -name '*.o' \
+	-not -name '*.d' \
+	-not -name '*.zip' \
+	-not -name '*.tar.gz' \
+	| sort >> "$OUT"
+
+if [ -f Makefile ]; then
+	dump_file "Makefile"
+fi
+
+while IFS= read -r FILE
 do
-	[ -f "$file" ] && add_file "$file"
+	dump_file "$FILE"
+done < <(
+	find inc srcs \
+		-type f \
+		\( -name '*.h' -o -name '*.c' \) \
+		2>/dev/null \
+		| sort
+)
+
+for FILE in \
+	ARCHITECTURE.md \
+	VALIDATION.md \
+	README.md \
+	README \
+	targets.txt
+do
+	if [ -f "$FILE" ]; then
+		dump_file "$FILE"
+	fi
 done
-
-find srcs -type f \( -name '*.c' -o -name '*.h' \) \
-	| sort \
-	| while IFS= read -r file
-	do
-		add_file "$file"
-	done
-
-add_file "srcs/packet/README.md"
-add_file "srcs/runtime/README.md"
-
-add_file "PlanGlobal.md"
-add_file "PLanMoteur.md"
 
 echo "Generated: $OUT"
 wc -l "$OUT"
-wc -c "$OUT"
+du -h "$OUT"

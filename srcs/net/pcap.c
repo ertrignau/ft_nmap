@@ -1,3 +1,4 @@
+
 #include "config.h"
 
 #include <pcap/pcap.h>
@@ -11,9 +12,10 @@
 /**
  * @brief Build the target-family BPF capture filter.
  *
- * @note Direct replies are restricted to target -> local traffic. ICMP errors
- *       may come from intermediate routers, so the error branch only requires
- *       the packet to be addressed to the local source address.
+ * Direct replies are restricted to target -> local traffic. ICMP errors may
+ * come from intermediate routers, so the error branch only constrains the
+ * destination. IPv6 uses protochain for ICMPv6 so extension headers in front
+ * of ICMPv6 do not get discarded before the userspace Next Header walker.
  */
 static int	build_pcap_filter(const t_nmap_config *config,
 		char *filter, size_t filter_size)
@@ -32,7 +34,7 @@ static int	build_pcap_filter(const t_nmap_config *config,
 	{
 		ret = snprintf(filter, filter_size,
 				"((ip6 and src host %s and dst host %s)"
-				" or (icmp6 and dst host %s))",
+				" or (ip6 protochain 58 and dst host %s))",
 				config->target.ip, config->route.src_ip,
 				config->route.src_ip);
 	}
@@ -41,9 +43,7 @@ static int	build_pcap_filter(const t_nmap_config *config,
 	return (ret >= 0 && (size_t)ret < filter_size);
 }
 
-/**
- * @brief Apply capture settings before activation.
- */
+/** Apply capture settings before activation. */
 static int	apply_pcap_settings(pcap_t *handle)
 {
 	if (pcap_set_snaplen(handle, NMAP_PCAP_SNAPLEN) < 0)
@@ -55,9 +55,7 @@ static int	apply_pcap_settings(pcap_t *handle)
 	return (1);
 }
 
-/**
- * @brief Create and activate the pcap handle on the selected route interface.
- */
+/** Create and activate the pcap handle on the selected route interface. */
 static int	open_pcap_handle(t_nmap_config *config)
 {
 	pcap_t	*handle;
@@ -86,9 +84,7 @@ static int	open_pcap_handle(t_nmap_config *config)
 	return (1);
 }
 
-/**
- * @brief Compile and install the capture filter.
- */
+/** Compile and install the capture filter. */
 static int	install_pcap_filter(t_nmap_config *config)
 {
 	struct bpf_program	program;
@@ -117,9 +113,7 @@ static int	install_pcap_filter(t_nmap_config *config)
 	return (1);
 }
 
-/**
- * @brief Expose pcap as a non-blocking selectable fd for the event loop.
- */
+/** Expose pcap as a non-blocking selectable fd for the event loop. */
 static int	prepare_pcap_fd(t_nmap_config *config)
 {
 	config->capture.fd = pcap_get_selectable_fd(config->capture.handle);
@@ -139,9 +133,7 @@ static int	prepare_pcap_fd(t_nmap_config *config)
 	return (1);
 }
 
-/**
- * @brief Prepare packet capture before the first probe is scheduled.
- */
+/** Prepare packet capture before the first probe is scheduled. */
 int	nmap_prepare_pcap(t_nmap_config *config, int *exit_status)
 {
 	if (!config)
