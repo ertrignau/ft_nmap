@@ -33,7 +33,10 @@ void	nmap_stop_sender_pool(t_nmap_config *config);
 int		nmap_sender_pool_has_error(t_nmap_config *config);
 
 /* output */
-void	nmap_print_report(t_nmap_config *config);
+void	nmap_output_print_target_report(const t_nmap_config *config,
+			uint64_t elapsed_ms, int multi_target);
+void	nmap_output_print_run_summary(size_t total_targets,
+			size_t completed_targets, uint64_t elapsed_ms);
 
 /* parsing */
 int		nmap_parse_ports(t_nmap_config *config, const char *arg);

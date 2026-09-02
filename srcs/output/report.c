@@ -1,289 +1,245 @@
-
-#include "config.h"
-#include "packet/wire.h"
+#include "output/output_internal.h"
 
 #include <stdio.h>
+#include <string.h>
 
-/** Return the display name for one concrete scan type. */
-static const char	*scan_type_name(uint32_t scan_type)
+/**
+ * @brief Print one fixed-width token and color only its visible contents.
+ *
+ * Padding remains outside the ANSI sequence so redirected/plain rendering and
+ * visual column widths stay predictable.
+ */
+static void	print_colored_token(const char *token, const char *color,
+		int width, int use_color)
 {
-	if (scan_type == NMAP_SCAN_SYN)
-		return ("SYN");
-	if (scan_type == NMAP_SCAN_NULL)
-		return ("NULL");
-	if (scan_type == NMAP_SCAN_FIN)
-		return ("FIN");
-	if (scan_type == NMAP_SCAN_XMAS)
-		return ("XMAS");
-	if (scan_type == NMAP_SCAN_ACK)
-		return ("ACK");
-	if (scan_type == NMAP_SCAN_UDP)
-		return ("UDP");
-	return ("UNKNOWN");
+	if (use_color && color && color[0] != '\0')
+		printf("%s%s%s%-*s", color, token,
+			nmap_output_color_reset(),
+			width - (int)strlen(token), "");
+	else
+		printf("%-*s", width, token);
 }
 
-/** Return the display name for one final scan result. */
-static const char	*scan_result_name(t_scan_result result)
+/** Print one scan state column. */
+static void	print_state_cell(const t_probe *probe, int use_color)
 {
-	if (result == SCAN_RESULT_OPEN)
-		return ("open");
-	if (result == SCAN_RESULT_CLOSED)
-		return ("closed");
-	if (result == SCAN_RESULT_FILTERED)
-		return ("filtered");
-	if (result == SCAN_RESULT_UNFILTERED)
-		return ("unfiltered");
-	if (result == SCAN_RESULT_OPEN_FILTERED)
-		return ("open|filtered");
-	return ("unknown");
+	const char	*state;
+
+	state = nmap_output_state_name(probe);
+	print_colored_token(state, nmap_output_state_color(probe),
+		NMAP_OUTPUT_STATE_WIDTH,
+		use_color && probe != NULL);
 }
 
-/** Return the display name for one non-final runtime state. */
-static const char	*probe_state_name(t_probe_state state)
+/** Print the dedicated reason column associated with one scan. */
+static void	print_reason_cell(const t_probe *probe)
 {
-	if (state == PROBE_PENDING)
-		return ("pending");
-	if (state == PROBE_QUEUED)
-		return ("queued");
-	if (state == PROBE_OUTSTANDING)
-		return ("outstanding");
-	if (state == PROBE_DONE)
-		return ("done");
-	return ("unknown");
+	char	reason[64];
+
+	nmap_output_reason_name(probe, reason, sizeof(reason));
+	printf("%-*s", NMAP_OUTPUT_REASON_WIDTH, reason);
 }
 
-/** Convert known ICMPv4 type/code pairs to concise report text. */
-static const char	*icmp4_reason(uint8_t type, uint8_t code)
+/**
+ * @brief Print one scan result.
+ *
+ * With --reason, the state and its reason deliberately occupy two independent
+ * table columns.
+ */
+static void	print_scan_cell(const t_probe *probe, int show_reason,
+		int use_color)
 {
-	if (type == 3 && code == 0)
-		return ("net-unreachable");
-	if (type == 3 && code == 1)
-		return ("host-unreachable");
-	if (type == 3 && code == 2)
-		return ("protocol-unreachable");
-	if (type == 3 && code == 3)
-		return ("port-unreachable");
-	if (type == 3 && code == 9)
-		return ("net-prohibited");
-	if (type == 3 && code == 10)
-		return ("host-prohibited");
-	if (type == 3 && code == 13)
-		return ("admin-prohibited");
-	if (type == 11 && code == 0)
-		return ("ttl-exceeded");
-	if (type == 11 && code == 1)
-		return ("fragment-timeout");
-	return (NULL);
+	print_state_cell(probe, use_color);
+	if (show_reason)
+		print_reason_cell(probe);
 }
 
-/** Convert known ICMPv6 type/code pairs to concise report text. */
-static const char	*icmp6_reason(uint8_t type, uint8_t code)
+/** Print the state/reason header pair for one scan family. */
+static void	print_scan_header(const char *scan_name, int show_reason)
 {
-	if (type == 1 && code == 0)
-		return ("no-route");
-	if (type == 1 && code == 1)
-		return ("admin-prohibited");
-	if (type == 1 && code == 2)
-		return ("beyond-scope");
-	if (type == 1 && code == 3)
-		return ("address-unreachable");
-	if (type == 1 && code == 4)
-		return ("port-unreachable");
-	if (type == 1 && code == 5)
-		return ("source-policy-failed");
-	if (type == 1 && code == 6)
-		return ("reject-route");
-	if (type == 3 && code == 0)
-		return ("hop-limit-exceeded");
-	if (type == 3 && code == 1)
-		return ("fragment-timeout");
-	return (NULL);
-}
+	char	reason_header[32];
 
-/** Format the structured runtime reason without inventing protocol evidence. */
-static void	format_scan_reason(const t_scan_reason *reason,
-		char *buf, size_t size)
-{
-	const char	*name;
-
-	if (!reason || size == 0)
-		return ;
-	if (reason->kind == SCAN_REASON_TCP)
+	printf("%-*s", NMAP_OUTPUT_STATE_WIDTH, scan_name);
+	if (show_reason)
 	{
-		if ((reason->tcp_flags & NMAP_TCP_SYN)
-			&& (reason->tcp_flags & NMAP_TCP_ACK))
-			snprintf(buf, size, "syn-ack");
-		else if (reason->tcp_flags & NMAP_TCP_RST)
-			snprintf(buf, size, "reset");
-		else if (reason->tcp_flags & NMAP_TCP_SYN)
-			snprintf(buf, size, "syn");
-		else
-			snprintf(buf, size, "tcp-flags-0x%02x", reason->tcp_flags);
-		return ;
+		snprintf(reason_header, sizeof(reason_header),
+			"%s-REASON", scan_name);
+		printf("%-*s", NMAP_OUTPUT_REASON_WIDTH,
+			reason_header);
 	}
-	if (reason->kind == SCAN_REASON_UDP_REPLY)
-		snprintf(buf, size, "udp-response");
-	else if (reason->kind == SCAN_REASON_NO_RESPONSE)
-		snprintf(buf, size, "no-response");
-	else if (reason->kind == SCAN_REASON_SEND_ERROR)
-		snprintf(buf, size, "send-error");
-	else if (reason->kind == SCAN_REASON_ICMP)
+}
+
+/** Print the stable table header. */
+static void	print_table_header(int show_reason)
+{
+	printf("%-7s%-*s", "PORT",
+		NMAP_OUTPUT_SERVICE_WIDTH, "SERVICE");
+	print_scan_header("SYN", show_reason);
+	print_scan_header("NUL", show_reason);
+	print_scan_header("FIN", show_reason);
+	print_scan_header("XMS", show_reason);
+	print_scan_header("ACK", show_reason);
+	print_scan_header("UDP", show_reason);
+	printf("%s\n", "VERDICT");
+}
+
+/** Print one colored verdict token without adding padding. */
+static void	print_inline_token(const char *token, const char *color,
+		int use_color)
+{
+	if (use_color && color && color[0] != '\0')
+		printf("%s%s%s", color, token,
+			nmap_output_color_reset());
+	else
+		printf("%s", token);
+}
+
+/**
+ * @brief Print TCP and UDP conclusions independently.
+ *
+ * Each protocol keeps its own color. For example, T:CLS U:OPN must not become
+ * globally green because TCP/53 and UDP/53 are different endpoints.
+ */
+static void	print_verdict_cell(const t_nmap_port_view *view,
+		int use_color)
+{
+	const char	*tcp;
+	const char	*udp;
+	int			visible_len;
+
+	tcp = nmap_output_verdict_name(view->tcp_verdict);
+	udp = nmap_output_verdict_name(view->udp_verdict);
+	visible_len = 0;
+	if (view->tcp_verdict != NMAP_VERDICT_NONE
+		&& view->udp_verdict != NMAP_VERDICT_NONE)
 	{
-		name = NULL;
-		if (reason->family == AF_INET)
-			name = icmp4_reason(reason->icmp_type, reason->icmp_code);
-		else if (reason->family == AF_INET6)
-			name = icmp6_reason(reason->icmp_type, reason->icmp_code);
-		if (name)
-			snprintf(buf, size, "%s", name);
-		else if (reason->family == AF_INET6)
-			snprintf(buf, size, "icmp6-%u/%u",
-				reason->icmp_type, reason->icmp_code);
-		else
-			snprintf(buf, size, "icmp-%u/%u",
-				reason->icmp_type, reason->icmp_code);
+		printf("T:");
+		print_inline_token(tcp,
+			nmap_output_verdict_color(view->tcp_verdict),
+			use_color);
+		printf(" U:");
+		print_inline_token(udp,
+			nmap_output_verdict_color(view->udp_verdict),
+			use_color);
+		visible_len = 5 + (int)strlen(tcp)
+			+ (int)strlen(udp);
+	}
+	else if (view->tcp_verdict != NMAP_VERDICT_NONE)
+	{
+		print_inline_token(tcp,
+			nmap_output_verdict_color(view->tcp_verdict),
+			use_color);
+		visible_len = (int)strlen(tcp);
+	}
+	else if (view->udp_verdict != NMAP_VERDICT_NONE)
+	{
+		print_inline_token(udp,
+			nmap_output_verdict_color(view->udp_verdict),
+			use_color);
+		visible_len = (int)strlen(udp);
 	}
 	else
-		snprintf(buf, size, "none");
-}
-
-/** Check whether one scan column is enabled. */
-static int	scan_enabled(const t_nmap_config *config, uint32_t scan_type)
-{
-	return ((config->scan.scan_mask & scan_type) != 0);
-}
-
-/** Find one logical probe by destination port and scan type. */
-static t_probe	*find_probe(t_nmap_config *config,
-		uint16_t port, uint32_t scan_type)
-{
-	size_t	i;
-
-	i = 0;
-	while (i < config->runtime.probe_count)
 	{
-		if (config->runtime.probes[i].dst_port == port
-			&& config->runtime.probes[i].scan_type == scan_type)
-			return (&config->runtime.probes[i]);
-		i++;
+		printf("-");
+		visible_len = 1;
 	}
-	return (NULL);
+	if (visible_len < NMAP_OUTPUT_VERDICT_WIDTH)
+		printf("%*s",
+			NMAP_OUTPUT_VERDICT_WIDTH - visible_len, "");
 }
 
-/** Display a final result when DONE, otherwise the live runtime state. */
-static const char	*probe_display(const t_probe *probe)
+/** Print one complete port row. */
+static void	print_port_row(const t_nmap_config *config,
+		const t_nmap_port_view *view, int use_color)
 {
-	if (!probe)
-		return ("unknown");
-	if (probe->state != PROBE_DONE)
-		return (probe_state_name(probe->state));
-	return (scan_result_name(probe->result));
+	char	service[NMAP_OUTPUT_SERVICE_MAX];
+
+	nmap_output_service_name(view, service, sizeof(service));
+	printf("%-7u%-*.*s",
+		view->port,
+		NMAP_OUTPUT_SERVICE_WIDTH,
+		NMAP_OUTPUT_SERVICE_WIDTH - 1,
+		service);
+	print_scan_cell(view->syn,
+		config->scan.show_reason, use_color);
+	print_scan_cell(view->null_scan,
+		config->scan.show_reason, use_color);
+	print_scan_cell(view->fin,
+		config->scan.show_reason, use_color);
+	print_scan_cell(view->xmas,
+		config->scan.show_reason, use_color);
+	print_scan_cell(view->ack,
+		config->scan.show_reason, use_color);
+	print_scan_cell(view->udp,
+		config->scan.show_reason, use_color);
+	print_verdict_cell(view, use_color);
+	printf("\n");
 }
 
-/** Return whether a DONE result counts as open-like for --open filtering. */
-static int	probe_is_open_like(const t_probe *probe)
+/** Print every port visible under the current --open policy. */
+static void	print_result_table(const t_nmap_config *config)
 {
-	if (!probe || probe->state != PROBE_DONE)
-		return (0);
-	return (probe->result == SCAN_RESULT_OPEN
-		|| probe->result == SCAN_RESULT_OPEN_FILTERED);
-}
-
-/** Check whether any enabled scan keeps one port visible in --open mode. */
-static int	port_is_open_like(t_nmap_config *config, uint16_t port)
-{
-	static const uint32_t	types[] = {
-		NMAP_SCAN_SYN, NMAP_SCAN_NULL, NMAP_SCAN_FIN,
-		NMAP_SCAN_XMAS, NMAP_SCAN_ACK, NMAP_SCAN_UDP
-	};
+	t_nmap_port_view	view;
 	size_t				i;
+	int					use_color;
 
-	i = 0;
-	while (i < sizeof(types) / sizeof(types[0]))
-	{
-		if (scan_enabled(config, types[i])
-			&& probe_is_open_like(find_probe(config, port, types[i])))
-			return (1);
-		i++;
-	}
-	return (0);
-}
-
-/** Print one enabled result-table header column. */
-static void	print_header_column(const t_nmap_config *config, uint32_t type)
-{
-	if (scan_enabled(config, type))
-		printf("%-28s", scan_type_name(type));
-}
-
-/** Print one enabled result-table cell, optionally with --reason. */
-static void	print_result_column(t_nmap_config *config,
-		uint16_t port, uint32_t type)
-{
-	t_probe	*probe;
-	char	reason[48];
-	char	cell[96];
-
-	if (!scan_enabled(config, type))
-		return ;
-	probe = find_probe(config, port, type);
-	if (!config->scan.show_reason || !probe || probe->state != PROBE_DONE)
-	{
-		printf("%-28s", probe_display(probe));
-		return ;
-	}
-	format_scan_reason(&probe->reason, reason, sizeof(reason));
-	snprintf(cell, sizeof(cell), "%s(%s)", probe_display(probe), reason);
-	printf("%-28s", cell);
-}
-
-/** Print the report table header in stable scan order. */
-static void	print_header(const t_nmap_config *config)
-{
-	printf("%-8s", "PORT");
-	print_header_column(config, NMAP_SCAN_SYN);
-	print_header_column(config, NMAP_SCAN_NULL);
-	print_header_column(config, NMAP_SCAN_FIN);
-	print_header_column(config, NMAP_SCAN_XMAS);
-	print_header_column(config, NMAP_SCAN_ACK);
-	print_header_column(config, NMAP_SCAN_UDP);
-	printf("\n");
-}
-
-/** Print all enabled scan results for one destination port. */
-static void	print_port(t_nmap_config *config, uint16_t port)
-{
-	printf("%-8u", port);
-	print_result_column(config, port, NMAP_SCAN_SYN);
-	print_result_column(config, port, NMAP_SCAN_NULL);
-	print_result_column(config, port, NMAP_SCAN_FIN);
-	print_result_column(config, port, NMAP_SCAN_XMAS);
-	print_result_column(config, port, NMAP_SCAN_ACK);
-	print_result_column(config, port, NMAP_SCAN_UDP);
-	printf("\n");
-}
-
-/** @brief Print the current-target scan report without modifying runtime state. */
-void	nmap_print_report(t_nmap_config *config)
-{
-	size_t	i;
-
-	if (!config)
-		return ;
-	printf("Scan report for %s (%s)\n",
-		config->target.name, config->target.ip);
-	printf("Probes: %zu total, %zu done, %zu queued, %zu outstanding\n\n",
-		config->runtime.probe_count,
-		config->runtime.done_count,
-		config->runtime.queued_count,
-		config->runtime.outstanding_count);
-	print_header(config);
+	use_color = nmap_output_color_enabled();
+	print_table_header(config->scan.show_reason);
 	i = 0;
 	while (i < config->scan.port_count)
 	{
+		nmap_output_build_port_view(config,
+			config->scan.ports[i], &view);
 		if (!config->scan.open_only
-			|| port_is_open_like(config, config->scan.ports[i]))
-			print_port(config, config->scan.ports[i]);
+			|| nmap_output_view_is_open_like(&view))
+			print_port_row(config, &view, use_color);
 		i++;
+	}
+}
+
+/**
+ * @brief Print one successfully completed target.
+ *
+ * elapsed_ms is measured by run.c. Output owns presentation only.
+ */
+void	nmap_output_print_target_report(const t_nmap_config *config,
+		uint64_t elapsed_ms, int multi_target)
+{
+	char	duration[32];
+
+	if (!config)
+		return ;
+	printf("ft_nmap scan report for %s (%s)\n\n",
+		config->target.name, config->target.ip);
+	print_result_table(config);
+	nmap_output_format_duration(elapsed_ms,
+		duration, sizeof(duration));
+	if (multi_target)
+		printf("\nTarget completed in %s\n", duration);
+	else
+		printf("\nScan completed in %s\n", duration);
+}
+
+/** Print the process-level footer for a multi-target run. */
+void	nmap_output_print_run_summary(size_t total_targets,
+		size_t completed_targets, uint64_t elapsed_ms)
+{
+	char	duration[32];
+
+	if (total_targets <= 1)
+		return ;
+	nmap_output_format_duration(elapsed_ms,
+		duration, sizeof(duration));
+	if (completed_targets == total_targets)
+		printf("\nScanned %zu targets in %s\n",
+			total_targets, duration);
+	else
+	{
+		printf("\nProcessed %zu targets in %s "
+			"(%zu completed, %zu failed)\n",
+			total_targets,
+			duration,
+			completed_targets,
+			total_targets - completed_targets);
 	}
 }

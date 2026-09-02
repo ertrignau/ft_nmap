@@ -1,10 +1,12 @@
-#!/usr/bin/env python3
+#include "output/output_internal.h"
 
-from pathlib import Path
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
-PATH = Path("srcs/output/service.c")
 
-CACHE_CODE = r'''
 /*
  * Service-name cache.
  *
@@ -155,83 +157,66 @@ static struct servent	*nmap_cached_getservbyport(int port,
 	}
 	return (NULL);
 }
-'''
 
+/** Return whether at least one TCP scan exists for this port. */
+static int	has_tcp_scan(const t_nmap_port_view *view)
+{
+	return (view->syn || view->null_scan || view->fin
+		|| view->xmas || view->ack);
+}
 
-def fail(message: str) -> None:
-    raise SystemExit(f"tot.py: {message}")
+/**
+ * @brief Lookup one conventional service name from the local services DB.
+ *
+ * nmap_cached_getservbyport() performs no network service detection. It is only the
+ * conventional (port, protocol) -> service-name mapping.
+ */
+static int	lookup_service(uint16_t port, const char *protocol,
+		char *dst, size_t dst_size)
+{
+	struct servent	*service;
 
+	service = nmap_cached_getservbyport(htons(port), protocol);
+	if (!service || !service->s_name)
+		return (0);
+	snprintf(dst, dst_size, "%s", service->s_name);
+	return (1);
+}
 
-def add_include(text: str, header: str) -> str:
-    include = f"#include <{header}>"
-    if include in text:
-        return text
+/**
+ * @brief Produce the SERVICE column for one port.
+ *
+ * TCP and UDP are looked up independently because the same numeric port can
+ * theoretically have different conventional service names per protocol.
+ */
+void	nmap_output_service_name(const t_nmap_port_view *view,
+		char *dst, size_t dst_size)
+{
+	char	tcp[NMAP_OUTPUT_SERVICE_MAX];
+	char	udp[NMAP_OUTPUT_SERVICE_MAX];
+	int		have_tcp;
+	int		have_udp;
 
-    lines = text.splitlines()
-    include_indices = [
-        i for i, line in enumerate(lines)
-        if line.startswith("#include ")
-    ]
-    if not include_indices:
-        fail(f"aucun #include trouve pour ajouter <{header}>")
-
-    index = include_indices[-1] + 1
-    lines.insert(index, include)
-    return "\n".join(lines) + "\n"
-
-
-def insert_cache(text: str) -> str:
-    if "nmap_service_cache_load" in text:
-        print("[skip] cache deja present")
-        return text
-
-    lines = text.splitlines()
-    include_indices = [
-        i for i, line in enumerate(lines)
-        if line.startswith("#include ")
-    ]
-    if not include_indices:
-        fail("aucun bloc #include trouve")
-
-    index = include_indices[-1] + 1
-
-    while index < len(lines) and lines[index].strip() == "":
-        index += 1
-
-    cache_lines = CACHE_CODE.strip().splitlines()
-    lines[index:index] = [""] + cache_lines + [""]
-
-    return "\n".join(lines) + "\n"
-
-
-def main() -> None:
-    if not PATH.exists():
-        fail(f"{PATH} introuvable")
-
-    text = PATH.read_text(encoding="utf-8")
-
-    if "getservbyport(" not in text \
-            and "nmap_cached_getservbyport(" not in text:
-        fail("aucun appel getservbyport() trouve dans service.c")
-
-    text = add_include(text, "netdb.h")
-    text = add_include(text, "stdlib.h")
-    text = add_include(text, "string.h")
-
-    if "nmap_cached_getservbyport(" not in text:
-        text = text.replace(
-            "getservbyport(",
-            "nmap_cached_getservbyport("
-        )
-        print("[patch] getservbyport -> cache")
-
-    text = insert_cache(text)
-
-    PATH.write_text(text, encoding="utf-8")
-    print("[write] srcs/output/service.c")
-    print()
-    print("Cache /etc/services installe.")
-
-
-if __name__ == "__main__":
-    main()
+	if (!view || !dst || dst_size == 0)
+		return ;
+	tcp[0] = '\0';
+	udp[0] = '\0';
+	have_tcp = 0;
+	have_udp = 0;
+	if (has_tcp_scan(view))
+		have_tcp = lookup_service(view->port, "tcp",
+				tcp, sizeof(tcp));
+	if (view->udp)
+		have_udp = lookup_service(view->port, "udp",
+				udp, sizeof(udp));
+	if (have_tcp && have_udp && strcmp(tcp, udp) == 0)
+		snprintf(dst, dst_size, "%s", tcp);
+	else if (have_tcp && have_udp)
+		snprintf(dst, dst_size, "%s|%s", tcp, udp);
+	else if (have_tcp)
+		snprintf(dst, dst_size, "%s", tcp);
+	else if (have_udp)
+		snprintf(dst, dst_size, "%s", udp);
+	else
+		snprintf(dst, dst_size, "unknown");
+}

@@ -64,6 +64,9 @@ SRCS := srcs/main.c \
 	srcs/runtime/worker.c \
 	srcs/runtime/wait.c \
 	srcs/output/report.c \
+	srcs/output/verdict.c \
+	srcs/output/format.c \
+	srcs/output/service.c \
 	srcs/parsing/pars_port.c \
 	srcs/parsing/parsing_utils.c \
 	srcs/parsing/pars_flags.c \

@@ -1,6 +1,26 @@
-
 #include "ft_nmap.h"
 #include "debug/debug.h"
+
+#include <time.h>
+
+/** Return a monotonic timestamp used only for elapsed-time reporting. */
+static uint64_t	run_now_ms(void)
+{
+	struct timespec	ts;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return (0);
+	return ((uint64_t)ts.tv_sec * 1000ULL
+		+ (uint64_t)ts.tv_nsec / 1000000ULL);
+}
+
+/** Safely subtract two monotonic timestamps. */
+static uint64_t	elapsed_ms(uint64_t start, uint64_t end)
+{
+	if (end < start)
+		return (0);
+	return (end - start);
+}
 
 /**
  * @brief Execute the main event loop for the current resolved target.
@@ -34,7 +54,6 @@ static int	run_scan_loop(t_nmap_config *config, int *exit_status)
 			*exit_status = 130;
 		return (0);
 	}
-	/* A last worker may fail while simultaneously completing the final probe. */
 	if (nmap_sender_pool_has_error(config))
 	{
 		if (exit_status)
@@ -50,8 +69,11 @@ static int	run_scan_loop(t_nmap_config *config, int *exit_status)
 static int	run_target(t_nmap_config *config, const char *target,
 		int *exit_status)
 {
-	int	success;
+	uint64_t	start_ms;
+	uint64_t	end_ms;
+	int			success;
 
+	start_ms = run_now_ms();
 	success = 0;
 	if (!nmap_prepare_target(config, target, exit_status)
 		|| !nmap_prepare_route(config, exit_status)
@@ -66,9 +88,16 @@ static int	run_target(t_nmap_config *config, const char *target,
 	DEBUG_RUNTIME(config);
 	if (!run_scan_loop(config, exit_status))
 		goto cleanup;
-	/* Workers must be joined before report/cleanup can inspect/free probes. */
+
+	/*
+	 * Freeze all runtime state before the read-only output module consumes it.
+	 */
 	nmap_stop_sender_pool(config);
-	nmap_print_report(config);
+
+	end_ms = run_now_ms();
+	nmap_output_print_target_report(config,
+		elapsed_ms(start_ms, end_ms),
+		config->targets.count > 1);
 	success = 1;
 cleanup:
 	nmap_cleanup_current_target(config);
@@ -80,8 +109,11 @@ cleanup:
  */
 int	nmap_run(t_nmap_config *config, int *exit_status)
 {
-	size_t	i;
-	int		had_error;
+	uint64_t	start_ms;
+	uint64_t	end_ms;
+	size_t		i;
+	size_t		completed;
+	int			had_error;
 
 	if (!config)
 	{
@@ -89,7 +121,9 @@ int	nmap_run(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	start_ms = run_now_ms();
 	i = 0;
+	completed = 0;
 	had_error = 0;
 	while (i < config->targets.count)
 	{
@@ -99,7 +133,10 @@ int	nmap_run(t_nmap_config *config, int *exit_status)
 				*exit_status = 130;
 			return (0);
 		}
-		if (!run_target(config, config->targets.items[i], exit_status))
+		if (run_target(config,
+				config->targets.items[i], exit_status))
+			completed++;
+		else
 		{
 			if (exit_status && *exit_status == 130)
 				return (0);
@@ -109,6 +146,13 @@ int	nmap_run(t_nmap_config *config, int *exit_status)
 		}
 		i++;
 	}
+	end_ms = run_now_ms();
+
+	nmap_output_print_run_summary(
+		config->targets.count,
+		completed,
+		elapsed_ms(start_ms, end_ms));
+
 	if (had_error && exit_status)
 		*exit_status = 1;
 	return (!had_error);
