@@ -142,6 +142,55 @@ typedef struct s_nmap_reply
 	int					has_original_tcp_seq;
 }	t_nmap_reply;
 
+
+/**
+ * @brief Result of one runtime wait operation.
+ *
+ * READY means the engine may continue its normal event-loop work.
+ * PROGRESS means stdin requested a user-visible progress snapshot.
+ * ERROR means the wait operation failed.
+ */
+typedef enum e_nmap_wait_result
+{
+	NMAP_WAIT_ERROR = 0,
+	NMAP_WAIT_READY,
+	NMAP_WAIT_PROGRESS
+}	t_nmap_wait_result;
+
+
+/**
+ * @brief Adaptive timing state for the current target.
+ *
+ * RTT estimation and UDP pacing are target-local. The configured scan values
+ * remain immutable limits while this structure contains the policy currently
+ * selected by the runtime.
+ *
+ * rto_ms is used for TCP-family retransmission deadlines. UDP keeps its longer
+ * configured timeout because silence is a valid open|filtered outcome.
+ *
+ * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
+ * probes may be sent to this target even when window capacity remains.
+ */
+typedef struct s_nmap_timing
+{
+	uint64_t	srtt_ms;
+	uint64_t	rttvar_ms;
+	uint64_t	rto_ms;
+	uint64_t	rto_min_ms;
+	uint64_t	rto_max_ms;
+	int			rtt_valid;
+
+	size_t		udp_window;
+	size_t		udp_window_min;
+	size_t		udp_window_max;
+
+	uint64_t	udp_send_gap_ms;
+	uint64_t	udp_send_gap_max_ms;
+
+	size_t		udp_clean_replies;
+	size_t		udp_retry_recoveries;
+}	t_nmap_timing;
+
 /**
  * @brief Runtime state for the current target.
  *
@@ -162,6 +211,8 @@ typedef struct s_nmap_runtime
 
 	uint16_t		source_port_base;
 	uint64_t		last_udp_sent_ms;
+
+	t_nmap_timing	timing;
 
 	pthread_mutex_t	lock;
 	int				lock_initialized;

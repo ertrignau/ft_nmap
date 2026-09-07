@@ -1,4 +1,5 @@
 #include "config.h"
+#include "runtime/runtime_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -185,6 +186,7 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 	if (pthread_mutex_init(&config->runtime.lock, NULL) != 0)
 		goto fail;
 	config->runtime.lock_initialized = 1;
+	nmap_timing_init(config);
 	scan_count = count_scan_types(config->scan.scan_mask);
 	if (config->scan.port_count == 0 || scan_count == 0)
 		goto partial_fail;

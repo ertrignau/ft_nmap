@@ -165,6 +165,28 @@ void	nmap_output_format_duration(uint64_t elapsed_ms,
 		(unsigned long long)(elapsed_ms % 1000ULL));
 }
 
+
+/** Format a duration as H:MM:SS for progress reporting. */
+void	nmap_output_format_hms(uint64_t elapsed_ms,
+		char *dst, size_t dst_size)
+{
+	uint64_t	total_seconds;
+	uint64_t	hours;
+	uint64_t	minutes;
+	uint64_t	seconds;
+
+	if (!dst || dst_size == 0)
+		return ;
+	total_seconds = elapsed_ms / 1000ULL;
+	hours = total_seconds / 3600ULL;
+	minutes = (total_seconds % 3600ULL) / 60ULL;
+	seconds = total_seconds % 60ULL;
+	snprintf(dst, dst_size, "%llu:%02llu:%02llu",
+		(unsigned long long)hours,
+		(unsigned long long)minutes,
+		(unsigned long long)seconds);
+}
+
 /**
  * @brief Return whether ANSI colors are suitable for stdout.
  *

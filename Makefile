@@ -55,6 +55,7 @@ SRCS := srcs/main.c \
 	srcs/packet/link_offset.c \
 	srcs/packet/parse.c \
 	srcs/runtime/common.c \
+	srcs/runtime/timing.c \
 	srcs/runtime/init.c \
 	srcs/runtime/match.c \
 	srcs/runtime/classify.c \

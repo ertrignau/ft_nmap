@@ -1,25 +1,9 @@
-/* NMAP_OUTPUT_STATUS_V1 */
-
-#include "config.h"
 #include "output/output_internal.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
-static uint64_t	g_scan_started_ms;
-
-/** Return monotonic time in milliseconds. */
-static uint64_t	output_now_ms(void)
-{
-	struct timespec	ts;
-
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-		return (0);
-	return ((uint64_t)ts.tv_sec * 1000ULL
-		+ (uint64_t)ts.tv_nsec / 1000000ULL);
-}
 
 /** Return whether the selected ports form one continuous range. */
 static int	ports_are_contiguous(const t_nmap_config *config)
@@ -125,29 +109,7 @@ static void	print_timeouts(const t_nmap_config *config)
 			config->scan.tcp_timeout_ms);
 }
 
-/** Format milliseconds as H:MM:SS. */
-static void	format_duration(uint64_t ms, char *buffer, size_t size)
-{
-	uint64_t	total;
-	uint64_t	hours;
-	uint64_t	minutes;
-	uint64_t	seconds;
-
-	total = ms / 1000ULL;
-	hours = total / 3600ULL;
-	minutes = (total % 3600ULL) / 60ULL;
-	seconds = total % 60ULL;
-	snprintf(buffer, size, "%llu:%02llu:%02llu",
-		(unsigned long long)hours,
-		(unsigned long long)minutes,
-		(unsigned long long)seconds);
-}
-
-/**
- * @brief Print Estimated Time of Completion.
- *
- * ETC means Estimated Time of Completion.
- */
+/** Print Estimated Time of Completion. */
 static void	print_etc(uint64_t remaining_ms)
 {
 	time_t		finish;
@@ -162,107 +124,64 @@ static void	print_etc(uint64_t remaining_ms)
 	printf("%s", buffer);
 }
 
-/** Print effective configuration and start progress timing. */
+/** Print effective configuration before one target scan. */
 void	nmap_output_begin_scan(const t_nmap_config *config)
 {
 	if (!config)
 		return ;
-	g_scan_started_ms = output_now_ms();
-
 	printf("ft_nmap scan configuration\n");
 	if (config->target.name
 		&& strcmp(config->target.name, config->target.ip) != 0)
 		printf("Target   : %s (%s)\n",
-			config->target.name,
-			config->target.ip);
+			config->target.name, config->target.ip);
 	else
 		printf("Target   : %s\n", config->target.ip);
-
 	print_ports(config);
 	print_scans(config);
-
 	printf("Threads  : %d\n", config->scan.thread_count);
 	printf("Retries  : %d\n", config->scan.retries);
 	print_timeouts(config);
 	printf("Window   : %d\n", config->scan.window_size);
-
 	if (isatty(STDIN_FILENO))
 		printf("\nStarting scan... (press Enter for progress)\n\n");
 	else
 		printf("\nStarting scan...\n\n");
-
 	fflush(stdout);
 }
 
-/** Print one coherent snapshot of the current runtime counters. */
-void	nmap_output_print_progress(t_nmap_config *config)
+/** Print one immutable progress snapshot. */
+void	nmap_output_print_progress(const t_nmap_progress *progress)
 {
-	size_t		total;
-	size_t		done;
-	size_t		queued;
-	size_t		outstanding;
-	size_t		pending;
-	uint64_t	now;
-	uint64_t	elapsed;
 	uint64_t	remaining;
 	double		percent;
-	char		elapsed_text[32];
+	char		elapsed[32];
 	char		remaining_text[32];
 
-	if (!config)
+	if (!progress)
 		return ;
-
-	pthread_mutex_lock(&config->runtime.lock);
-	total = config->runtime.probe_count;
-	done = config->runtime.done_count;
-	queued = config->runtime.queued_count;
-	outstanding = config->runtime.outstanding_count;
-	pthread_mutex_unlock(&config->runtime.lock);
-
-	pending = 0;
-	if (total >= done + queued + outstanding)
-		pending = total - done - queued - outstanding;
-
-	now = output_now_ms();
-	elapsed = 0;
-	if (g_scan_started_ms != 0 && now >= g_scan_started_ms)
-		elapsed = now - g_scan_started_ms;
-
 	percent = 0.0;
-	if (total != 0)
-		percent = (double)done * 100.0 / (double)total;
-
-	format_duration(elapsed,
-		elapsed_text, sizeof(elapsed_text));
-
-	printf("Stats: %s elapsed; "
-		"%zu/%zu probes completed (%.1f%%); "
+	if (progress->total != 0)
+		percent = (double)progress->done
+			* 100.0 / (double)progress->total;
+	nmap_output_format_hms(progress->elapsed_ms,
+		elapsed, sizeof(elapsed));
+	printf("Stats: %s elapsed; %zu/%zu probes completed (%.1f%%); "
 		"%zu outstanding; %zu queued; %zu pending\n",
-		elapsed_text,
-		done,
-		total,
-		percent,
-		outstanding,
-		queued,
-		pending);
-
-	if (done == 0 || done >= total)
+		elapsed, progress->done, progress->total, percent,
+		progress->outstanding, progress->queued, progress->pending);
+	if (progress->done == 0 || progress->done >= progress->total)
 	{
 		printf("Timing: About %.1f%% done\n", percent);
 		fflush(stdout);
 		return ;
 	}
-
-	remaining = (uint64_t)(((long double)elapsed
-			* (long double)(total - done))
-			/ (long double)done);
-
-	format_duration(remaining,
+	remaining = (uint64_t)(((long double)progress->elapsed_ms
+			* (long double)(progress->total - progress->done))
+			/ (long double)progress->done);
+	nmap_output_format_hms(remaining,
 		remaining_text, sizeof(remaining_text));
-
 	printf("Timing: About %.1f%% done; ETC: ", percent);
 	print_etc(remaining);
 	printf(" (%s remaining)\n", remaining_text);
-
 	fflush(stdout);
 }

@@ -3,31 +3,20 @@
 #include "debug/debug.h"
 #include "runtime/runtime_internal.h"
 
-/** Return the timeout policy applying to one probe family. */
-static int	probe_timeout_ms(const t_nmap_config *config,
-		const t_probe *probe)
-{
-	if (nmap_probe_is_udp(probe))
-		return (config->scan.udp_timeout_ms);
-	return (config->scan.tcp_timeout_ms);
-}
-
 /** Check whether one OUTSTANDING probe reached its current deadline. */
 static int	probe_expired(const t_nmap_config *config,
 		const t_probe *probe, uint64_t now_ms)
 {
-	int			timeout_ms;
+	uint64_t	timeout_ms;
 	uint64_t	elapsed;
 
 	if (probe->state != PROBE_OUTSTANDING)
 		return (0);
-	timeout_ms = probe_timeout_ms(config, probe);
-	if (timeout_ms <= 0)
+	timeout_ms = nmap_timing_probe_timeout_ms(config, probe);
+	if (timeout_ms == 0)
 		return (1);
-	if (now_ms <= probe->sent_at_ms)
-		return (0);
 	elapsed = now_ms - probe->sent_at_ms;
-	return (elapsed >= (uint64_t)timeout_ms);
+	return (elapsed >= timeout_ms);
 }
 
 /** Remove one probe from outstanding accounting while runtime.lock is held. */

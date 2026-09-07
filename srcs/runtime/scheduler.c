@@ -25,13 +25,13 @@ static int	udp_gap_allows_locked(const t_nmap_config *config,
 {
 	uint64_t	elapsed;
 
-	if (config->scan.udp_send_gap_ms <= 0
+	if (config->runtime.timing.udp_send_gap_ms <= 0
 		|| config->runtime.last_udp_sent_ms == 0)
 		return (1);
 	if (now_ms <= config->runtime.last_udp_sent_ms)
 		return (0);
 	elapsed = now_ms - config->runtime.last_udp_sent_ms;
-	return (elapsed >= (uint64_t)config->scan.udp_send_gap_ms);
+	return (elapsed >= (uint64_t)config->runtime.timing.udp_send_gap_ms);
 }
 
 /**
@@ -51,7 +51,7 @@ static int	probe_can_be_reserved_locked(const t_nmap_config *config,
 	if (!nmap_probe_is_udp(probe))
 		return (1);
 	if (udp_active_count_locked(config)
-		>= (size_t)config->scan.udp_window_size)
+		>= (size_t)config->runtime.timing.udp_window)
 		return (0);
 	if (config->runtime.udp_queued_count > 0)
 		return (0);

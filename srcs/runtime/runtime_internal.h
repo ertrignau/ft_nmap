@@ -48,4 +48,15 @@ void			nmap_mark_probe_done(t_nmap_config *config,
 					t_probe *probe, t_scan_result result,
 					t_scan_reason reason, const char *debug_reason);
 
+
+/* adaptive target timing */
+void			nmap_timing_init(t_nmap_config *config);
+uint64_t		nmap_timing_probe_timeout_ms(
+					const t_nmap_config *config,
+					const t_probe *probe);
+void			nmap_timing_note_reply_locked(
+					t_nmap_config *config,
+					const t_probe *probe,
+					uint64_t now_ms);
+
 #endif

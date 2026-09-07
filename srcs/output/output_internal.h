@@ -1,7 +1,7 @@
 #ifndef NMAP_OUTPUT_INTERNAL_H
 # define NMAP_OUTPUT_INTERNAL_H
 
-# include "config.h"
+# include "output/output.h"
 
 # include <stddef.h>
 # include <stdint.h>
@@ -63,6 +63,8 @@ void		nmap_output_reason_name(const t_probe *probe,
 const char	*nmap_output_verdict_name(t_nmap_port_verdict verdict);
 void		nmap_output_format_duration(uint64_t elapsed_ms,
 				char *dst, size_t dst_size);
+void		nmap_output_format_hms(uint64_t elapsed_ms,
+				char *dst, size_t dst_size);
 
 /* colors */
 int			nmap_output_color_enabled(void);
@@ -73,11 +75,5 @@ const char	*nmap_output_color_reset(void);
 /* service name */
 void		nmap_output_service_name(const t_nmap_port_view *view,
 				char *dst, size_t dst_size);
-
-/** Print effective scan configuration before one target scan. */
-void	nmap_output_begin_scan(const t_nmap_config *config);
-
-/** Print one user-requested runtime progress snapshot. */
-void	nmap_output_print_progress(t_nmap_config *config);
 
 #endif

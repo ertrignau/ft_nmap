@@ -177,6 +177,10 @@ void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
 		pthread_mutex_unlock(&config->runtime.lock);
 		return ;
 	}
+	if (reason.kind == SCAN_REASON_TCP
+		|| reason.kind == SCAN_REASON_UDP_REPLY
+		|| reason.kind == SCAN_REASON_ICMP)
+		nmap_timing_note_reply_locked(config, probe, nmap_now_ms());
 	old_state = probe->state;
 	if (old_state == PROBE_QUEUED)
 		remove_queued_locked(config, probe);
