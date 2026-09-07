@@ -1,236 +1,331 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import sys
 
-PATH = Path("srcs/output/service.c")
 
-CACHE_CODE = r'''
-/*
- * Service-name cache.
+REPORT = Path("srcs/output/report.c")
+
+
+REPORT_SOURCE = r'''#include "output/output_internal.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/**
+ * @brief Return whether one scan family is enabled.
+ */
+static int	scan_enabled(const t_nmap_config *config, uint32_t scan)
+{
+	return ((config->scan.scan_mask & scan) != 0);
+}
+
+/**
+ * @brief Print one fixed-width token and color only its visible contents.
  *
- * getservbyport() may reopen and rescan /etc/services for every lookup.
- * The report can perform hundreds or thousands of lookups, so load the
- * service database once and resolve all later requests from memory.
+ * Padding remains outside the ANSI sequence so redirected/plain rendering and
+ * visual column widths stay predictable.
  */
-#define NMAP_SERVICE_CACHE_CHUNK 64
-#define NMAP_SERVICE_CACHE_NAME_MAX 64
-
-typedef struct s_nmap_service_cache_entry
+static void	print_colored_token(const char *token, const char *color,
+		int width, int use_color)
 {
-	int		port;
-	char	proto[4];
-	char	name[NMAP_SERVICE_CACHE_NAME_MAX];
-}	t_nmap_service_cache_entry;
+	if (use_color && color && color[0] != '\0')
+		printf("%s%s%s%-*s", color, token,
+			nmap_output_color_reset(),
+			width - (int)strlen(token), "");
+	else
+		printf("%-*s", width, token);
+}
 
-static t_nmap_service_cache_entry	*g_service_cache;
-static size_t						g_service_cache_count;
-static size_t						g_service_cache_capacity;
-static int							g_service_cache_loaded;
-
-/**
- * @brief Release the process-wide service-name cache.
- */
-static void	nmap_service_cache_cleanup(void)
+/** Print one scan state column. */
+static void	print_state_cell(const t_probe *probe, int use_color)
 {
-	free(g_service_cache);
-	g_service_cache = NULL;
-	g_service_cache_count = 0;
-	g_service_cache_capacity = 0;
-	g_service_cache_loaded = 0;
+	const char	*state;
+
+	state = nmap_output_state_name(probe);
+	print_colored_token(state, nmap_output_state_color(probe),
+		NMAP_OUTPUT_STATE_WIDTH,
+		use_color && probe != NULL);
+}
+
+/** Print the dedicated reason column associated with one scan. */
+static void	print_reason_cell(const t_probe *probe)
+{
+	char	reason[64];
+
+	nmap_output_reason_name(probe, reason, sizeof(reason));
+	printf("%-*s", NMAP_OUTPUT_REASON_WIDTH, reason);
 }
 
 /**
- * @brief Grow the service-name cache when necessary.
- */
-static int	nmap_service_cache_reserve(void)
-{
-	t_nmap_service_cache_entry	*entries;
-	size_t						capacity;
-
-	if (g_service_cache_count < g_service_cache_capacity)
-		return (1);
-	capacity = g_service_cache_capacity + NMAP_SERVICE_CACHE_CHUNK;
-	entries = realloc(g_service_cache,
-			capacity * sizeof(*g_service_cache));
-	if (!entries)
-		return (0);
-	g_service_cache = entries;
-	g_service_cache_capacity = capacity;
-	return (1);
-}
-
-/**
- * @brief Store one service database entry in the in-memory cache.
- */
-static int	nmap_service_cache_add(const struct servent *service)
-{
-	t_nmap_service_cache_entry	*entry;
-
-	if (!service || !service->s_name || !service->s_proto)
-		return (1);
-	if (strcmp(service->s_proto, "tcp") != 0
-		&& strcmp(service->s_proto, "udp") != 0)
-		return (1);
-	if (!nmap_service_cache_reserve())
-		return (0);
-	entry = &g_service_cache[g_service_cache_count];
-	entry->port = service->s_port;
-	strncpy(entry->proto, service->s_proto, sizeof(entry->proto) - 1);
-	entry->proto[sizeof(entry->proto) - 1] = '\0';
-	strncpy(entry->name, service->s_name, sizeof(entry->name) - 1);
-	entry->name[sizeof(entry->name) - 1] = '\0';
-	g_service_cache_count++;
-	return (1);
-}
-
-/**
- * @brief Load the system service database exactly once.
+ * @brief Print one scan result.
  *
- * setservent(1) asks libc to keep the service database open while getservent()
- * walks it. All TCP/UDP names are copied into owned memory, then the database
- * is closed.
+ * With --reason, the state and its reason deliberately occupy two independent
+ * table columns.
  */
-static int	nmap_service_cache_load(void)
+static void	print_scan_cell(const t_probe *probe, int show_reason,
+		int use_color)
 {
-	struct servent	*service;
+	print_state_cell(probe, use_color);
+	if (show_reason)
+		print_reason_cell(probe);
+}
 
-	if (g_service_cache_loaded)
-		return (1);
-	setservent(1);
-	service = getservent();
-	while (service)
+/** Print the state/reason header pair for one scan family. */
+static void	print_scan_header(const char *scan_name, int show_reason)
+{
+	char	reason_header[32];
+
+	printf("%-*s", NMAP_OUTPUT_STATE_WIDTH, scan_name);
+	if (show_reason)
 	{
-		if (!nmap_service_cache_add(service))
-		{
-			endservent();
-			nmap_service_cache_cleanup();
-			return (0);
-		}
-		service = getservent();
+		snprintf(reason_header, sizeof(reason_header),
+			"%s-REASON", scan_name);
+		printf("%-*s", NMAP_OUTPUT_REASON_WIDTH,
+			reason_header);
 	}
-	endservent();
-	g_service_cache_loaded = 1;
-	if (atexit(nmap_service_cache_cleanup) != 0)
-	{
-		nmap_service_cache_cleanup();
-		return (0);
-	}
-	return (1);
+}
+
+/** Print only the columns corresponding to enabled scan families. */
+static void	print_table_header(const t_nmap_config *config)
+{
+	printf("%-7s%-*s", "PORT",
+		NMAP_OUTPUT_SERVICE_WIDTH, "SERVICE");
+	if (scan_enabled(config, NMAP_SCAN_SYN))
+		print_scan_header("SYN", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_NULL))
+		print_scan_header("NUL", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_FIN))
+		print_scan_header("FIN", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_XMAS))
+		print_scan_header("XMS", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_ACK))
+		print_scan_header("ACK", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_UDP))
+		print_scan_header("UDP", config->scan.show_reason);
+	printf("%s\n", "VERDICT");
+}
+
+/** Print one colored verdict token without adding padding. */
+static void	print_inline_token(const char *token, const char *color,
+		int use_color)
+{
+	if (use_color && color && color[0] != '\0')
+		printf("%s%s%s", color, token,
+			nmap_output_color_reset());
+	else
+		printf("%s", token);
 }
 
 /**
- * @brief Cached equivalent of getservbyport() for report generation.
+ * @brief Print TCP and UDP conclusions independently.
  *
- * @param port Port in network byte order, matching getservbyport().
- * @param proto "tcp" or "udp".
- *
- * @return Pointer to temporary servent-compatible data, or NULL.
- *
- * @note The returned object behaves like libc's getservbyport() result:
- *       subsequent calls may overwrite it. Output generation is single
- *       threaded, so this is sufficient and keeps the existing service.c API.
+ * Each protocol keeps its own color. For example, T:CLS U:OPN must not become
+ * globally green because TCP/53 and UDP/53 are different endpoints.
  */
-static struct servent	*nmap_cached_getservbyport(int port,
-		const char *proto)
+static void	print_verdict_cell(const t_nmap_port_view *view,
+		int use_color)
 {
-	static struct servent	result;
-	static char				*aliases[] = {NULL};
-	size_t					i;
+	const char	*tcp;
+	const char	*udp;
+	int			visible_len;
 
-	if (!proto || !nmap_service_cache_load())
-		return (NULL);
+	tcp = nmap_output_verdict_name(view->tcp_verdict);
+	udp = nmap_output_verdict_name(view->udp_verdict);
+	visible_len = 0;
+	if (view->tcp_verdict != NMAP_VERDICT_NONE
+		&& view->udp_verdict != NMAP_VERDICT_NONE)
+	{
+		printf("T:");
+		print_inline_token(tcp,
+			nmap_output_verdict_color(view->tcp_verdict),
+			use_color);
+		printf(" U:");
+		print_inline_token(udp,
+			nmap_output_verdict_color(view->udp_verdict),
+			use_color);
+		visible_len = 5 + (int)strlen(tcp)
+			+ (int)strlen(udp);
+	}
+	else if (view->tcp_verdict != NMAP_VERDICT_NONE)
+	{
+		print_inline_token(tcp,
+			nmap_output_verdict_color(view->tcp_verdict),
+			use_color);
+		visible_len = (int)strlen(tcp);
+	}
+	else if (view->udp_verdict != NMAP_VERDICT_NONE)
+	{
+		print_inline_token(udp,
+			nmap_output_verdict_color(view->udp_verdict),
+			use_color);
+		visible_len = (int)strlen(udp);
+	}
+	else
+	{
+		printf("-");
+		visible_len = 1;
+	}
+	if (visible_len < NMAP_OUTPUT_VERDICT_WIDTH)
+		printf("%*s",
+			NMAP_OUTPUT_VERDICT_WIDTH - visible_len, "");
+}
+
+/** Print one complete port row. */
+static void	print_port_row(const t_nmap_config *config,
+		const t_nmap_port_view *view, int use_color)
+{
+	char	service[NMAP_OUTPUT_SERVICE_MAX];
+
+	nmap_output_service_name(view, service, sizeof(service));
+	printf("%-7u%-*.*s",
+		view->port,
+		NMAP_OUTPUT_SERVICE_WIDTH,
+		NMAP_OUTPUT_SERVICE_WIDTH - 1,
+		service);
+	if (scan_enabled(config, NMAP_SCAN_SYN))
+		print_scan_cell(view->syn,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_NULL))
+		print_scan_cell(view->null_scan,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_FIN))
+		print_scan_cell(view->fin,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_XMAS))
+		print_scan_cell(view->xmas,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_ACK))
+		print_scan_cell(view->ack,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_UDP))
+		print_scan_cell(view->udp,
+			config->scan.show_reason, use_color);
+	print_verdict_cell(view, use_color);
+	printf("\n");
+}
+
+/** Print every port visible under the current --open policy. */
+static void	print_result_table(const t_nmap_config *config)
+{
+	t_nmap_port_view	view;
+	size_t				i;
+	int					use_color;
+
+	use_color = nmap_output_color_enabled();
+	print_table_header(config);
 	i = 0;
-	while (i < g_service_cache_count)
+	while (i < config->scan.port_count)
 	{
-		if (g_service_cache[i].port == port
-			&& strcmp(g_service_cache[i].proto, proto) == 0)
-		{
-			result.s_name = g_service_cache[i].name;
-			result.s_aliases = aliases;
-			result.s_port = g_service_cache[i].port;
-			result.s_proto = g_service_cache[i].proto;
-			return (&result);
-		}
+		nmap_output_build_port_view(config,
+			config->scan.ports[i], &view);
+		if (!config->scan.open_only
+			|| nmap_output_view_is_open_like(&view))
+			print_port_row(config, &view, use_color);
 		i++;
 	}
-	return (NULL);
+}
+
+/** Print the compact report-state legend. */
+static void	print_legend(void)
+{
+	printf("\n");
+	printf("Legend: "
+		"OPN=open  "
+		"CLS=closed  "
+		"FLT=filtered  "
+		"UNF=unfiltered  "
+		"O|F=open|filtered  "
+		"MIX=mixed  "
+		"ERR=error\n");
+}
+
+/**
+ * @brief Print one successfully completed target.
+ *
+ * elapsed_ms is measured by run.c. Output owns presentation only.
+ */
+void	nmap_output_print_target_report(const t_nmap_config *config,
+		uint64_t elapsed_ms, int multi_target)
+{
+	char	duration[32];
+
+	if (!config)
+		return ;
+	printf("ft_nmap scan report for %s (%s)\n\n",
+		config->target.name, config->target.ip);
+	print_result_table(config);
+	print_legend();
+	nmap_output_format_duration(elapsed_ms,
+		duration, sizeof(duration));
+	if (multi_target)
+		printf("\nTarget completed in %s\n", duration);
+	else
+		printf("\nScan completed in %s\n", duration);
+}
+
+/** Print the process-level footer for a multi-target run. */
+void	nmap_output_print_run_summary(size_t total_targets,
+		size_t completed_targets, uint64_t elapsed_ms)
+{
+	char	duration[32];
+
+	if (total_targets <= 1)
+		return ;
+	nmap_output_format_duration(elapsed_ms,
+		duration, sizeof(duration));
+	if (completed_targets == total_targets)
+		printf("\nScanned %zu targets in %s\n",
+			total_targets, duration);
+	else
+	{
+		printf("\nProcessed %zu targets in %s "
+			"(%zu completed, %zu failed)\n",
+			total_targets,
+			duration,
+			completed_targets,
+			total_targets - completed_targets);
+	}
 }
 '''
 
 
-def fail(message: str) -> None:
-    raise SystemExit(f"tot.py: {message}")
-
-
-def add_include(text: str, header: str) -> str:
-    include = f"#include <{header}>"
-    if include in text:
-        return text
-
-    lines = text.splitlines()
-    include_indices = [
-        i for i, line in enumerate(lines)
-        if line.startswith("#include ")
-    ]
-    if not include_indices:
-        fail(f"aucun #include trouve pour ajouter <{header}>")
-
-    index = include_indices[-1] + 1
-    lines.insert(index, include)
-    return "\n".join(lines) + "\n"
-
-
-def insert_cache(text: str) -> str:
-    if "nmap_service_cache_load" in text:
-        print("[skip] cache deja present")
-        return text
-
-    lines = text.splitlines()
-    include_indices = [
-        i for i, line in enumerate(lines)
-        if line.startswith("#include ")
-    ]
-    if not include_indices:
-        fail("aucun bloc #include trouve")
-
-    index = include_indices[-1] + 1
-
-    while index < len(lines) and lines[index].strip() == "":
-        index += 1
-
-    cache_lines = CACHE_CODE.strip().splitlines()
-    lines[index:index] = [""] + cache_lines + [""]
-
-    return "\n".join(lines) + "\n"
-
-
-def main() -> None:
-    if not PATH.exists():
-        fail(f"{PATH} introuvable")
-
-    text = PATH.read_text(encoding="utf-8")
-
-    if "getservbyport(" not in text \
-            and "nmap_cached_getservbyport(" not in text:
-        fail("aucun appel getservbyport() trouve dans service.c")
-
-    text = add_include(text, "netdb.h")
-    text = add_include(text, "stdlib.h")
-    text = add_include(text, "string.h")
-
-    if "nmap_cached_getservbyport(" not in text:
-        text = text.replace(
-            "getservbyport(",
-            "nmap_cached_getservbyport("
+def main():
+    if not REPORT.exists():
+        print(
+            f"tot.py: {REPORT} introuvable",
+            file=sys.stderr,
         )
-        print("[patch] getservbyport -> cache")
+        raise SystemExit(1)
 
-    text = insert_cache(text)
+    old = REPORT.read_text(encoding="utf-8")
 
-    PATH.write_text(text, encoding="utf-8")
-    print("[write] srcs/output/service.c")
+    required = [
+        "nmap_output_print_target_report",
+        "nmap_output_build_port_view",
+        "nmap_output_service_name",
+    ]
+
+    for token in required:
+        if token not in old:
+            print(
+                f"tot.py: structure inattendue: {token} absent",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+    REPORT.write_text(
+        REPORT_SOURCE,
+        encoding="utf-8",
+    )
+
+    print("[write] srcs/output/report.c")
     print()
-    print("Cache /etc/services installe.")
+    print("Reparation appliquee:")
+    print("  - config passe correctement au header")
+    print("  - verdict restaure")
+    print("  - SYN/NUL/FIN/XMS/ACK/UDP conditionnels")
+    print("  - legende conservee")
 
 
 if __name__ == "__main__":

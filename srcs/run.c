@@ -2,6 +2,7 @@
 #include "debug/debug.h"
 
 #include <time.h>
+#include "output/output_internal.h"
 
 /** Return a monotonic timestamp used only for elapsed-time reporting. */
 static uint64_t	run_now_ms(void)
@@ -86,6 +87,7 @@ static int	run_target(t_nmap_config *config, const char *target,
 	DEBUG_SOCKET(config);
 	DEBUG_PCAP(config);
 	DEBUG_RUNTIME(config);
+	nmap_output_begin_scan(config);
 	if (!run_scan_loop(config, exit_status))
 		goto cleanup;
 

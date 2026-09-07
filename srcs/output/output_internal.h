@@ -74,4 +74,10 @@ const char	*nmap_output_color_reset(void);
 void		nmap_output_service_name(const t_nmap_port_view *view,
 				char *dst, size_t dst_size);
 
+/** Print effective scan configuration before one target scan. */
+void	nmap_output_begin_scan(const t_nmap_config *config);
+
+/** Print one user-requested runtime progress snapshot. */
+void	nmap_output_print_progress(t_nmap_config *config);
+
 #endif

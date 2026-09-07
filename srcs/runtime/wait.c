@@ -8,6 +8,8 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <time.h>
+#include "output/output_internal.h"
+#include <unistd.h>
 
 /** Return current monotonic time in microseconds for profiling/select. */
 static uint64_t	now_us(void)
@@ -139,12 +141,17 @@ static void	set_timeval(uint64_t ms, struct timeval *timeout)
  */
 int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 {
+	static int		stdin_available = 1;
 	fd_set			readfds;
 	struct timeval	timeout;
 	uint64_t		wait_ms;
 	uint64_t		before_us;
 	uint64_t		after_us;
 	int				ret;
+	int			max_fd;
+	int			watch_stdin;
+	char		input[64];
+	ssize_t		input_size;
 
 	if (!config || config->capture.fd < 0)
 	{
@@ -156,8 +163,16 @@ int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 		return (1);
 	FD_ZERO(&readfds);
 	FD_SET(config->capture.fd, &readfds);
+	max_fd = config->capture.fd;
+	watch_stdin = (stdin_available && isatty(STDIN_FILENO));
+	if (watch_stdin)
+	{
+		FD_SET(STDIN_FILENO, &readfds);
+		if (STDIN_FILENO > max_fd)
+			max_fd = STDIN_FILENO;
+	}
 	set_timeval(wait_ms, &timeout);
-	ret = select(config->capture.fd + 1,
+	ret = select(max_fd + 1,
 			&readfds, NULL, NULL, &timeout);
 	after_us = now_us();
 	PROF_ADD_VALUE(NMAP_PROF_SELECT_REQUESTED, wait_ms * 1000ULL);
@@ -171,5 +186,15 @@ int	nmap_runtime_wait(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
+	if (ret > 0 && watch_stdin
+		&& FD_ISSET(STDIN_FILENO, &readfds))
+	{
+		input_size = read(STDIN_FILENO, input, sizeof(input));
+		if (input_size > 0)
+			nmap_output_print_progress(config);
+		else
+			stdin_available = 0;
+	}
+
 	return (1);
 }

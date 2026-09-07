@@ -67,6 +67,7 @@ SRCS := srcs/main.c \
 	srcs/output/verdict.c \
 	srcs/output/format.c \
 	srcs/output/service.c \
+	srcs/output/status.c \
 	srcs/parsing/pars_port.c \
 	srcs/parsing/parsing_utils.c \
 	srcs/parsing/pars_flags.c \

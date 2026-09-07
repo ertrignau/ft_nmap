@@ -4,6 +4,14 @@
 #include <string.h>
 
 /**
+ * @brief Return whether one scan family is enabled.
+ */
+static int	scan_enabled(const t_nmap_config *config, uint32_t scan)
+{
+	return ((config->scan.scan_mask & scan) != 0);
+}
+
+/**
  * @brief Print one fixed-width token and color only its visible contents.
  *
  * Padding remains outside the ANSI sequence so redirected/plain rendering and
@@ -69,17 +77,23 @@ static void	print_scan_header(const char *scan_name, int show_reason)
 	}
 }
 
-/** Print the stable table header. */
-static void	print_table_header(int show_reason)
+/** Print only the columns corresponding to enabled scan families. */
+static void	print_table_header(const t_nmap_config *config)
 {
 	printf("%-7s%-*s", "PORT",
 		NMAP_OUTPUT_SERVICE_WIDTH, "SERVICE");
-	print_scan_header("SYN", show_reason);
-	print_scan_header("NUL", show_reason);
-	print_scan_header("FIN", show_reason);
-	print_scan_header("XMS", show_reason);
-	print_scan_header("ACK", show_reason);
-	print_scan_header("UDP", show_reason);
+	if (scan_enabled(config, NMAP_SCAN_SYN))
+		print_scan_header("SYN", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_NULL))
+		print_scan_header("NUL", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_FIN))
+		print_scan_header("FIN", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_XMAS))
+		print_scan_header("XMS", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_ACK))
+		print_scan_header("ACK", config->scan.show_reason);
+	if (scan_enabled(config, NMAP_SCAN_UDP))
+		print_scan_header("UDP", config->scan.show_reason);
 	printf("%s\n", "VERDICT");
 }
 
@@ -160,18 +174,24 @@ static void	print_port_row(const t_nmap_config *config,
 		NMAP_OUTPUT_SERVICE_WIDTH,
 		NMAP_OUTPUT_SERVICE_WIDTH - 1,
 		service);
-	print_scan_cell(view->syn,
-		config->scan.show_reason, use_color);
-	print_scan_cell(view->null_scan,
-		config->scan.show_reason, use_color);
-	print_scan_cell(view->fin,
-		config->scan.show_reason, use_color);
-	print_scan_cell(view->xmas,
-		config->scan.show_reason, use_color);
-	print_scan_cell(view->ack,
-		config->scan.show_reason, use_color);
-	print_scan_cell(view->udp,
-		config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_SYN))
+		print_scan_cell(view->syn,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_NULL))
+		print_scan_cell(view->null_scan,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_FIN))
+		print_scan_cell(view->fin,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_XMAS))
+		print_scan_cell(view->xmas,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_ACK))
+		print_scan_cell(view->ack,
+			config->scan.show_reason, use_color);
+	if (scan_enabled(config, NMAP_SCAN_UDP))
+		print_scan_cell(view->udp,
+			config->scan.show_reason, use_color);
 	print_verdict_cell(view, use_color);
 	printf("\n");
 }
@@ -184,7 +204,7 @@ static void	print_result_table(const t_nmap_config *config)
 	int					use_color;
 
 	use_color = nmap_output_color_enabled();
-	print_table_header(config->scan.show_reason);
+	print_table_header(config);
 	i = 0;
 	while (i < config->scan.port_count)
 	{
@@ -195,6 +215,20 @@ static void	print_result_table(const t_nmap_config *config)
 			print_port_row(config, &view, use_color);
 		i++;
 	}
+}
+
+/** Print the compact report-state legend. */
+static void	print_legend(void)
+{
+	printf("\n");
+	printf("Legend: "
+		"OPN=open  "
+		"CLS=closed  "
+		"FLT=filtered  "
+		"UNF=unfiltered  "
+		"O|F=open|filtered  "
+		"MIX=mixed  "
+		"ERR=error\n");
 }
 
 /**
@@ -212,6 +246,7 @@ void	nmap_output_print_target_report(const t_nmap_config *config,
 	printf("ft_nmap scan report for %s (%s)\n\n",
 		config->target.name, config->target.ip);
 	print_result_table(config);
+	print_legend();
 	nmap_output_format_duration(elapsed_ms,
 		duration, sizeof(duration));
 	if (multi_target)
