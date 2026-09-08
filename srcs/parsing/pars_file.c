@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include "ft_nmap.h"
+#include <stdio.h>
 
 int	parse_file(t_nmap_config *config, int argc, char **argv, int *i)
 {

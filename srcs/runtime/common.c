@@ -77,6 +77,37 @@ static void	remove_queued_locked(t_nmap_config *config, const t_probe *probe)
 		config->runtime.udp_queued_count--;
 }
 
+/** Remove one BENCHED probe from bench accounting while runtime.lock is held. */
+static void	remove_benched_locked(t_nmap_config *config)
+{
+	if (config->runtime.benched_count > 0)
+		config->runtime.benched_count--;
+}
+
+/**
+ * @brief Release every UDP probe waiting on the next justified retry level.
+ *
+ * Retry permission grows exactly one level at a time. Therefore every probe
+ * currently BENCHED was stopped at the previously allowed level and becomes
+ * schedulable when nmap_timing_note_reply_locked() reports one promotion.
+ */
+static void	release_benched_locked(t_nmap_config *config)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_BENCHED)
+		{
+			config->runtime.probes[i].state = PROBE_PENDING;
+			config->runtime.probes[i].sent_at_ms = 0;
+			remove_benched_locked(config);
+		}
+		i++;
+	}
+}
+
 /**
  * @brief Commit a successful sendto() for one claimed generation.
  *
@@ -97,6 +128,8 @@ void	nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
 		return ;
 	}
 	probe->sending_dispatch_id = 0;
+	if (probe->attempts_sent > 0)
+		PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
 	probe->attempts_sent++;
 	if (nmap_probe_is_udp(probe))
 		config->runtime.last_udp_sent_ms = sent_at_ms;
@@ -163,11 +196,16 @@ int	nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
  * @note The operation is idempotent for late duplicate replies. If a worker
  *       already claimed the current QUEUED generation, the physical send may
  *       still finish, but its later commit cannot reopen this DONE probe.
+ *
+ * A successful UDP retry may justify exactly one additional retry level.
+ * BENCHED probes are released only after the current replying probe has been
+ * removed from its previous lifecycle accounting and committed as DONE.
  */
 void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
 		t_scan_result result, t_scan_reason reason, const char *debug_reason)
 {
 	t_probe_state	old_state;
+	int				retry_level_increased;
 
 	if (!config || !probe)
 		return ;
@@ -177,11 +215,15 @@ void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
 		pthread_mutex_unlock(&config->runtime.lock);
 		return ;
 	}
+	old_state = probe->state;
+	retry_level_increased = 0;
 	if (reason.kind == SCAN_REASON_TCP
 		|| reason.kind == SCAN_REASON_UDP_REPLY
 		|| reason.kind == SCAN_REASON_ICMP)
-		nmap_timing_note_reply_locked(config, probe, nmap_now_ms());
-	old_state = probe->state;
+	{
+		retry_level_increased = nmap_timing_note_reply_locked(
+				config, probe, &reason, nmap_now_ms());
+	}
 	if (old_state == PROBE_QUEUED)
 		remove_queued_locked(config, probe);
 	else if (old_state == PROBE_OUTSTANDING)
@@ -192,10 +234,15 @@ void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
 			&& config->runtime.udp_outstanding_count > 0)
 			config->runtime.udp_outstanding_count--;
 	}
+	else if (old_state == PROBE_BENCHED)
+		remove_benched_locked(config);
 	probe->state = PROBE_DONE;
 	probe->result = result;
 	probe->reason = reason;
 	config->runtime.done_count++;
+	if (retry_level_increased)
+		release_benched_locked(config);
+	pthread_cond_broadcast(&config->runtime.probe_cond);
 	pthread_mutex_unlock(&config->runtime.lock);
 	DEBUG_PROBE_RESULT(probe, debug_reason);
 }

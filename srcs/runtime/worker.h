@@ -6,9 +6,9 @@
 /**
  * @brief One sender thread in the shared producer/consumer pool.
  *
- * @note A worker has deliberately no pcap handle and no classifier state. Its
- *       sole responsibility is to consume a reserved send job and execute the
- *       packet-layer send.
+ * @note A worker has deliberately no pcap handle and no classifier state.
+ *       It sends one reserved job, then waits until the main thread resolves
+ *       or expires that probe before consuming another job.
  */
 struct s_nmap_worker
 {

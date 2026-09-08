@@ -46,6 +46,15 @@ static int	probe_can_be_reserved_locked(const t_nmap_config *config,
 {
 	if (probe->state != PROBE_PENDING)
 		return (0);
+
+	/*
+	 * --speedup is intentionally a naive threaded mode.
+	 * Sender workers consume every PENDING probe without applying the
+	 * inline network window or UDP pacing policy.
+	 */
+	if (config->sender_pool.worker_count > 0)
+		return (1);
+
 	if (active_count_locked(config) >= (size_t)config->scan.window_size)
 		return (0);
 	if (!nmap_probe_is_udp(probe))
@@ -181,7 +190,14 @@ int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
 	uint64_t	now_ms;
 	int			threaded;
 
-	if (!config || config->scan.window_size <= 0)
+	if (!config)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	threaded = (config->sender_pool.worker_count > 0);
+	if (!threaded && config->scan.window_size <= 0)
 	{
 		if (exit_status)
 			*exit_status = 1;
@@ -193,11 +209,10 @@ int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	threaded = (config->sender_pool.worker_count > 0);
 	i = 0;
 	while (i < config->runtime.probe_count)
 	{
-		if (global_window_full(config))
+		if (!threaded && global_window_full(config))
 			break ;
 		now_ms = nmap_now_ms();
 		if (threaded)

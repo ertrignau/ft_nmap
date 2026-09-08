@@ -18,6 +18,7 @@ typedef struct s_nmap_progress
 	size_t		done;
 	size_t		queued;
 	size_t		outstanding;
+	size_t		benched;
 	size_t		pending;
 	uint64_t	elapsed_ms;
 }	t_nmap_progress;

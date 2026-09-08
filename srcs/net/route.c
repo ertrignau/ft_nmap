@@ -160,7 +160,6 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 	if (!find_source_address(&config->target,
 			&config->route.src_addr, &error))
 	{
-		config->route.error = error;
 		fprintf(stderr, "ft_nmap: no route to %s: %s\n",
 			config->target.ip, strerror(error));
 		if (exit_status)
@@ -170,7 +169,6 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 	if (!nmap_ip_ntop(&config->route.src_addr,
 			config->route.src_ip, sizeof(config->route.src_ip)))
 	{
-		config->route.error = errno;
 		perror("ft_nmap: inet_ntop route source");
 		if (exit_status)
 			*exit_status = 1;
@@ -185,7 +183,6 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 			config->route.iface, sizeof(config->route.iface),
 			&config->route.ifindex, &error))
 	{
-		config->route.error = error;
 		fprintf(stderr, "ft_nmap: cannot find interface for source %s: %s\n",
 			config->route.src_ip, strerror(error));
 		if (exit_status)

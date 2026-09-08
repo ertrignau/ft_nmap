@@ -138,10 +138,13 @@ void	nmap_output_begin_scan(const t_nmap_config *config)
 		printf("Target   : %s\n", config->target.ip);
 	print_ports(config);
 	print_scans(config);
-	printf("Threads  : %d\n", config->scan.thread_count);
-	printf("Retries  : %d\n", config->scan.retries);
+	printf("Extra threads : %d\n", config->scan.thread_count);
+	printf("Retries       : %d\n", config->scan.retries);
 	print_timeouts(config);
-	printf("Window   : %d\n", config->scan.window_size);
+	if (config->scan.thread_count > 0)
+		printf("Send mode     : naive threaded\n");
+	else
+		printf("Window        : %d\n", config->scan.window_size);
 	if (isatty(STDIN_FILENO))
 		printf("\nStarting scan... (press Enter for progress)\n\n");
 	else
@@ -166,9 +169,10 @@ void	nmap_output_print_progress(const t_nmap_progress *progress)
 	nmap_output_format_hms(progress->elapsed_ms,
 		elapsed, sizeof(elapsed));
 	printf("Stats: %s elapsed; %zu/%zu probes completed (%.1f%%); "
-		"%zu outstanding; %zu queued; %zu pending\n",
+		"%zu outstanding; %zu queued; %zu benched; %zu pending\n",
 		elapsed, progress->done, progress->total, percent,
-		progress->outstanding, progress->queued, progress->pending);
+		progress->outstanding, progress->queued,
+		progress->benched, progress->pending);
 	if (progress->done == 0 || progress->done >= progress->total)
 	{
 		printf("Timing: About %.1f%% done\n", percent);

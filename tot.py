@@ -7,56 +7,14 @@ import sys
 RUNTIME_H = Path("inc/runtime.h")
 INTERNAL_H = Path("srcs/runtime/runtime_internal.h")
 COMMON_C = Path("srcs/runtime/common.c")
-INIT_C = Path("srcs/runtime/init.c")
 EXPIRE_C = Path("srcs/runtime/expire.c")
-SCHEDULER_C = Path("srcs/runtime/scheduler.c")
-WAIT_C = Path("srcs/runtime/wait.c")
 TIMING_C = Path("srcs/runtime/timing.c")
-MAKEFILE = Path("Makefile")
-
-
-TIMING_STRUCT = r'''
-/**
- * @brief Adaptive timing state for the current target.
- *
- * RTT estimation and UDP pacing are target-local. The configured scan values
- * remain immutable limits while this structure contains the policy currently
- * selected by the runtime.
- *
- * rto_ms is used for TCP-family retransmission deadlines. UDP keeps its longer
- * configured timeout because silence is a valid open|filtered outcome.
- *
- * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
- * probes may be sent to this target even when window capacity remains.
- */
-typedef struct s_nmap_timing
-{
-	uint64_t	srtt_ms;
-	uint64_t	rttvar_ms;
-	uint64_t	rto_ms;
-	uint64_t	rto_min_ms;
-	uint64_t	rto_max_ms;
-	int			rtt_valid;
-
-	size_t		udp_window;
-	size_t		udp_window_min;
-	size_t		udp_window_max;
-
-	uint64_t	udp_send_gap_ms;
-	uint64_t	udp_send_gap_max_ms;
-
-	size_t		udp_clean_replies;
-	size_t		udp_retry_recoveries;
-}	t_nmap_timing;
-
-'''
 
 
 TIMING_SOURCE = r'''#include "runtime/runtime_internal.h"
 
 #define NMAP_RTO_MIN_MS 100ULL
 
-#define NMAP_UDP_BACKOFF_RECOVERIES 2
 #define NMAP_UDP_WINDOW_RECOVERY_REPLIES 8
 
 #define NMAP_UDP_BACKOFF_INITIAL_GAP_MS 50ULL
@@ -80,11 +38,30 @@ static uint64_t	clamp_rto(const t_nmap_timing *timing, uint64_t rto)
 	return (rto);
 }
 
+/** Return the currently justified number of UDP retransmissions. */
+size_t	nmap_timing_udp_allowed_retries_locked(
+		const t_nmap_config *config)
+{
+	const t_nmap_timing	*timing;
+	size_t				allowed;
+
+	if (!config)
+		return (0);
+	timing = &config->runtime.timing;
+	if (timing->udp_retry_limit == 0)
+		return (0);
+	allowed = timing->udp_max_successful_retry + 1;
+	if (allowed > timing->udp_retry_limit)
+		allowed = timing->udp_retry_limit;
+	return (allowed);
+}
+
 /**
  * @brief Initialize target-local adaptive timing policy.
  *
- * The configured TCP timeout is both the conservative initial RTO and the
- * maximum value allowed by this first adaptive implementation.
+ * TCP starts with the configured timeout as a conservative RTO ceiling.
+ * UDP starts with at most one justified retransmission; higher retry levels
+ * must be proven useful by successful replies from earlier retry levels.
  */
 void	nmap_timing_init(t_nmap_config *config)
 {
@@ -121,6 +98,9 @@ void	nmap_timing_init(t_nmap_config *config)
 	timing->udp_send_gap_max_ms = NMAP_UDP_BACKOFF_MAX_GAP_MS;
 	if (timing->udp_send_gap_ms > timing->udp_send_gap_max_ms)
 		timing->udp_send_gap_max_ms = timing->udp_send_gap_ms;
+
+	if (config->scan.retries > 0)
+		timing->udp_retry_limit = (size_t)config->scan.retries;
 }
 
 /**
@@ -204,23 +184,41 @@ static void	backoff_rto(t_nmap_timing *timing)
 	timing->rto_ms = clamp_rto(timing, next);
 }
 
-/**
- * @brief Reduce UDP parallelism and increase per-target pacing.
- *
- * The delay never decreases during one target scan. This deliberately keeps
- * the controller monotonic and easy to reason about once rate limiting has
- * been observed.
- */
-static void	backoff_udp(t_nmap_timing *timing)
+/** Set a minimum UDP send gap without reducing an existing larger gap. */
+static void	ensure_udp_gap(t_nmap_timing *timing, uint64_t minimum)
 {
-	size_t	next_window;
+	if (minimum > timing->udp_send_gap_max_ms)
+		minimum = timing->udp_send_gap_max_ms;
+	if (timing->udp_send_gap_ms < minimum)
+		timing->udp_send_gap_ms = minimum;
+}
+
+/**
+ * @brief React to an ICMP response that was recovered only after a UDP retry.
+ *
+ * The first observation stops zero-gap bursts. The second observation confirms
+ * the pattern, halves UDP parallelism once, and doubles the gap. Further
+ * observations keep doubling the gap up to the configured ceiling.
+ */
+static void	note_udp_icmp_retry_recovery(t_nmap_timing *timing)
+{
+	size_t		next_window;
 	uint64_t	next_gap;
 
-	next_window = (timing->udp_window + 1) / 2;
-	if (next_window < timing->udp_window_min)
-		next_window = timing->udp_window_min;
-	timing->udp_window = next_window;
-
+	timing->udp_clean_replies = 0;
+	timing->udp_rate_limit_evidence++;
+	if (timing->udp_rate_limit_evidence == 1)
+	{
+		ensure_udp_gap(timing, NMAP_UDP_BACKOFF_INITIAL_GAP_MS);
+		return ;
+	}
+	if (timing->udp_rate_limit_evidence == 2)
+	{
+		next_window = (timing->udp_window + 1) / 2;
+		if (next_window < timing->udp_window_min)
+			next_window = timing->udp_window_min;
+		timing->udp_window = next_window;
+	}
 	if (timing->udp_send_gap_ms == 0)
 		next_gap = NMAP_UDP_BACKOFF_INITIAL_GAP_MS;
 	else if (timing->udp_send_gap_ms
@@ -231,14 +229,12 @@ static void	backoff_udp(t_nmap_timing *timing)
 	if (next_gap > timing->udp_send_gap_max_ms)
 		next_gap = timing->udp_send_gap_max_ms;
 	timing->udp_send_gap_ms = next_gap;
-
-	timing->udp_clean_replies = 0;
 }
 
 /**
  * @brief Slowly restore UDP window capacity after clean first-attempt replies.
  *
- * The pacing delay is intentionally not reduced during the target scan.
+ * The pacing delay deliberately never decreases during one target scan.
  */
 static void	note_clean_udp_reply(t_nmap_timing *timing)
 {
@@ -248,25 +244,38 @@ static void	note_clean_udp_reply(t_nmap_timing *timing)
 		return ;
 	if (timing->udp_window < timing->udp_window_max)
 		timing->udp_window++;
-	timing->udp_retry_recoveries = 0;
 	timing->udp_clean_replies = 0;
 }
 
 /**
- * @brief Record a UDP response recovered only after retransmission.
+ * @brief Record that one concrete UDP retry level produced useful evidence.
  *
- * One recovery may simply be ordinary packet loss. Two nearby recoveries are
- * required before changing pacing/window policy.
+ * A success after retry N justifies trying retry N+1 on still-silent probes,
+ * never more than one level at a time and never beyond udp_retry_limit.
+ *
+ * @return 1 when the currently allowed retry level increased.
  */
-static void	note_udp_retry_recovery(t_nmap_timing *timing)
+static int	note_udp_retry_success(t_nmap_timing *timing,
+		const t_probe *probe)
 {
-	timing->udp_clean_replies = 0;
-	timing->udp_retry_recoveries++;
-	if (timing->udp_retry_recoveries
-		< NMAP_UDP_BACKOFF_RECOVERIES)
-		return ;
-	backoff_udp(timing);
-	timing->udp_retry_recoveries = 0;
+	size_t	before;
+	size_t	retry_number;
+	size_t	after;
+
+	if (probe->attempts_sent <= 1)
+		return (0);
+	before = timing->udp_max_successful_retry + 1;
+	if (before > timing->udp_retry_limit)
+		before = timing->udp_retry_limit;
+	retry_number = (size_t)probe->attempts_sent - 1;
+	if (retry_number > timing->udp_retry_limit)
+		retry_number = timing->udp_retry_limit;
+	if (retry_number > timing->udp_max_successful_retry)
+		timing->udp_max_successful_retry = retry_number;
+	after = timing->udp_max_successful_retry + 1;
+	if (after > timing->udp_retry_limit)
+		after = timing->udp_retry_limit;
+	return (after > before);
 }
 
 /**
@@ -275,73 +284,60 @@ static void	note_udp_retry_recovery(t_nmap_timing *timing)
  * @note runtime.lock must already be held.
  *
  * Karn rule:
- *   attempts_sent == 1 -> RTT sample is unambiguous.
- *   attempts_sent > 1  -> classify the reply, but never use it as RTT sample.
+ *   attempts_sent == 1 and sent_at_ms != 0 -> unambiguous RTT sample.
+ *   attempts_sent > 1                      -> never update RTT.
+ *
+ * For UDP, any useful retry may justify one additional retry level, while
+ * only an ICMP recovered after retry is treated as rate-limit evidence.
+ *
+ * @return 1 when UDP retry policy expanded and BENCHED probes may be released.
  */
-void	nmap_timing_note_reply_locked(t_nmap_config *config,
-		const t_probe *probe, uint64_t now_ms)
+int	nmap_timing_note_reply_locked(t_nmap_config *config,
+		const t_probe *probe, const t_scan_reason *reason,
+		uint64_t now_ms)
 {
 	t_nmap_timing	*timing;
 	uint64_t		sample_ms;
+	int				retry_level_increased;
+	int				first_attempt_sample;
 
-	if (!config || !probe || probe->attempts_sent == 0)
-		return ;
+	if (!config || !probe || !reason || probe->attempts_sent == 0)
+		return (0);
 	timing = &config->runtime.timing;
-	if (probe->attempts_sent == 1
-		&& probe->sent_at_ms != 0
-		&& now_ms >= probe->sent_at_ms)
+	retry_level_increased = 0;
+	first_attempt_sample = (probe->attempts_sent == 1
+			&& probe->sent_at_ms != 0
+			&& now_ms >= probe->sent_at_ms);
+	if (first_attempt_sample)
 	{
 		sample_ms = now_ms - probe->sent_at_ms;
 		update_rtt(timing, sample_ms);
 	}
-
 	if (nmap_probe_is_udp(probe))
 	{
 		if (probe->attempts_sent > 1)
-			note_udp_retry_recovery(timing);
-		else
+		{
+			retry_level_increased =
+				note_udp_retry_success(timing, probe);
+			timing->udp_clean_replies = 0;
+			if (reason->kind == SCAN_REASON_ICMP)
+				note_udp_icmp_retry_recovery(timing);
+		}
+		else if (first_attempt_sample)
 			note_clean_udp_reply(timing);
 	}
 	else if (probe->attempts_sent > 1)
 		backoff_rto(timing);
+	return (retry_level_increased);
 }
 '''
 
 
-TIMING_PROTOTYPES = r'''
-/* adaptive target timing */
-void			nmap_timing_init(t_nmap_config *config);
-uint64_t		nmap_timing_probe_timeout_ms(
-					const t_nmap_config *config,
-					const t_probe *probe);
-void			nmap_timing_note_reply_locked(
-					t_nmap_config *config,
-					const t_probe *probe,
-					uint64_t now_ms);
+EXPIRE_SOURCE = r'''#include "config.h"
+#include "debug/debug.h"
+#include "runtime/runtime_internal.h"
 
-'''
-
-
-WAIT_REMAINING = r'''/** Compute remaining milliseconds before one outstanding probe expires. */
-static uint64_t	remaining_probe_ms(const t_nmap_config *config,
-		const t_probe *probe, uint64_t now_ms)
-{
-	uint64_t	elapsed;
-	uint64_t	timeout_ms;
-
-	timeout_ms = nmap_timing_probe_timeout_ms(config, probe);
-	if (timeout_ms == 0 || now_ms <= probe->sent_at_ms)
-		return (timeout_ms);
-	elapsed = now_ms - probe->sent_at_ms;
-	if (elapsed >= timeout_ms)
-		return (0);
-	return (timeout_ms - elapsed);
-}
-
-'''
-
-
-EXPIRE_CHECK = r'''/** Check whether one OUTSTANDING probe reached its current deadline. */
+/** Check whether one OUTSTANDING probe reached its current deadline. */
 static int	probe_expired(const t_nmap_config *config,
 		const t_probe *probe, uint64_t now_ms)
 {
@@ -357,6 +353,281 @@ static int	probe_expired(const t_nmap_config *config,
 	return (elapsed >= timeout_ms);
 }
 
+/** Remove one probe from outstanding accounting while runtime.lock is held. */
+static void	remove_outstanding_count(t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (config->runtime.outstanding_count > 0)
+		config->runtime.outstanding_count--;
+	if (nmap_probe_is_udp(probe)
+		&& config->runtime.udp_outstanding_count > 0)
+		config->runtime.udp_outstanding_count--;
+}
+
+/** Return how many retransmissions this logical probe has already sent. */
+static size_t	retries_used(const t_probe *probe)
+{
+	if (!probe || probe->attempts_sent == 0)
+		return (0);
+	return ((size_t)probe->attempts_sent - 1);
+}
+
+/** Move one expired probe back to scheduler-visible PENDING state. */
+static void	retry_probe_locked(t_probe *probe)
+{
+	probe->state = PROBE_PENDING;
+	probe->sent_at_ms = 0;
+	PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
+}
+
+/**
+ * @brief Hold one silent UDP probe until another retry proves a new level useful.
+ */
+static void	bench_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	probe->state = PROBE_BENCHED;
+	probe->sent_at_ms = 0;
+	config->runtime.benched_count++;
+}
+
+/** Finalize one still-unanswered probe using normal no-response semantics. */
+static void	finalize_no_response_locked(t_nmap_config *config,
+		t_probe *probe)
+{
+	if (probe->state == PROBE_BENCHED
+		&& config->runtime.benched_count > 0)
+		config->runtime.benched_count--;
+	probe->state = PROBE_DONE;
+	probe->result = nmap_classify_no_response(probe->scan_type);
+	probe->reason = (t_scan_reason){0};
+	probe->reason.kind = SCAN_REASON_NO_RESPONSE;
+	config->runtime.done_count++;
+	DEBUG_PROBE_RESULT(probe,
+		"no matching response after retransmission policy");
+}
+
+/** Apply the original fixed retry policy to one TCP-family probe. */
+static void	expire_tcp_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	size_t	hard_limit;
+
+	hard_limit = 0;
+	if (config->scan.retries > 0)
+		hard_limit = (size_t)config->scan.retries;
+	if (retries_used(probe) < hard_limit)
+	{
+		retry_probe_locked(probe);
+		return ;
+	}
+	finalize_no_response_locked(config, probe);
+}
+
+/**
+ * @brief Apply adaptive retry policy to one silent UDP probe.
+ *
+ * The configured retry count is a hard ceiling. Initially only retry #1 is
+ * justified. Higher levels become schedulable only after an earlier retry
+ * produced a useful network response on this same target.
+ */
+static void	expire_udp_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	size_t	used;
+	size_t	allowed;
+	size_t	hard_limit;
+
+	used = retries_used(probe);
+	allowed = nmap_timing_udp_allowed_retries_locked(config);
+	hard_limit = config->runtime.timing.udp_retry_limit;
+	if (used < allowed)
+	{
+		retry_probe_locked(probe);
+		return ;
+	}
+	if (used < hard_limit)
+	{
+		bench_probe_locked(config, probe);
+		return ;
+	}
+	finalize_no_response_locked(config, probe);
+}
+
+/**
+ * @brief Apply timeout bookkeeping then route to TCP or UDP retry policy.
+ */
+static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	remove_outstanding_count(config, probe);
+	DEBUG_PROBE_TIMEOUT(probe);
+	PROF_COUNT(NMAP_PROF_PACKET_TIMEOUT);
+	if (nmap_probe_is_udp(probe))
+		expire_udp_probe_locked(config, probe);
+	else
+		expire_tcp_probe_locked(config, probe);
+}
+
+/**
+ * @brief Return whether some non-benched probe can still change retry policy.
+ *
+ * PENDING work may still be sent. QUEUED/OUTSTANDING work may still produce a
+ * useful response. If none exists, BENCHED probes cannot learn anything new
+ * from the active scan and may safely receive their final no-response verdict.
+ */
+static int	has_retry_decision_source_locked(const t_nmap_config *config)
+{
+	size_t			i;
+	t_probe_state	state;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		state = config->runtime.probes[i].state;
+		if (state == PROBE_PENDING
+			|| state == PROBE_QUEUED
+			|| state == PROBE_OUTSTANDING)
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/**
+ * @brief Finalize a bench that can no longer be promoted by future evidence.
+ */
+static void	finalize_stalled_bench_locked(t_nmap_config *config)
+{
+	size_t	i;
+
+	if (config->runtime.benched_count == 0
+		|| has_retry_decision_source_locked(config))
+		return ;
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_BENCHED)
+			finalize_no_response_locked(config,
+				&config->runtime.probes[i]);
+		i++;
+	}
+}
+
+/**
+ * @brief Expire every probe whose current successful attempt reached deadline.
+ */
+void	nmap_runtime_expire_probes(t_nmap_config *config)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	uint64_t	prof_start;
+
+	if (!config || !config->runtime.probes)
+		return ;
+	prof_start = PROF_START();
+	now_ms = nmap_now_ms();
+	pthread_mutex_lock(&config->runtime.lock);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (probe_expired(config, &config->runtime.probes[i], now_ms))
+			expire_probe_locked(config, &config->runtime.probes[i]);
+		i++;
+	}
+	finalize_stalled_bench_locked(config);
+	pthread_mutex_unlock(&config->runtime.lock);
+	PROF_ADD(NMAP_PROF_EXPIRE, prof_start);
+}
+'''
+
+
+BENCH_HELPERS = r'''/** Remove one BENCHED probe from bench accounting while runtime.lock is held. */
+static void	remove_benched_locked(t_nmap_config *config)
+{
+	if (config->runtime.benched_count > 0)
+		config->runtime.benched_count--;
+}
+
+/**
+ * @brief Release every UDP probe waiting on the next justified retry level.
+ *
+ * Retry permission grows exactly one level at a time. Therefore every probe
+ * currently BENCHED was stopped at the previously allowed level and becomes
+ * schedulable when nmap_timing_note_reply_locked() reports one promotion.
+ */
+static void	release_benched_locked(t_nmap_config *config)
+{
+	size_t	i;
+
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (config->runtime.probes[i].state == PROBE_BENCHED)
+		{
+			config->runtime.probes[i].state = PROBE_PENDING;
+			config->runtime.probes[i].sent_at_ms = 0;
+			remove_benched_locked(config);
+			PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
+		}
+		i++;
+	}
+}
+
+'''
+
+
+MARK_DONE_SOURCE = r'''/**
+ * @brief Atomically move one logical probe to DONE and maintain counters.
+ *
+ * @note The operation is idempotent for late duplicate replies. If a worker
+ *       already claimed the current QUEUED generation, the physical send may
+ *       still finish, but its later commit cannot reopen this DONE probe.
+ *
+ * A successful UDP retry may justify exactly one additional retry level.
+ * BENCHED probes are released only after the current replying probe has been
+ * removed from its previous lifecycle accounting and committed as DONE.
+ */
+void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
+		t_scan_result result, t_scan_reason reason, const char *debug_reason)
+{
+	t_probe_state	old_state;
+	int				retry_level_increased;
+
+	if (!config || !probe)
+		return ;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->state == PROBE_DONE)
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return ;
+	}
+	old_state = probe->state;
+	retry_level_increased = 0;
+	if (reason.kind == SCAN_REASON_TCP
+		|| reason.kind == SCAN_REASON_UDP_REPLY
+		|| reason.kind == SCAN_REASON_ICMP)
+	{
+		retry_level_increased = nmap_timing_note_reply_locked(
+				config, probe, &reason, nmap_now_ms());
+	}
+	if (old_state == PROBE_QUEUED)
+		remove_queued_locked(config, probe);
+	else if (old_state == PROBE_OUTSTANDING)
+	{
+		if (config->runtime.outstanding_count > 0)
+			config->runtime.outstanding_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_outstanding_count > 0)
+			config->runtime.udp_outstanding_count--;
+	}
+	else if (old_state == PROBE_BENCHED)
+		remove_benched_locked(config);
+	probe->state = PROBE_DONE;
+	probe->result = result;
+	probe->reason = reason;
+	config->runtime.done_count++;
+	if (retry_level_increased)
+		release_benched_locked(config);
+	pthread_mutex_unlock(&config->runtime.lock);
+	DEBUG_PROBE_RESULT(probe, debug_reason);
+}
 '''
 
 
@@ -374,231 +645,164 @@ def read(path):
 def replace_once(text, old, new, path):
     count = text.count(old)
     if count != 1:
-        fail(
-            f"{path}: remplacement ambigu pour {old!r} "
-            f"(occurrences={count})"
-        )
+        fail(f"{path}: remplacement ambigu ({count} occurrences)")
     return text.replace(old, new, 1)
 
 
-def replace_all_required(text, old, new, path):
-    count = text.count(old)
-    if count == 0:
-        fail(f"{path}: token attendu absent: {old}")
-    return text.replace(old, new)
-
-
-def replace_section(text, start_marker, end_marker, replacement, path):
-    start = text.find(start_marker)
-    if start < 0:
-        fail(f"{path}: debut de section introuvable")
-    end = text.find(end_marker, start)
-    if end < 0:
-        fail(f"{path}: fin de section introuvable")
-    return text[:start] + replacement + text[end:]
-
-
 def patch_runtime_h(text):
-    if "typedef struct s_nmap_timing" in text:
-        fail("inc/runtime.h: timing adaptatif deja present")
+    old_state = """ * PENDING      ready for the scheduler.
+ * QUEUED       one dispatch generation is reserved; it may still be waiting
+ *              in the sender queue or currently executing sendto().
+ * OUTSTANDING  sendto() completed successfully and its timeout clock is live.
+ * DONE         final scan result has been produced.
+ *
+ * @note A logical probe survives retransmissions. A retry does not allocate a
+ *       second probe object; the same probe returns to PENDING.
+ */
+typedef enum e_probe_state
+{
+\tPROBE_PENDING = 0,
+\tPROBE_QUEUED,
+\tPROBE_OUTSTANDING,
+\tPROBE_DONE
+}\tt_probe_state;
+"""
+    new_state = """ * PENDING      ready for the scheduler.
+ * QUEUED       one dispatch generation is reserved; it may still be waiting
+ *              in the sender queue or currently executing sendto().
+ * OUTSTANDING  sendto() completed successfully and its timeout clock is live.
+ * BENCHED      UDP probe has exhausted the currently justified retry level.
+ *              It remains matchable but is not schedulable until another
+ *              successful retry proves that one more level is useful.
+ * DONE         final scan result has been produced.
+ *
+ * @note A logical probe survives retransmissions. A retry does not allocate a
+ *       second probe object; the same probe returns to PENDING.
+ */
+typedef enum e_probe_state
+{
+\tPROBE_PENDING = 0,
+\tPROBE_QUEUED,
+\tPROBE_OUTSTANDING,
+\tPROBE_BENCHED,
+\tPROBE_DONE
+}\tt_probe_state;
+"""
+    old_comment = """ * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
+ * probes may be sent to this target even when window capacity remains.
+ */
+"""
+    new_comment = """ * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
+ * probes may be sent to this target even when window capacity remains.
+ *
+ * udp_retry_limit is the configured hard ceiling. udp_max_successful_retry
+ * records the highest retry level that actually produced useful evidence;
+ * only the next level beyond that success is allowed to run.
+ */
+"""
+    old_timing = """\tuint64_t\tudp_send_gap_ms;
+\tuint64_t\tudp_send_gap_max_ms;
 
-    marker = "/**\n * @brief Runtime state for the current target."
-    pos = text.find(marker)
-    if pos < 0:
-        fail("inc/runtime.h: structure runtime introuvable")
+\tsize_t\t\tudp_clean_replies;
+\tsize_t\t\tudp_retry_recoveries;
+}\tt_nmap_timing;
+"""
+    new_timing = """\tuint64_t\tudp_send_gap_ms;
+\tuint64_t\tudp_send_gap_max_ms;
 
-    text = text[:pos] + TIMING_STRUCT + text[pos:]
+\tsize_t\t\tudp_clean_replies;
+\tsize_t\t\tudp_rate_limit_evidence;
 
-    old = "\tuint16_t\t\tsource_port_base;\n\tuint64_t\t\tlast_udp_sent_ms;\n"
-    new = (
-        "\tuint16_t\t\tsource_port_base;\n"
-        "\tuint64_t\t\tlast_udp_sent_ms;\n\n"
-        "\tt_nmap_timing\ttiming;\n"
-    )
+\tsize_t\t\tudp_retry_limit;
+\tsize_t\t\tudp_max_successful_retry;
+}\tt_nmap_timing;
+"""
+    old_counts = """\tsize_t\t\t\tdone_count;
+\tsize_t\t\t\tqueued_count;
+\tsize_t\t\t\toutstanding_count;
+\tsize_t\t\t\tudp_queued_count;
+\tsize_t\t\t\tudp_outstanding_count;
+"""
+    new_counts = """\tsize_t\t\t\tdone_count;
+\tsize_t\t\t\tqueued_count;
+\tsize_t\t\t\toutstanding_count;
+\tsize_t\t\t\tbenched_count;
+\tsize_t\t\t\tudp_queued_count;
+\tsize_t\t\t\tudp_outstanding_count;
+"""
 
-    return replace_once(text, old, new, RUNTIME_H)
+    text = replace_once(text, old_state, new_state, RUNTIME_H)
+    text = replace_once(text, old_comment, new_comment, RUNTIME_H)
+    text = replace_once(text, old_timing, new_timing, RUNTIME_H)
+    text = replace_once(text, old_counts, new_counts, RUNTIME_H)
+    return text
 
 
 def patch_internal_h(text):
-    if "nmap_timing_init" in text:
-        fail("runtime_internal.h: timing prototypes deja presents")
+    old = """void\t\t\tnmap_timing_note_reply_locked(
+\t\t\t\t\tt_nmap_config *config,
+\t\t\t\t\tconst t_probe *probe,
+\t\t\t\t\tuint64_t now_ms);
+"""
+    new = """size_t\t\t\tnmap_timing_udp_allowed_retries_locked(
+\t\t\t\t\tconst t_nmap_config *config);
+int\t\t\t\tnmap_timing_note_reply_locked(
+\t\t\t\t\tt_nmap_config *config,
+\t\t\t\t\tconst t_probe *probe,
+\t\t\t\t\tconst t_scan_reason *reason,
+\t\t\t\t\tuint64_t now_ms);
+"""
+    return replace_once(text, old, new, INTERNAL_H)
 
-    marker = "\n#endif\n"
-    if marker not in text:
-        fail("runtime_internal.h: #endif introuvable")
 
-    return text.replace(marker, "\n" + TIMING_PROTOTYPES + "#endif\n", 1)
+def patch_common_c(text):
+    if "PROBE_BENCHED" in text:
+        fail("common.c: BENCHED semble deja applique")
 
+    marker = """/** Remove one QUEUED probe from queue accounting while runtime.lock is held. */
+static void\tremove_queued_locked(t_nmap_config *config, const t_probe *probe)
+{
+\tif (config->runtime.queued_count > 0)
+\t\tconfig->runtime.queued_count--;
+\tif (nmap_probe_is_udp(probe) && config->runtime.udp_queued_count > 0)
+\t\tconfig->runtime.udp_queued_count--;
+}
 
-def patch_makefile(text):
-    if "srcs/runtime/timing.c" in text:
-        fail("Makefile: timing.c deja present")
+"""
+    if text.count(marker) != 1:
+        fail("common.c: point d'insertion bench introuvable")
+    text = text.replace(marker, marker + BENCH_HELPERS, 1)
 
-    old = "\tsrcs/runtime/common.c \\\n"
-    new = (
-        "\tsrcs/runtime/common.c \\\n"
-        "\tsrcs/runtime/timing.c \\\n"
+    start = text.find(
+        "/**\n * @brief Atomically move one logical probe to DONE"
     )
+    if start < 0:
+        fail("common.c: nmap_mark_probe_done introuvable")
 
-    return replace_once(text, old, new, MAKEFILE)
-
-
-def patch_init(text):
-    if "nmap_timing_init(config);" in text:
-        fail("runtime/init.c: timing deja initialise")
-
-    old = "\tconfig->runtime.lock_initialized = 1;\n"
-    new = (
-        "\tconfig->runtime.lock_initialized = 1;\n"
-        "\tnmap_timing_init(config);\n"
-    )
-
-    return replace_once(text, old, new, INIT_C)
-
-
-def patch_common(text):
-    if "nmap_timing_note_reply_locked" in text:
-        fail("runtime/common.c: timing reply deja branche")
-
-    old = "\told_state = probe->state;\n"
-
-    new = r'''	if (reason.kind == SCAN_REASON_TCP
-		|| reason.kind == SCAN_REASON_UDP_REPLY
-		|| reason.kind == SCAN_REASON_ICMP)
-		nmap_timing_note_reply_locked(config, probe, nmap_now_ms());
-	old_state = probe->state;
-'''
-
-    return replace_once(text, old, new, COMMON_C)
-
-
-def patch_scheduler(text):
-    text = replace_all_required(
-        text,
-        "config->scan.udp_window_size",
-        "config->runtime.timing.udp_window",
-        SCHEDULER_C,
-    )
-
-    text = replace_all_required(
-        text,
-        "config->scan.udp_send_gap_ms",
-        "config->runtime.timing.udp_send_gap_ms",
-        SCHEDULER_C,
-    )
-
-    return text
-
-
-def patch_wait(text):
-    timeout_start = "/** Return the timeout configured for one probe family. */"
-    remaining_start = (
-        "/** Compute remaining milliseconds before one outstanding probe expires. */"
-    )
-    udp_gap_start = "/** Compute remaining delay since the last successful UDP send. */"
-
-    text = replace_section(
-        text,
-        timeout_start,
-        remaining_start,
-        "",
-        WAIT_C,
-    )
-
-    text = replace_section(
-        text,
-        remaining_start,
-        udp_gap_start,
-        WAIT_REMAINING,
-        WAIT_C,
-    )
-
-    text = replace_all_required(
-        text,
-        "config->scan.udp_send_gap_ms",
-        "config->runtime.timing.udp_send_gap_ms",
-        WAIT_C,
-    )
-
-    return text
-
-
-def patch_expire(text):
-    timeout_start = "/** Return the timeout policy applying to one probe family. */"
-    expired_start = "/** Check whether one OUTSTANDING probe reached its current deadline. */"
-    remove_start = (
-        "/** Remove one probe from outstanding accounting while runtime.lock is held. */"
-    )
-
-    text = replace_section(
-        text,
-        timeout_start,
-        expired_start,
-        "",
-        EXPIRE_C,
-    )
-
-    text = replace_section(
-        text,
-        expired_start,
-        remove_start,
-        EXPIRE_CHECK,
-        EXPIRE_C,
-    )
-
+    text = text[:start] + MARK_DONE_SOURCE
     return text
 
 
 def preflight():
-    required = [
-        RUNTIME_H,
-        INTERNAL_H,
-        COMMON_C,
-        INIT_C,
-        EXPIRE_C,
-        SCHEDULER_C,
-        WAIT_C,
-        MAKEFILE,
-    ]
-
-    for path in required:
+    for path in [RUNTIME_H, INTERNAL_H, COMMON_C, EXPIRE_C, TIMING_C]:
         if not path.exists():
             fail(f"{path}: fichier requis absent")
 
-    if TIMING_C.exists():
-        fail(
-            "srcs/runtime/timing.c existe deja; "
-            "aucune modification appliquee"
-        )
+    if "PROBE_BENCHED" in read(RUNTIME_H):
+        fail("patch BENCHED deja present")
+    if "udp_rate_limit_evidence" in read(TIMING_C):
+        fail("nouvelle politique UDP deja presente")
 
 
 def main():
     preflight()
 
-    #
-    # Charger et transformer TOUT avant la premiere ecriture.
-    # Si l'arbre courant ne correspond pas a ce qui est attendu,
-    # le script s'arrete sans patch partiel.
-    #
-    runtime_h = patch_runtime_h(read(RUNTIME_H))
-    internal_h = patch_internal_h(read(INTERNAL_H))
-    common_c = patch_common(read(COMMON_C))
-    init_c = patch_init(read(INIT_C))
-    expire_c = patch_expire(read(EXPIRE_C))
-    scheduler_c = patch_scheduler(read(SCHEDULER_C))
-    wait_c = patch_wait(read(WAIT_C))
-    makefile = patch_makefile(read(MAKEFILE))
-
     writes = {
-        RUNTIME_H: runtime_h,
-        INTERNAL_H: internal_h,
-        COMMON_C: common_c,
-        INIT_C: init_c,
-        EXPIRE_C: expire_c,
-        SCHEDULER_C: scheduler_c,
-        WAIT_C: wait_c,
+        RUNTIME_H: patch_runtime_h(read(RUNTIME_H)),
+        INTERNAL_H: patch_internal_h(read(INTERNAL_H)),
+        COMMON_C: patch_common_c(read(COMMON_C)),
+        EXPIRE_C: EXPIRE_SOURCE,
         TIMING_C: TIMING_SOURCE,
-        MAKEFILE: makefile,
     }
 
     for path, content in writes.items():
@@ -606,15 +810,17 @@ def main():
         print(f"[write] {path}")
 
     print()
-    print("Adaptive timing installed:")
-    print("  TCP: SRTT / RTTVAR / adaptive RTO")
-    print("  TCP: Karn rule after retransmission")
-    print("  UDP: dynamic outstanding window")
-    print("  UDP: adaptive per-target send gap")
-    print("  UDP: backoff after repeated retry recoveries")
-    print("  UDP: slow window recovery after clean replies")
-    print("  Classifier: unchanged")
-    print("  Multi-target scheduling: unchanged for now")
+    print("UDP retry policy installed:")
+    print("  - DONE probes are never retried")
+    print("  - only silent probes consume retry budget")
+    print("  - configured retries are a hard ceiling")
+    print("  - retry #1 is initially allowed")
+    print("  - a successful retry unlocks only the next level")
+    print("  - silent probes wait in PROBE_BENCHED")
+    print("  - first recovered ICMP enables UDP pacing")
+    print("  - second recovered ICMP halves the UDP window")
+    print("  - later recovered ICMPs progressively increase the gap")
+    print("  - TCP timing policy is unchanged")
 
 
 if __name__ == "__main__":

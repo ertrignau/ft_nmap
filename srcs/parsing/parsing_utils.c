@@ -13,29 +13,12 @@
 #include "ft_nmap.h"
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 int	nmap_streq(const char *a, const char *b)
 {
 	if (!a || !b)
 		return (0);
 	return (strcmp(a, b) == 0);
-}
-
-int	nmap_is_number(const char *s)
-{
-	int	i;
-
-	if (!s || !s[0])
-		return (0);
-	i = 0;
-	while (s[i])
-	{
-		if (!isdigit((unsigned char)s[i]))
-			return (0);
-		i++;
-	}
-	return (1);
 }
 
 int	nmap_parse_int(const char *s, int *out)

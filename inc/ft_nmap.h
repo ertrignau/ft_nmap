@@ -51,11 +51,9 @@ int		parse_file(t_nmap_config *config, int argc, char **argv, int *i);
 int		parse_bool_flag(t_nmap_config *config, const char *flag);
 int		nmap_parse_cli(t_nmap_config *config, int argc, char **argv,
 			int *exit_status);
-int		scan_name_to_mask(const char *name, uint32_t *mask);
 
 /* parsing utils */
 int		nmap_streq(const char *a, const char *b);
-int		nmap_is_number(const char *s);
 int		nmap_parse_int(const char *s, int *out);
 
 /* signal */

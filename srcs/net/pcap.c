@@ -12,10 +12,15 @@
 /**
  * @brief Build the target-family BPF capture filter.
  *
- * Direct replies are restricted to target -> local traffic. ICMP errors may
- * come from intermediate routers, so the error branch only constrains the
- * destination. IPv6 uses protochain for ICMPv6 so extension headers in front
- * of ICMPv6 do not get discarded before the userspace Next Header walker.
+ * Direct IPv4 replies are restricted to target -> local traffic. ICMP errors
+ * may come from intermediate routers, so their branch only constrains the
+ * destination.
+ *
+ * IPv6 capture deliberately stays broad at the network layer: every IPv6
+ * packet addressed to the selected local source is accepted. The userspace
+ * parser walks extension headers and runtime matching validates the exact
+ * target, protocol and probe identity. This avoids relying on protochain
+ * filters that are not accepted by every Linux kernel BPF path.
  */
 static int	build_pcap_filter(const t_nmap_config *config,
 		char *filter, size_t filter_size)
@@ -33,9 +38,7 @@ static int	build_pcap_filter(const t_nmap_config *config,
 	else if (config->target.addr.family == AF_INET6)
 	{
 		ret = snprintf(filter, filter_size,
-				"((ip6 and src host %s and dst host %s)"
-				" or (ip6 protochain 58 and dst host %s))",
-				config->target.ip, config->route.src_ip,
+				"(ip6 and dst host %s)",
 				config->route.src_ip);
 	}
 	else

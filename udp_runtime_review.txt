@@ -1,0 +1,1502 @@
+===== inc/runtime.h =====
+
+#ifndef NMAP_RUNTIME_H
+# define NMAP_RUNTIME_H
+
+# include "ip_addr.h"
+
+# include <pthread.h>
+# include <stddef.h>
+# include <stdint.h>
+
+/**
+ * @brief Runtime lifecycle of one logical probe.
+ *
+ * PENDING      ready for the scheduler.
+ * QUEUED       one dispatch generation is reserved; it may still be waiting
+ *              in the sender queue or currently executing sendto().
+ * OUTSTANDING  sendto() completed successfully and its timeout clock is live.
+ * DONE         final scan result has been produced.
+ *
+ * @note A logical probe survives retransmissions. A retry does not allocate a
+ *       second probe object; the same probe returns to PENDING.
+ */
+typedef enum e_probe_state
+{
+	PROBE_PENDING = 0,
+	PROBE_QUEUED,
+	PROBE_OUTSTANDING,
+	PROBE_DONE
+}	t_probe_state;
+
+/**
+ * @brief Final semantic states exposed by the scanner.
+ */
+typedef enum e_scan_result
+{
+	SCAN_RESULT_UNKNOWN = 0,
+	SCAN_RESULT_OPEN,
+	SCAN_RESULT_CLOSED,
+	SCAN_RESULT_FILTERED,
+	SCAN_RESULT_UNFILTERED,
+	SCAN_RESULT_OPEN_FILTERED
+}	t_scan_result;
+
+/**
+ * @brief Stable reason category retained by a completed logical probe.
+ */
+typedef enum e_scan_reason_kind
+{
+	SCAN_REASON_NONE = 0,
+	SCAN_REASON_TCP,
+	SCAN_REASON_UDP_REPLY,
+	SCAN_REASON_ICMP,
+	SCAN_REASON_NO_RESPONSE,
+	SCAN_REASON_SEND_ERROR
+}	t_scan_reason_kind;
+
+/**
+ * @brief Structured evidence that produced one final scan result.
+ *
+ * The runtime keeps protocol facts, not presentation text. report.c is free to
+ * turn TCP flags or ICMP family/type/code into a human-readable --reason.
+ */
+typedef struct s_scan_reason
+{
+	t_scan_reason_kind	kind;
+	sa_family_t			family;
+	uint8_t				tcp_flags;
+	uint8_t				icmp_type;
+	uint8_t				icmp_code;
+}	t_scan_reason;
+
+/**
+ * @brief One logical scan probe for one destination port and scan type.
+ *
+ * @note Target/source IP addresses deliberately do not live here. The current
+ *       runtime scans one resolved target at a time; family/address ownership
+ *       belongs to config.target/config.route instead of being duplicated in
+ *       every probe.
+ *
+ * @note sending_dispatch_id is a transient execution token. A worker sets it
+ *       only after validating the current QUEUED generation and immediately
+ *       before sendto(). This lets a very fast reply match without lying that
+ *       the probe is already OUTSTANDING. OUTSTANDING is committed only after
+ *       sendto() succeeds.
+ */
+typedef struct s_probe
+{
+	uint16_t		dst_port;
+	uint16_t		src_port;
+	uint32_t		seq;
+	uint32_t		scan_type;
+	uint64_t		sent_at_ms;
+	uint8_t			attempts_sent;
+	uint32_t		dispatch_id;
+	uint32_t		sending_dispatch_id;
+	t_probe_state	state;
+	t_scan_result	result;
+	t_scan_reason	reason;
+}	t_probe;
+
+/**
+ * @brief Parsed network reply kind.
+ */
+typedef enum e_nmap_reply_type
+{
+	NMAP_REPLY_NONE = 0,
+	NMAP_REPLY_TCP,
+	NMAP_REPLY_UDP,
+	NMAP_REPLY_ICMP4,
+	NMAP_REPLY_ICMP6
+}	t_nmap_reply_type;
+
+/**
+ * @brief Protocol-independent parsed representation of one captured reply.
+ *
+ * Direct TCP/UDP replies fill src/dst addresses and ports. ICMP errors also
+ * fill the embedded original packet fields, which are required to match the
+ * error back to the exact logical probe.
+ */
+typedef struct s_nmap_reply
+{
+	t_nmap_reply_type	type;
+
+	t_nmap_ip_addr		src_addr;
+	t_nmap_ip_addr		dst_addr;
+	uint16_t			src_port;
+	uint16_t			dst_port;
+
+	uint8_t				tcp_flags;
+	uint32_t			tcp_seq;
+	uint32_t			tcp_ack;
+
+	uint8_t				icmp_type;
+	uint8_t				icmp_code;
+
+	uint8_t				original_protocol;
+	t_nmap_ip_addr		original_src_addr;
+	t_nmap_ip_addr		original_dst_addr;
+	uint16_t			original_src_port;
+	uint16_t			original_dst_port;
+	uint32_t			original_tcp_seq;
+	int					has_original_tcp_seq;
+}	t_nmap_reply;
+
+
+/**
+ * @brief Result of one runtime wait operation.
+ *
+ * READY means the engine may continue its normal event-loop work.
+ * PROGRESS means stdin requested a user-visible progress snapshot.
+ * ERROR means the wait operation failed.
+ */
+typedef enum e_nmap_wait_result
+{
+	NMAP_WAIT_ERROR = 0,
+	NMAP_WAIT_READY,
+	NMAP_WAIT_PROGRESS
+}	t_nmap_wait_result;
+
+
+/**
+ * @brief Adaptive timing state for the current target.
+ *
+ * RTT estimation and UDP pacing are target-local. The configured scan values
+ * remain immutable limits while this structure contains the policy currently
+ * selected by the runtime.
+ *
+ * rto_ms is used for TCP-family retransmission deadlines. UDP keeps its longer
+ * configured timeout because silence is a valid open|filtered outcome.
+ *
+ * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
+ * probes may be sent to this target even when window capacity remains.
+ */
+typedef struct s_nmap_timing
+{
+	uint64_t	srtt_ms;
+	uint64_t	rttvar_ms;
+	uint64_t	rto_ms;
+	uint64_t	rto_min_ms;
+	uint64_t	rto_max_ms;
+	int			rtt_valid;
+
+	size_t		udp_window;
+	size_t		udp_window_min;
+	size_t		udp_window_max;
+
+	uint64_t	udp_send_gap_ms;
+	uint64_t	udp_send_gap_max_ms;
+
+	size_t		udp_clean_replies;
+	size_t		udp_retry_recoveries;
+}	t_nmap_timing;
+
+/**
+ * @brief Runtime state for the current target.
+ *
+ * @note probe_by_src_port gives O(1) candidate lookup. The candidate is still
+ *       fully validated before a captured packet is accepted.
+ */
+typedef struct s_nmap_runtime
+{
+	t_probe			*probes;
+	t_probe			**probe_by_src_port;
+	size_t			probe_count;
+
+	size_t			done_count;
+	size_t			queued_count;
+	size_t			outstanding_count;
+	size_t			udp_queued_count;
+	size_t			udp_outstanding_count;
+
+	uint16_t		source_port_base;
+	uint64_t		last_udp_sent_ms;
+
+	t_nmap_timing	timing;
+
+	pthread_mutex_t	lock;
+	int				lock_initialized;
+}	t_nmap_runtime;
+
+#endif
+
+===== srcs/runtime/runtime_internal.h =====
+
+#ifndef NMAP_RUNTIME_INTERNAL_H
+# define NMAP_RUNTIME_INTERNAL_H
+
+# include "config.h"
+
+/** Return a monotonic millisecond timestamp used by runtime deadlines. */
+uint64_t		nmap_now_ms(void);
+
+/** Return whether one logical probe belongs to the UDP scan family. */
+int				nmap_probe_is_udp(const t_probe *probe);
+
+/** Return whether a reply may still legally complete this logical probe. */
+int				nmap_probe_can_match(const t_probe *probe);
+
+/**
+ * Atomically claim one QUEUED generation immediately before sendto().
+ * snapshot may be NULL; when supplied it receives a race-free debug copy.
+ */
+int				nmap_runtime_begin_send(t_nmap_config *config, t_probe *probe,
+					uint32_t dispatch_id, t_probe *snapshot);
+
+/** Commit one successful physical send as OUTSTANDING when still relevant. */
+void			nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
+					uint32_t dispatch_id, uint64_t sent_at_ms);
+
+/**
+ * Record one failed physical send.
+ * Return 1 when the failure is fatal for the target, 0 when the send belonged
+ * to a retry already made irrelevant by a valid late reply.
+ */
+int				nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
+					uint32_t dispatch_id);
+
+/** Find and fully validate the logical probe corresponding to one reply. */
+t_probe			*nmap_find_matching_probe(t_nmap_config *config,
+					t_nmap_reply *reply);
+
+/** Classify one already-matched network reply. */
+t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+					const t_probe *probe, const t_nmap_reply *reply);
+
+/** Classify final absence of any useful reply after retransmission policy. */
+t_scan_result	nmap_classify_no_response(uint32_t scan_type);
+
+/** Atomically finalize one logical probe and update runtime counters. */
+void			nmap_mark_probe_done(t_nmap_config *config,
+					t_probe *probe, t_scan_result result,
+					t_scan_reason reason, const char *debug_reason);
+
+
+/* adaptive target timing */
+void			nmap_timing_init(t_nmap_config *config);
+uint64_t		nmap_timing_probe_timeout_ms(
+					const t_nmap_config *config,
+					const t_probe *probe);
+void			nmap_timing_note_reply_locked(
+					t_nmap_config *config,
+					const t_probe *probe,
+					uint64_t now_ms);
+
+#endif
+
+===== srcs/runtime/common.c =====
+
+#include "runtime/runtime_internal.h"
+#include "debug/debug.h"
+
+#include <time.h>
+
+/** Return current monotonic time in milliseconds. */
+uint64_t	nmap_now_ms(void)
+{
+	struct timespec	ts;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return (0);
+	return ((uint64_t)ts.tv_sec * 1000ULL
+		+ (uint64_t)ts.tv_nsec / 1000000ULL);
+}
+
+/** Check whether one probe belongs to the UDP scan family. */
+int	nmap_probe_is_udp(const t_probe *probe)
+{
+	return (probe && probe->scan_type == NMAP_SCAN_UDP);
+}
+
+/**
+ * @brief Check whether an incoming reply may still complete this probe.
+ *
+ * PENDING remains matchable after an earlier successful send. QUEUED remains
+ * matchable after an earlier send as well, and also during the tiny interval
+ * where the current generation has been claimed immediately before sendto().
+ * A merely queued first attempt is not considered matchable yet.
+ */
+int	nmap_probe_can_match(const t_probe *probe)
+{
+	if (!probe || probe->state == PROBE_DONE)
+		return (0);
+	if (probe->attempts_sent > 0)
+		return (1);
+	return (probe->state == PROBE_QUEUED
+		&& probe->sending_dispatch_id != 0
+		&& probe->sending_dispatch_id == probe->dispatch_id);
+}
+
+/**
+ * @brief Claim one exact QUEUED generation immediately before sendto().
+ *
+ * No network policy is decided here. The scheduler already selected this job;
+ * this function only creates the atomic execution commit point used to reject
+ * stale queue entries and to let a very fast reply match safely.
+ */
+int	nmap_runtime_begin_send(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id, t_probe *snapshot)
+{
+	int	valid;
+
+	if (!config || !probe)
+		return (0);
+	pthread_mutex_lock(&config->runtime.lock);
+	valid = (probe->state == PROBE_QUEUED
+			&& probe->dispatch_id == dispatch_id
+			&& probe->sending_dispatch_id == 0);
+	if (valid)
+	{
+		probe->sending_dispatch_id = dispatch_id;
+		if (snapshot)
+			*snapshot = *probe;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (valid);
+}
+
+/** Remove one QUEUED probe from queue accounting while runtime.lock is held. */
+static void	remove_queued_locked(t_nmap_config *config, const t_probe *probe)
+{
+	if (config->runtime.queued_count > 0)
+		config->runtime.queued_count--;
+	if (nmap_probe_is_udp(probe) && config->runtime.udp_queued_count > 0)
+		config->runtime.udp_queued_count--;
+}
+
+/**
+ * @brief Commit a successful sendto() for one claimed generation.
+ *
+ * If a late reply completed the logical probe while sendto() was executing,
+ * the physical send is still accounted as having happened, but DONE is never
+ * reopened and queued/outstanding counters are not touched a second time.
+ */
+void	nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id, uint64_t sent_at_ms)
+{
+	if (!config || !probe)
+		return ;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->dispatch_id != dispatch_id
+		|| probe->sending_dispatch_id != dispatch_id)
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return ;
+	}
+	probe->sending_dispatch_id = 0;
+	probe->attempts_sent++;
+	if (nmap_probe_is_udp(probe))
+		config->runtime.last_udp_sent_ms = sent_at_ms;
+	if (probe->state == PROBE_QUEUED)
+	{
+		remove_queued_locked(config, probe);
+		config->runtime.outstanding_count++;
+		if (nmap_probe_is_udp(probe))
+			config->runtime.udp_outstanding_count++;
+		probe->sent_at_ms = sent_at_ms;
+		probe->state = PROBE_OUTSTANDING;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+}
+
+/**
+ * @brief Record a failed sendto() for one claimed generation.
+ *
+ * A failure on the first physical attempt is always fatal. A retry can become
+ * obsolete while sendto() is executing if a late reply from an earlier attempt
+ * completes the probe; in that case the already-valid network result wins and
+ * the obsolete retry failure does not poison the whole target.
+ */
+int	nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id)
+{
+	t_scan_reason	reason;
+	int				fatal;
+	int				marked_done;
+
+	if (!config || !probe)
+		return (0);
+	fatal = 0;
+	marked_done = 0;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->dispatch_id == dispatch_id
+		&& probe->sending_dispatch_id == dispatch_id)
+	{
+		probe->sending_dispatch_id = 0;
+		if (probe->state == PROBE_DONE)
+			fatal = (probe->attempts_sent == 0);
+		else if (probe->state == PROBE_QUEUED)
+		{
+			remove_queued_locked(config, probe);
+			reason = (t_scan_reason){0};
+			reason.kind = SCAN_REASON_SEND_ERROR;
+			probe->state = PROBE_DONE;
+			probe->result = SCAN_RESULT_UNKNOWN;
+			probe->reason = reason;
+			config->runtime.done_count++;
+			fatal = 1;
+			marked_done = 1;
+		}
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+	if (marked_done)
+		DEBUG_PROBE_RESULT(probe, "send failure");
+	return (fatal);
+}
+
+/**
+ * @brief Atomically move one logical probe to DONE and maintain counters.
+ *
+ * @note The operation is idempotent for late duplicate replies. If a worker
+ *       already claimed the current QUEUED generation, the physical send may
+ *       still finish, but its later commit cannot reopen this DONE probe.
+ */
+void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
+		t_scan_result result, t_scan_reason reason, const char *debug_reason)
+{
+	t_probe_state	old_state;
+
+	if (!config || !probe)
+		return ;
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->state == PROBE_DONE)
+	{
+		pthread_mutex_unlock(&config->runtime.lock);
+		return ;
+	}
+	if (reason.kind == SCAN_REASON_TCP
+		|| reason.kind == SCAN_REASON_UDP_REPLY
+		|| reason.kind == SCAN_REASON_ICMP)
+		nmap_timing_note_reply_locked(config, probe, nmap_now_ms());
+	old_state = probe->state;
+	if (old_state == PROBE_QUEUED)
+		remove_queued_locked(config, probe);
+	else if (old_state == PROBE_OUTSTANDING)
+	{
+		if (config->runtime.outstanding_count > 0)
+			config->runtime.outstanding_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_outstanding_count > 0)
+			config->runtime.udp_outstanding_count--;
+	}
+	probe->state = PROBE_DONE;
+	probe->result = result;
+	probe->reason = reason;
+	config->runtime.done_count++;
+	pthread_mutex_unlock(&config->runtime.lock);
+	DEBUG_PROBE_RESULT(probe, debug_reason);
+}
+
+===== srcs/runtime/expire.c =====
+
+#include "config.h"
+#include "debug/debug.h"
+#include "runtime/runtime_internal.h"
+
+/** Check whether one OUTSTANDING probe reached its current deadline. */
+static int	probe_expired(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	uint64_t	timeout_ms;
+	uint64_t	elapsed;
+
+	if (probe->state != PROBE_OUTSTANDING)
+		return (0);
+	timeout_ms = nmap_timing_probe_timeout_ms(config, probe);
+	if (timeout_ms == 0)
+		return (1);
+	elapsed = now_ms - probe->sent_at_ms;
+	return (elapsed >= timeout_ms);
+}
+
+/** Remove one probe from outstanding accounting while runtime.lock is held. */
+static void	remove_outstanding_count(t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (config->runtime.outstanding_count > 0)
+		config->runtime.outstanding_count--;
+	if (nmap_probe_is_udp(probe)
+		&& config->runtime.udp_outstanding_count > 0)
+		config->runtime.udp_outstanding_count--;
+}
+
+/**
+ * @brief Apply retransmission policy or final no-response classification.
+ *
+ * @note retries counts additional successful sends. With retries=1, the first
+ *       successful attempt times out back to PENDING; the second successful
+ *       attempt times out to the final no-response result.
+ */
+static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	t_scan_result	result;
+
+	remove_outstanding_count(config, probe);
+	DEBUG_PROBE_TIMEOUT(probe);
+	PROF_COUNT(NMAP_PROF_PACKET_TIMEOUT);
+	if (probe->attempts_sent <= (uint8_t)config->scan.retries)
+	{
+		probe->state = PROBE_PENDING;
+		probe->sent_at_ms = 0;
+		PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
+		return ;
+	}
+	result = nmap_classify_no_response(probe->scan_type);
+	probe->state = PROBE_DONE;
+	probe->result = result;
+	probe->reason = (t_scan_reason){0};
+	probe->reason.kind = SCAN_REASON_NO_RESPONSE;
+	config->runtime.done_count++;
+	DEBUG_PROBE_RESULT(probe,
+		"no matching response after retransmission policy");
+}
+
+/**
+ * @brief Expire every probe whose current successful attempt reached deadline.
+ */
+void	nmap_runtime_expire_probes(t_nmap_config *config)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	uint64_t	prof_start;
+
+	if (!config || !config->runtime.probes)
+		return ;
+	prof_start = PROF_START();
+	now_ms = nmap_now_ms();
+	pthread_mutex_lock(&config->runtime.lock);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (probe_expired(config, &config->runtime.probes[i], now_ms))
+			expire_probe_locked(config, &config->runtime.probes[i]);
+		i++;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+	PROF_ADD(NMAP_PROF_EXPIRE, prof_start);
+}
+
+===== srcs/runtime/scheduler.c =====
+
+#include "config.h"
+#include "debug/debug.h"
+#include "packet/packet.h"
+#include "runtime/runtime_internal.h"
+#include "runtime/worker.h"
+
+/** Return total queued + outstanding logical probes while runtime.lock is held. */
+static size_t	active_count_locked(const t_nmap_config *config)
+{
+	return (config->runtime.queued_count
+		+ config->runtime.outstanding_count);
+}
+
+/** Return active UDP probes while runtime.lock is held. */
+static size_t	udp_active_count_locked(const t_nmap_config *config)
+{
+	return (config->runtime.udp_queued_count
+		+ config->runtime.udp_outstanding_count);
+}
+
+/** Check whether the configured gap since the last real UDP send elapsed. */
+static int	udp_gap_allows_locked(const t_nmap_config *config,
+		uint64_t now_ms)
+{
+	uint64_t	elapsed;
+
+	if (config->runtime.timing.udp_send_gap_ms <= 0
+		|| config->runtime.last_udp_sent_ms == 0)
+		return (1);
+	if (now_ms <= config->runtime.last_udp_sent_ms)
+		return (0);
+	elapsed = now_ms - config->runtime.last_udp_sent_ms;
+	return (elapsed >= (uint64_t)config->runtime.timing.udp_send_gap_ms);
+}
+
+/**
+ * @brief Check whether one PENDING probe can consume scheduler capacity now.
+ *
+ * Only one UDP job is allowed to remain QUEUED at a time. This makes the UDP
+ * pacing timestamp refer to actual successful sends rather than to reservations
+ * that may sit in a worker queue for an arbitrary duration.
+ */
+static int	probe_can_be_reserved_locked(const t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	if (probe->state != PROBE_PENDING)
+		return (0);
+	if (active_count_locked(config) >= (size_t)config->scan.window_size)
+		return (0);
+	if (!nmap_probe_is_udp(probe))
+		return (1);
+	if (udp_active_count_locked(config)
+		>= (size_t)config->runtime.timing.udp_window)
+		return (0);
+	if (config->runtime.udp_queued_count > 0)
+		return (0);
+	return (udp_gap_allows_locked(config, now_ms));
+}
+
+/** Reserve one exact send generation in QUEUED state. */
+static uint32_t	reserve_probe_locked(t_nmap_config *config, t_probe *probe)
+{
+	probe->state = PROBE_QUEUED;
+	probe->dispatch_id++;
+	probe->sending_dispatch_id = 0;
+	config->runtime.queued_count++;
+	if (nmap_probe_is_udp(probe))
+		config->runtime.udp_queued_count++;
+	return (probe->dispatch_id);
+}
+
+/** Undo a reservation that never reached a sender. */
+static void	revert_reservation(t_nmap_config *config,
+		t_probe *probe, uint32_t dispatch_id)
+{
+	pthread_mutex_lock(&config->runtime.lock);
+	if (probe->state == PROBE_QUEUED
+		&& probe->dispatch_id == dispatch_id
+		&& probe->sending_dispatch_id == 0)
+	{
+		probe->state = PROBE_PENDING;
+		if (config->runtime.queued_count > 0)
+			config->runtime.queued_count--;
+		if (nmap_probe_is_udp(probe)
+			&& config->runtime.udp_queued_count > 0)
+			config->runtime.udp_queued_count--;
+	}
+	pthread_mutex_unlock(&config->runtime.lock);
+}
+
+/** Reserve one PENDING probe and return its new generation. */
+static int	reserve_probe(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, uint32_t *dispatch_id)
+{
+	int	reserved;
+
+	pthread_mutex_lock(&config->runtime.lock);
+	reserved = probe_can_be_reserved_locked(config, probe, now_ms);
+	if (reserved)
+		*dispatch_id = reserve_probe_locked(config, probe);
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (reserved);
+}
+
+/** Send one already-reserved generation synchronously from the main thread. */
+static int	send_reserved_inline(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id, int *exit_status)
+{
+	t_probe		snapshot;
+	uint64_t	sent_at_ms;
+
+	if (!nmap_runtime_begin_send(config, probe, dispatch_id, &snapshot))
+		return (1);
+	DEBUG_PROBE_SEND(&snapshot);
+	if (!nmap_send_probe(config, probe))
+	{
+		(void)nmap_runtime_fail_send(config, probe, dispatch_id);
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	sent_at_ms = nmap_now_ms();
+	nmap_runtime_complete_send(config, probe, dispatch_id, sent_at_ms);
+	return (1);
+}
+
+/** Reserve and enqueue one probe for sender-thread execution. */
+static int	queue_threaded(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, int *exit_status)
+{
+	uint32_t	dispatch_id;
+
+	if (!reserve_probe(config, probe, now_ms, &dispatch_id))
+		return (1);
+	if (!nmap_dispatch_probe_to_sender(config, probe, dispatch_id))
+	{
+		revert_reservation(config, probe, dispatch_id);
+		if (nmap_sender_pool_has_error(config))
+		{
+			if (exit_status)
+				*exit_status = 1;
+			return (0);
+		}
+	}
+	return (1);
+}
+
+/** Reserve and execute one probe directly from the main thread. */
+static int	send_inline(t_nmap_config *config, t_probe *probe,
+		uint64_t now_ms, int *exit_status)
+{
+	uint32_t	dispatch_id;
+
+	if (!reserve_probe(config, probe, now_ms, &dispatch_id))
+		return (1);
+	return (send_reserved_inline(config, probe, dispatch_id, exit_status));
+}
+
+/** Check whether the global send window is currently full. */
+static int	global_window_full(t_nmap_config *config)
+{
+	int	full;
+
+	pthread_mutex_lock(&config->runtime.lock);
+	full = (active_count_locked(config)
+			>= (size_t)config->scan.window_size);
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (full);
+}
+
+/**
+ * @brief Schedule every currently eligible PENDING probe while capacity allows.
+ *
+ * This function owns send order and window policy. Workers can only execute a
+ * generation already reserved here and cannot bypass global/UDP limits.
+ */
+int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
+{
+	size_t		i;
+	uint64_t	now_ms;
+	int			threaded;
+
+	if (!config || config->scan.window_size <= 0)
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	if (nmap_sender_pool_has_error(config))
+	{
+		if (exit_status)
+			*exit_status = 1;
+		return (0);
+	}
+	threaded = (config->sender_pool.worker_count > 0);
+	i = 0;
+	while (i < config->runtime.probe_count)
+	{
+		if (global_window_full(config))
+			break ;
+		now_ms = nmap_now_ms();
+		if (threaded)
+		{
+			if (!queue_threaded(config, &config->runtime.probes[i],
+					now_ms, exit_status))
+				return (0);
+		}
+		else if (!send_inline(config, &config->runtime.probes[i],
+				now_ms, exit_status))
+			return (0);
+		i++;
+	}
+	return (1);
+}
+
+===== srcs/runtime/timing.c =====
+#include "runtime/runtime_internal.h"
+
+#define NMAP_RTO_MIN_MS 100ULL
+
+#define NMAP_UDP_BACKOFF_RECOVERIES 2
+#define NMAP_UDP_WINDOW_RECOVERY_REPLIES 8
+
+#define NMAP_UDP_BACKOFF_INITIAL_GAP_MS 50ULL
+#define NMAP_UDP_BACKOFF_MAX_GAP_MS 1000ULL
+
+/** Return the smaller of two size_t values. */
+static size_t	min_size(size_t a, size_t b)
+{
+	if (a < b)
+		return (a);
+	return (b);
+}
+
+/** Clamp one RTO to the target timing limits. */
+static uint64_t	clamp_rto(const t_nmap_timing *timing, uint64_t rto)
+{
+	if (rto < timing->rto_min_ms)
+		return (timing->rto_min_ms);
+	if (rto > timing->rto_max_ms)
+		return (timing->rto_max_ms);
+	return (rto);
+}
+
+/**
+ * @brief Initialize target-local adaptive timing policy.
+ *
+ * The configured TCP timeout is both the conservative initial RTO and the
+ * maximum value allowed by this first adaptive implementation.
+ */
+void	nmap_timing_init(t_nmap_config *config)
+{
+	t_nmap_timing	*timing;
+	size_t			global_window;
+	size_t			udp_window;
+
+	if (!config)
+		return ;
+	timing = &config->runtime.timing;
+	timing->rto_max_ms = (uint64_t)config->scan.tcp_timeout_ms;
+	if (timing->rto_max_ms == 0)
+		timing->rto_max_ms = NMAP_RTO_MIN_MS;
+	timing->rto_min_ms = NMAP_RTO_MIN_MS;
+	if (timing->rto_max_ms < timing->rto_min_ms)
+		timing->rto_min_ms = timing->rto_max_ms;
+	timing->rto_ms = timing->rto_max_ms;
+
+	global_window = (size_t)config->scan.window_size;
+	udp_window = (size_t)config->scan.udp_window_size;
+	if (global_window == 0)
+		global_window = 1;
+	if (udp_window == 0)
+		udp_window = 1;
+	timing->udp_window_min = 1;
+	timing->udp_window_max = min_size(global_window, udp_window);
+	if (timing->udp_window_max == 0)
+		timing->udp_window_max = 1;
+	timing->udp_window = timing->udp_window_max;
+
+	if (config->scan.udp_send_gap_ms > 0)
+		timing->udp_send_gap_ms =
+			(uint64_t)config->scan.udp_send_gap_ms;
+	timing->udp_send_gap_max_ms = NMAP_UDP_BACKOFF_MAX_GAP_MS;
+	if (timing->udp_send_gap_ms > timing->udp_send_gap_max_ms)
+		timing->udp_send_gap_max_ms = timing->udp_send_gap_ms;
+}
+
+/**
+ * @brief Return the timeout applying to one currently outstanding probe.
+ *
+ * TCP-family scans use the target adaptive RTO after the first valid RTT
+ * sample. UDP deliberately keeps the configured UDP timeout.
+ */
+uint64_t	nmap_timing_probe_timeout_ms(const t_nmap_config *config,
+		const t_probe *probe)
+{
+	if (!config || !probe)
+		return (0);
+	if (nmap_probe_is_udp(probe))
+		return ((uint64_t)config->scan.udp_timeout_ms);
+	if (!config->runtime.timing.rtt_valid)
+		return ((uint64_t)config->scan.tcp_timeout_ms);
+	return (config->runtime.timing.rto_ms);
+}
+
+/**
+ * @brief Feed one unambiguous RTT sample into the target estimator.
+ *
+ * Formula:
+ *   SRTT   <- SRTT + (sample - SRTT) / 8
+ *   RTTVAR <- RTTVAR + (|sample - SRTT| - RTTVAR) / 4
+ *   RTO    <- SRTT + 4 * RTTVAR
+ *
+ * Integer arithmetic is written in weighted-average form to avoid signed
+ * intermediate values.
+ */
+static void	update_rtt(t_nmap_timing *timing, uint64_t sample_ms)
+{
+	uint64_t	delta;
+	uint64_t	next_rto;
+
+	if (sample_ms == 0)
+		sample_ms = 1;
+	if (!timing->rtt_valid)
+	{
+		timing->srtt_ms = sample_ms;
+		timing->rttvar_ms = sample_ms / 2;
+		if (timing->rttvar_ms == 0)
+			timing->rttvar_ms = 1;
+		timing->rtt_valid = 1;
+	}
+	else
+	{
+		if (sample_ms > timing->srtt_ms)
+			delta = sample_ms - timing->srtt_ms;
+		else
+			delta = timing->srtt_ms - sample_ms;
+		timing->rttvar_ms =
+			(3 * timing->rttvar_ms + delta) / 4;
+		timing->srtt_ms =
+			(7 * timing->srtt_ms + sample_ms) / 8;
+		if (timing->rttvar_ms == 0)
+			timing->rttvar_ms = 1;
+	}
+	next_rto = timing->srtt_ms + 4 * timing->rttvar_ms;
+	timing->rto_ms = clamp_rto(timing, next_rto);
+}
+
+/**
+ * @brief Increase TCP RTO after a reply recovered only after retransmission.
+ *
+ * Such a reply is intentionally not used as an RTT sample because it is
+ * ambiguous which transmitted attempt caused it.
+ */
+static void	backoff_rto(t_nmap_timing *timing)
+{
+	uint64_t	next;
+
+	if (!timing->rtt_valid
+		|| timing->rto_ms >= timing->rto_max_ms)
+		return ;
+	if (timing->rto_ms > timing->rto_max_ms / 2)
+		next = timing->rto_max_ms;
+	else
+		next = timing->rto_ms * 2;
+	timing->rto_ms = clamp_rto(timing, next);
+}
+
+/**
+ * @brief Reduce UDP parallelism and increase per-target pacing.
+ *
+ * The delay never decreases during one target scan. This deliberately keeps
+ * the controller monotonic and easy to reason about once rate limiting has
+ * been observed.
+ */
+static void	backoff_udp(t_nmap_timing *timing)
+{
+	size_t	next_window;
+	uint64_t	next_gap;
+
+	next_window = (timing->udp_window + 1) / 2;
+	if (next_window < timing->udp_window_min)
+		next_window = timing->udp_window_min;
+	timing->udp_window = next_window;
+
+	if (timing->udp_send_gap_ms == 0)
+		next_gap = NMAP_UDP_BACKOFF_INITIAL_GAP_MS;
+	else if (timing->udp_send_gap_ms
+		> timing->udp_send_gap_max_ms / 2)
+		next_gap = timing->udp_send_gap_max_ms;
+	else
+		next_gap = timing->udp_send_gap_ms * 2;
+	if (next_gap > timing->udp_send_gap_max_ms)
+		next_gap = timing->udp_send_gap_max_ms;
+	timing->udp_send_gap_ms = next_gap;
+
+	timing->udp_clean_replies = 0;
+}
+
+/**
+ * @brief Slowly restore UDP window capacity after clean first-attempt replies.
+ *
+ * The pacing delay is intentionally not reduced during the target scan.
+ */
+static void	note_clean_udp_reply(t_nmap_timing *timing)
+{
+	timing->udp_clean_replies++;
+	if (timing->udp_clean_replies
+		< NMAP_UDP_WINDOW_RECOVERY_REPLIES)
+		return ;
+	if (timing->udp_window < timing->udp_window_max)
+		timing->udp_window++;
+	timing->udp_retry_recoveries = 0;
+	timing->udp_clean_replies = 0;
+}
+
+/**
+ * @brief Record a UDP response recovered only after retransmission.
+ *
+ * One recovery may simply be ordinary packet loss. Two nearby recoveries are
+ * required before changing pacing/window policy.
+ */
+static void	note_udp_retry_recovery(t_nmap_timing *timing)
+{
+	timing->udp_clean_replies = 0;
+	timing->udp_retry_recoveries++;
+	if (timing->udp_retry_recoveries
+		< NMAP_UDP_BACKOFF_RECOVERIES)
+		return ;
+	backoff_udp(timing);
+	timing->udp_retry_recoveries = 0;
+}
+
+/**
+ * @brief Update target timing from one accepted network response.
+ *
+ * @note runtime.lock must already be held.
+ *
+ * Karn rule:
+ *   attempts_sent == 1 -> RTT sample is unambiguous.
+ *   attempts_sent > 1  -> classify the reply, but never use it as RTT sample.
+ */
+void	nmap_timing_note_reply_locked(t_nmap_config *config,
+		const t_probe *probe, uint64_t now_ms)
+{
+	t_nmap_timing	*timing;
+	uint64_t		sample_ms;
+
+	if (!config || !probe || probe->attempts_sent == 0)
+		return ;
+	timing = &config->runtime.timing;
+	if (probe->attempts_sent == 1
+		&& probe->sent_at_ms != 0
+		&& now_ms >= probe->sent_at_ms)
+	{
+		sample_ms = now_ms - probe->sent_at_ms;
+		update_rtt(timing, sample_ms);
+	}
+
+	if (nmap_probe_is_udp(probe))
+	{
+		if (probe->attempts_sent > 1)
+			note_udp_retry_recovery(timing);
+		else
+			note_clean_udp_reply(timing);
+	}
+	else if (probe->attempts_sent > 1)
+		backoff_rto(timing);
+}
+
+===== srcs/runtime/init.c =====
+#include "config.h"
+#include "runtime/runtime_internal.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <sys/random.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#define NMAP_SOURCE_PORT_MIN 32768U
+
+/** Count concrete scan types enabled in one scan mask. */
+static size_t	count_scan_types(uint32_t mask)
+{
+	size_t	count;
+
+	count = 0;
+	if (mask & NMAP_SCAN_SYN)
+		count++;
+	if (mask & NMAP_SCAN_NULL)
+		count++;
+	if (mask & NMAP_SCAN_FIN)
+		count++;
+	if (mask & NMAP_SCAN_XMAS)
+		count++;
+	if (mask & NMAP_SCAN_ACK)
+		count++;
+	if (mask & NMAP_SCAN_UDP)
+		count++;
+	return (count);
+}
+
+/** Return the Nth concrete scan type in stable report order. */
+static uint32_t	scan_type_at(uint32_t mask, size_t index)
+{
+	size_t	current;
+
+	current = 0;
+	if ((mask & NMAP_SCAN_SYN) && current++ == index)
+		return (NMAP_SCAN_SYN);
+	if ((mask & NMAP_SCAN_NULL) && current++ == index)
+		return (NMAP_SCAN_NULL);
+	if ((mask & NMAP_SCAN_FIN) && current++ == index)
+		return (NMAP_SCAN_FIN);
+	if ((mask & NMAP_SCAN_XMAS) && current++ == index)
+		return (NMAP_SCAN_XMAS);
+	if ((mask & NMAP_SCAN_ACK) && current++ == index)
+		return (NMAP_SCAN_ACK);
+	if ((mask & NMAP_SCAN_UDP) && current++ == index)
+		return (NMAP_SCAN_UDP);
+	return (0);
+}
+
+/**
+ * @brief Fallback entropy when getrandom() cannot immediately provide bytes.
+ */
+static uint32_t	fallback_random(void)
+{
+	struct timeval	tv;
+	uint32_t		value;
+
+	gettimeofday(&tv, NULL);
+	value = (uint32_t)tv.tv_sec ^ (uint32_t)tv.tv_usec;
+	value ^= (uint32_t)getpid() * 0x9e3779b9U;
+	value ^= value << 13;
+	value ^= value >> 17;
+	value ^= value << 5;
+	return (value);
+}
+
+/** Return one best-effort random uint32_t for probe identity generation. */
+static uint32_t	random_u32(void)
+{
+	uint32_t	value;
+	ssize_t		ret;
+
+	ret = getrandom(&value, sizeof(value), GRND_NONBLOCK);
+	if (ret == (ssize_t)sizeof(value))
+		return (value);
+	return (fallback_random());
+}
+
+/**
+ * @brief Choose one contiguous ephemeral source-port block for all probes.
+ *
+ * @note Source ports are unique inside the runtime and randomized between
+ *       processes. This preserves O(1) lookup while reducing accidental cross
+ *       matching when multiple scanner instances run simultaneously.
+ */
+static int	choose_source_port_base(t_nmap_runtime *runtime)
+{
+	uint32_t	max_base;
+	uint32_t	span;
+
+	if (runtime->probe_count == 0
+		|| runtime->probe_count > 65535U - NMAP_SOURCE_PORT_MIN + 1U)
+		return (0);
+	max_base = 65535U - (uint32_t)runtime->probe_count + 1U;
+	span = max_base - NMAP_SOURCE_PORT_MIN + 1U;
+	runtime->source_port_base = (uint16_t)(NMAP_SOURCE_PORT_MIN
+		+ random_u32() % span);
+	return (1);
+}
+
+/** Insert a probe in the O(1) source-port candidate index. */
+static int	index_probe(t_nmap_runtime *runtime, t_probe *probe)
+{
+	if (runtime->probe_by_src_port[probe->src_port])
+		return (0);
+	runtime->probe_by_src_port[probe->src_port] = probe;
+	return (1);
+}
+
+/** Initialize one logical probe from the immutable scan plan. */
+static int	init_probe(t_nmap_runtime *runtime, t_probe *probe,
+		uint16_t dst_port, uint32_t scan_type, size_t index,
+		uint32_t seq_seed)
+{
+	uint32_t	src_port;
+
+	src_port = (uint32_t)runtime->source_port_base + (uint32_t)index;
+	if (src_port > 65535U)
+		return (0);
+	memset(probe, 0, sizeof(*probe));
+	probe->dst_port = dst_port;
+	probe->src_port = (uint16_t)src_port;
+	probe->seq = seq_seed + (uint32_t)index * 0x9e3779b9U;
+	probe->scan_type = scan_type;
+	probe->state = PROBE_PENDING;
+	probe->result = SCAN_RESULT_UNKNOWN;
+	return (index_probe(runtime, probe));
+}
+
+/** Fill the complete [port x scan-type] logical probe table. */
+static int	fill_probes(t_nmap_config *config, size_t scan_count)
+{
+	size_t		port_index;
+	size_t		scan_index;
+	size_t		probe_index;
+	uint32_t	scan_type;
+	uint32_t	seq_seed;
+
+	seq_seed = random_u32();
+	probe_index = 0;
+	port_index = 0;
+	while (port_index < config->scan.port_count)
+	{
+		scan_index = 0;
+		while (scan_index < scan_count)
+		{
+			scan_type = scan_type_at(config->scan.scan_mask, scan_index);
+			if (!scan_type || !init_probe(&config->runtime,
+					&config->runtime.probes[probe_index],
+					config->scan.ports[port_index], scan_type,
+					probe_index, seq_seed))
+				return (0);
+			probe_index++;
+			scan_index++;
+		}
+		port_index++;
+	}
+	return (1);
+}
+
+/** Release a partially initialized runtime after setup failure. */
+static void	cleanup_partial_runtime(t_nmap_runtime *runtime)
+{
+	free(runtime->probe_by_src_port);
+	free(runtime->probes);
+	if (runtime->lock_initialized)
+		pthread_mutex_destroy(&runtime->lock);
+	memset(runtime, 0, sizeof(*runtime));
+}
+
+/**
+ * @brief Allocate and initialize the complete runtime for the current target.
+ */
+int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
+{
+	size_t	scan_count;
+	size_t	probe_count;
+
+	if (!config)
+		goto fail;
+	memset(&config->runtime, 0, sizeof(config->runtime));
+	if (pthread_mutex_init(&config->runtime.lock, NULL) != 0)
+		goto fail;
+	config->runtime.lock_initialized = 1;
+	nmap_timing_init(config);
+	scan_count = count_scan_types(config->scan.scan_mask);
+	if (config->scan.port_count == 0 || scan_count == 0)
+		goto partial_fail;
+	probe_count = config->scan.port_count * scan_count;
+	config->runtime.probe_count = probe_count;
+	if (!choose_source_port_base(&config->runtime))
+		goto partial_fail;
+	config->runtime.probes = calloc(probe_count, sizeof(t_probe));
+	config->runtime.probe_by_src_port = calloc(65536, sizeof(t_probe *));
+	if (!config->runtime.probes || !config->runtime.probe_by_src_port)
+		goto partial_fail;
+	if (!fill_probes(config, scan_count))
+		goto partial_fail;
+	return (1);
+partial_fail:
+	cleanup_partial_runtime(&config->runtime);
+fail:
+	if (exit_status)
+		*exit_status = 1;
+	return (0);
+}
+
+/**
+ * @brief Check whether every logical probe reached DONE.
+ */
+int	nmap_runtime_is_finished(t_nmap_config *config)
+{
+	int	finished;
+
+	if (!config || !config->runtime.lock_initialized)
+		return (1);
+	pthread_mutex_lock(&config->runtime.lock);
+	finished = (config->runtime.done_count >= config->runtime.probe_count);
+	pthread_mutex_unlock(&config->runtime.lock);
+	return (finished);
+}
+
+===== srcs/runtime/worker.c =====
+
+#include "runtime/worker.h"
+#include "debug/debug.h"
+#include "packet/packet.h"
+#include "runtime/runtime_internal.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+/**
+ * @brief Pop one job from the shared sender queue, blocking until work/stop.
+ */
+static int	pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
+{
+	pthread_mutex_lock(&pool->lock);
+	while (pool->queue_count == 0 && !pool->stop_requested)
+		pthread_cond_wait(&pool->cond, &pool->lock);
+	if (pool->stop_requested)
+	{
+		pthread_mutex_unlock(&pool->lock);
+		return (0);
+	}
+	*job = pool->queue[pool->queue_head];
+	pool->queue_head = (pool->queue_head + 1) % pool->queue_capacity;
+	pool->queue_count--;
+	pthread_mutex_unlock(&pool->lock);
+	return (1);
+}
+
+/** Record a fatal sender error visible to the main event loop. */
+static void	set_send_error(t_nmap_sender_pool *pool)
+{
+	pthread_mutex_lock(&pool->lock);
+	pool->send_error = 1;
+	pthread_mutex_unlock(&pool->lock);
+}
+
+/**
+ * @brief Execute one already-reserved generation.
+ *
+ * The worker does not decide any lifecycle policy. begin_send() only validates
+ * that this exact QUEUED generation is still current and creates a short-lived
+ * execution token. OUTSTANDING is committed only after sendto() succeeds.
+ *
+ * Once begin_send() succeeds, the physical send is considered committed. A
+ * late reply can still complete the logical probe while sendto() is running;
+ * complete_send() then observes DONE and never reopens it.
+ */
+static void	execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
+{
+	t_probe		snapshot;
+	uint64_t	sent_at_ms;
+	int			fatal;
+
+	if (!nmap_runtime_begin_send(worker->config, job->probe,
+			job->dispatch_id, &snapshot))
+		return ;
+	DEBUG_PROBE_SEND(&snapshot);
+	if (!nmap_send_probe(worker->config, job->probe))
+	{
+		fatal = nmap_runtime_fail_send(worker->config,
+				job->probe, job->dispatch_id);
+		if (fatal)
+			set_send_error(&worker->config->sender_pool);
+		return ;
+	}
+	sent_at_ms = nmap_now_ms();
+	nmap_runtime_complete_send(worker->config, job->probe,
+		job->dispatch_id, sent_at_ms);
+}
+
+/**
+ * @brief Sender worker entry point.
+ *
+ * No pcap, matching, classification, expiration, retry or scheduling policy
+ * belongs in this loop.
+ */
+static void	*worker_main(void *arg)
+{
+	t_nmap_worker	*worker;
+	t_nmap_send_job	job;
+
+	worker = (t_nmap_worker *)arg;
+	while (pool_pop_job(&worker->config->sender_pool, &job))
+		execute_job(worker, &job);
+	return (NULL);
+}
+
+/** Initialize and start one sender worker. */
+static int	init_worker(t_nmap_config *config, t_nmap_worker *worker,
+		int id)
+{
+	memset(worker, 0, sizeof(*worker));
+	worker->config = config;
+	worker->id = id;
+	if (pthread_create(&worker->thread, NULL, worker_main, worker) != 0)
+		return (0);
+	worker->started = 1;
+	return (1);
+}
+
+/**
+ * @brief Initialize the shared sender queue and requested worker threads.
+ *
+ * @note speedup=0 intentionally keeps an inline main-thread sender and does
+ *       not initialize pool synchronization primitives.
+ */
+int	nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status)
+{
+	int	i;
+
+	if (!config)
+		goto fail;
+	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+	config->sender_pool.worker_count = config->scan.thread_count;
+	if (config->sender_pool.worker_count <= 0)
+	{
+		config->sender_pool.worker_count = 0;
+		return (1);
+	}
+	if (pthread_mutex_init(&config->sender_pool.lock, NULL) != 0)
+		goto fail;
+	if (pthread_cond_init(&config->sender_pool.cond, NULL) != 0)
+	{
+		pthread_mutex_destroy(&config->sender_pool.lock);
+		goto fail;
+	}
+	config->sender_pool.initialized = 1;
+	config->sender_pool.queue_capacity = config->runtime.probe_count;
+	if (config->sender_pool.queue_capacity == 0)
+		goto fail_initialized;
+	config->sender_pool.queue = calloc(config->sender_pool.queue_capacity,
+			sizeof(*config->sender_pool.queue));
+	config->sender_pool.workers = calloc(config->sender_pool.worker_count,
+			sizeof(*config->sender_pool.workers));
+	if (!config->sender_pool.queue || !config->sender_pool.workers)
+		goto fail_initialized;
+	i = 0;
+	while (i < config->sender_pool.worker_count)
+	{
+		if (!init_worker(config, &config->sender_pool.workers[i], i))
+			goto fail_initialized;
+		i++;
+	}
+	return (1);
+fail_initialized:
+	if (exit_status)
+		*exit_status = 1;
+	nmap_stop_sender_pool(config);
+	return (0);
+fail:
+	if (exit_status)
+		*exit_status = 1;
+	return (0);
+}
+
+/**
+ * @brief Stop and join every sender worker, then release pool resources.
+ */
+void	nmap_stop_sender_pool(t_nmap_config *config)
+{
+	int	i;
+
+	if (!config || !config->sender_pool.initialized)
+		return ;
+	pthread_mutex_lock(&config->sender_pool.lock);
+	config->sender_pool.stop_requested = 1;
+	pthread_cond_broadcast(&config->sender_pool.cond);
+	pthread_mutex_unlock(&config->sender_pool.lock);
+	i = 0;
+	while (i < config->sender_pool.worker_count)
+	{
+		if (config->sender_pool.workers
+			&& config->sender_pool.workers[i].started)
+			pthread_join(config->sender_pool.workers[i].thread, NULL);
+		i++;
+	}
+	free(config->sender_pool.workers);
+	free(config->sender_pool.queue);
+	pthread_cond_destroy(&config->sender_pool.cond);
+	pthread_mutex_destroy(&config->sender_pool.lock);
+	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+}
+
+/** Return whether any relevant sender job reported a fatal send failure. */
+int	nmap_sender_pool_has_error(t_nmap_config *config)
+{
+	int	error;
+
+	if (!config || !config->sender_pool.initialized)
+		return (0);
+	pthread_mutex_lock(&config->sender_pool.lock);
+	error = config->sender_pool.send_error;
+	pthread_mutex_unlock(&config->sender_pool.lock);
+	return (error != 0);
+}
+
+/**
+ * @brief Push one already-reserved probe generation into the shared queue.
+ */
+int	nmap_dispatch_probe_to_sender(t_nmap_config *config, t_probe *probe,
+		uint32_t dispatch_id)
+{
+	t_nmap_sender_pool	*pool;
+
+	if (!config || !probe || !config->sender_pool.initialized)
+		return (0);
+	pool = &config->sender_pool;
+	pthread_mutex_lock(&pool->lock);
+	if (pool->stop_requested || pool->send_error
+		|| pool->queue_count >= pool->queue_capacity)
+	{
+		pthread_mutex_unlock(&pool->lock);
+		return (0);
+	}
+	pool->queue[pool->queue_tail].probe = probe;
+	pool->queue[pool->queue_tail].dispatch_id = dispatch_id;
+	pool->queue_tail = (pool->queue_tail + 1) % pool->queue_capacity;
+	pool->queue_count++;
+	pthread_cond_signal(&pool->cond);
+	pthread_mutex_unlock(&pool->lock);
+	return (1);
+}

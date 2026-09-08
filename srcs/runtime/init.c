@@ -167,6 +167,8 @@ static void	cleanup_partial_runtime(t_nmap_runtime *runtime)
 {
 	free(runtime->probe_by_src_port);
 	free(runtime->probes);
+	if (runtime->probe_cond_initialized)
+		pthread_cond_destroy(&runtime->probe_cond);
 	if (runtime->lock_initialized)
 		pthread_mutex_destroy(&runtime->lock);
 	memset(runtime, 0, sizeof(*runtime));
@@ -186,6 +188,9 @@ int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
 	if (pthread_mutex_init(&config->runtime.lock, NULL) != 0)
 		goto fail;
 	config->runtime.lock_initialized = 1;
+	if (pthread_cond_init(&config->runtime.probe_cond, NULL) != 0)
+		goto partial_fail;
+	config->runtime.probe_cond_initialized = 1;
 	nmap_timing_init(config);
 	scan_count = count_scan_types(config->scan.scan_mask);
 	if (config->scan.port_count == 0 || scan_count == 0)

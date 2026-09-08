@@ -15,6 +15,9 @@
  * QUEUED       one dispatch generation is reserved; it may still be waiting
  *              in the sender queue or currently executing sendto().
  * OUTSTANDING  sendto() completed successfully and its timeout clock is live.
+ * BENCHED      UDP probe has exhausted the currently justified retry level.
+ *              It remains matchable but is not schedulable until another
+ *              successful retry proves that one more level is useful.
  * DONE         final scan result has been produced.
  *
  * @note A logical probe survives retransmissions. A retry does not allocate a
@@ -25,6 +28,7 @@ typedef enum e_probe_state
 	PROBE_PENDING = 0,
 	PROBE_QUEUED,
 	PROBE_OUTSTANDING,
+	PROBE_BENCHED,
 	PROBE_DONE
 }	t_probe_state;
 
@@ -170,6 +174,10 @@ typedef enum e_nmap_wait_result
  *
  * udp_window limits simultaneous UDP probes. udp_send_gap_ms limits how fast
  * probes may be sent to this target even when window capacity remains.
+ *
+ * udp_retry_limit is the configured hard ceiling. udp_max_successful_retry
+ * records the highest retry level that actually produced useful evidence;
+ * only the next level beyond that success is allowed to run.
  */
 typedef struct s_nmap_timing
 {
@@ -188,7 +196,10 @@ typedef struct s_nmap_timing
 	uint64_t	udp_send_gap_max_ms;
 
 	size_t		udp_clean_replies;
-	size_t		udp_retry_recoveries;
+	size_t		udp_rate_limit_evidence;
+
+	size_t		udp_retry_limit;
+	size_t		udp_max_successful_retry;
 }	t_nmap_timing;
 
 /**
@@ -206,6 +217,7 @@ typedef struct s_nmap_runtime
 	size_t			done_count;
 	size_t			queued_count;
 	size_t			outstanding_count;
+	size_t			benched_count;
 	size_t			udp_queued_count;
 	size_t			udp_outstanding_count;
 
@@ -215,7 +227,9 @@ typedef struct s_nmap_runtime
 	t_nmap_timing	timing;
 
 	pthread_mutex_t	lock;
+	pthread_cond_t	probe_cond;
 	int				lock_initialized;
+	int				probe_cond_initialized;
 }	t_nmap_runtime;
 
 #endif

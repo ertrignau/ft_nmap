@@ -2,6 +2,7 @@
 
 #ifdef PROFILE
 
+# include <pthread.h>
 # include <stdio.h>
 # include <sys/time.h>
 
@@ -38,6 +39,8 @@ static t_prof_slot	g_prof[NMAP_PROF_EVENT_COUNT] = {
 	[NMAP_PROF_PROBE_RETRIED] = {"probes retried", 0, 0, 0, 0},
 };
 
+static pthread_mutex_t	g_prof_lock = PTHREAD_MUTEX_INITIALIZER;
+
 uint64_t	nmap_prof_now_us(void)
 {
 	struct timeval	tv;
@@ -52,6 +55,7 @@ void	nmap_prof_add_value(t_nmap_prof_event event, uint64_t elapsed_us)
 
 	if ((int)event < 0 || event >= NMAP_PROF_EVENT_COUNT)
 		return ;
+	pthread_mutex_lock(&g_prof_lock);
 	slot = &g_prof[event];
 	slot->calls++;
 	slot->total_us += elapsed_us;
@@ -59,6 +63,7 @@ void	nmap_prof_add_value(t_nmap_prof_event event, uint64_t elapsed_us)
 		slot->min_us = elapsed_us;
 	if (elapsed_us > slot->max_us)
 		slot->max_us = elapsed_us;
+	pthread_mutex_unlock(&g_prof_lock);
 }
 
 void	nmap_prof_add(t_nmap_prof_event event, uint64_t start_us)
@@ -70,7 +75,9 @@ void	nmap_prof_count(t_nmap_prof_event event)
 {
 	if ((int)event < 0 || event >= NMAP_PROF_EVENT_COUNT)
 		return ;
+	pthread_mutex_lock(&g_prof_lock);
 	g_prof[event].calls++;
+	pthread_mutex_unlock(&g_prof_lock);
 }
 
 static void	print_timed_slot(const t_prof_slot *slot)

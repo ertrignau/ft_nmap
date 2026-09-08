@@ -1,4 +1,3 @@
-
 #include "runtime/worker.h"
 #include "debug/debug.h"
 #include "packet/packet.h"
@@ -27,6 +26,17 @@ static int	pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
 	return (1);
 }
 
+/** Return whether pool shutdown has been requested. */
+static int	pool_is_stopping(t_nmap_sender_pool *pool)
+{
+	int	stopping;
+
+	pthread_mutex_lock(&pool->lock);
+	stopping = pool->stop_requested;
+	pthread_mutex_unlock(&pool->lock);
+	return (stopping);
+}
+
 /** Record a fatal sender error visible to the main event loop. */
 static void	set_send_error(t_nmap_sender_pool *pool)
 {
@@ -36,17 +46,45 @@ static void	set_send_error(t_nmap_sender_pool *pool)
 }
 
 /**
- * @brief Execute one already-reserved generation.
+ * @brief Wait until the main thread releases this physical attempt.
  *
- * The worker does not decide any lifecycle policy. begin_send() only validates
- * that this exact QUEUED generation is still current and creates a short-lived
- * execution token. OUTSTANDING is committed only after sendto() succeeds.
+ * The worker owns no receive path. Once sendto() succeeds, it cannot consume
+ * another job while this probe remains OUTSTANDING.
  *
- * Once begin_send() succeeds, the physical send is considered committed. A
- * late reply can still complete the logical probe while sendto() is running;
- * complete_send() then observes DONE and never reopens it.
+ * The main thread releases it by changing the probe to:
+ *
+ *   DONE      valid reply or final timeout
+ *   PENDING   timeout requiring another retry
+ *   BENCHED   UDP retry temporarily held by adaptive policy
+ *
+ * A single shared condition variable is deliberately used for simplicity.
+ * broadcast wakes all workers; each one re-checks its own probe predicate.
  */
-static void	execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
+static void	wait_for_probe(t_nmap_worker *worker, t_probe *probe)
+{
+	t_nmap_runtime		*runtime;
+	t_nmap_sender_pool	*pool;
+
+	runtime = &worker->config->runtime;
+	pool = &worker->config->sender_pool;
+	pthread_mutex_lock(&runtime->lock);
+	while (probe->state == PROBE_OUTSTANDING)
+	{
+		if (pool_is_stopping(pool))
+			break ;
+		pthread_cond_wait(&runtime->probe_cond, &runtime->lock);
+	}
+	pthread_mutex_unlock(&runtime->lock);
+}
+
+/**
+ * @brief Execute exactly one already-reserved physical send.
+ *
+ * @return 1 when sendto() succeeded and the worker must wait for the main
+ *         thread to resolve/expire this attempt, 0 for stale/failed jobs.
+ */
+static int	execute_job(t_nmap_worker *worker,
+		const t_nmap_send_job *job)
 {
 	t_probe		snapshot;
 	uint64_t	sent_at_ms;
@@ -54,7 +92,7 @@ static void	execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
 
 	if (!nmap_runtime_begin_send(worker->config, job->probe,
 			job->dispatch_id, &snapshot))
-		return ;
+		return (0);
 	DEBUG_PROBE_SEND(&snapshot);
 	if (!nmap_send_probe(worker->config, job->probe))
 	{
@@ -62,18 +100,27 @@ static void	execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
 				job->probe, job->dispatch_id);
 		if (fatal)
 			set_send_error(&worker->config->sender_pool);
-		return ;
+		return (0);
 	}
 	sent_at_ms = nmap_now_ms();
 	nmap_runtime_complete_send(worker->config, job->probe,
 		job->dispatch_id, sent_at_ms);
+	return (1);
 }
 
 /**
  * @brief Sender worker entry point.
  *
- * No pcap, matching, classification, expiration, retry or scheduling policy
- * belongs in this loop.
+ * One worker has at most one physical probe in flight.
+ *
+ * It only:
+ *   1. consumes one reserved job,
+ *   2. sends it,
+ *   3. waits until the main thread resolves/expires that attempt,
+ *   4. consumes another job.
+ *
+ * Pcap, matching, classification, retry policy and timeout policy stay owned
+ * exclusively by the main event loop.
  */
 static void	*worker_main(void *arg)
 {
@@ -82,7 +129,10 @@ static void	*worker_main(void *arg)
 
 	worker = (t_nmap_worker *)arg;
 	while (pool_pop_job(&worker->config->sender_pool, &job))
-		execute_job(worker, &job);
+	{
+		if (execute_job(worker, &job))
+			wait_for_probe(worker, job.probe);
+	}
 	return (NULL);
 }
 
@@ -167,6 +217,18 @@ void	nmap_stop_sender_pool(t_nmap_config *config)
 	config->sender_pool.stop_requested = 1;
 	pthread_cond_broadcast(&config->sender_pool.cond);
 	pthread_mutex_unlock(&config->sender_pool.lock);
+
+	/*
+	 * Some workers may be waiting for an OUTSTANDING probe rather than for a
+	 * queue job. Wake them as well so they can observe stop_requested.
+	 */
+	if (config->runtime.probe_cond_initialized)
+	{
+		pthread_mutex_lock(&config->runtime.lock);
+		pthread_cond_broadcast(&config->runtime.probe_cond);
+		pthread_mutex_unlock(&config->runtime.lock);
+	}
+
 	i = 0;
 	while (i < config->sender_pool.worker_count)
 	{

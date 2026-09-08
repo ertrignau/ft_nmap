@@ -92,7 +92,6 @@ int	nmap_prepare_send_socket(t_nmap_config *config, int *exit_status)
 		if (config->socket.send_fd >= 0)
 			close(config->socket.send_fd);
 		config->socket.send_fd = -1;
-		config->socket.error = saved_error;
 		fprintf(stderr, "ft_nmap: raw socket: %s\n",
 			strerror(saved_error));
 		if (exit_status)

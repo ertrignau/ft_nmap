@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include "ft_nmap.h"
+#include <stdio.h>
 
 static int	check_required_args(t_nmap_config *config)
 {

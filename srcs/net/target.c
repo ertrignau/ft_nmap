@@ -1,7 +1,6 @@
 #include "config.h"
 #include "net/address.h"
 
-#include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,7 +34,6 @@ static int	resolve_host(t_nmap_target *target, const char *target_name)
 	status = getaddrinfo(target_name, NULL, &hints, &results);
 	if (status != 0)
 	{
-		target->gai_error = status;
 		fprintf(stderr, "ft_nmap: %s: %s\n",
 			target_name, gai_strerror(status));
 		return (0);
@@ -60,7 +58,6 @@ static int	resolve_host(t_nmap_target *target, const char *target_name)
 	}
 	if (!nmap_ip_ntop(&target->addr, target->ip, sizeof(target->ip)))
 	{
-		target->error = errno;
 		perror("ft_nmap: inet_ntop target");
 		freeaddrinfo(results);
 		return (0);

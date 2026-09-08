@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include "ft_nmap.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -120,7 +121,7 @@ int	parse_port(t_nmap_config *config, int argc, char **argv, int *i)
 		fprintf(stderr, "ft_nmap: missing argument for --ports\n");
 		return (0);
 	}
-	if (config->cli.ports_arg)
+	if (config->cli.ports_specified)
 	{
 		fprintf(stderr, "ft_nmap: --ports specified more than once\n");
 		return (0);
@@ -131,7 +132,6 @@ int	parse_port(t_nmap_config *config, int argc, char **argv, int *i)
 		fprintf(stderr, "ft_nmap: invalid ports: %s\n", argv[*i]);
 		return (0);
 	}
-	config->cli.ports_arg = argv[*i];
 	config->cli.ports_specified = 1;
 	return (1);
 }

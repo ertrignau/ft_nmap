@@ -39,10 +39,12 @@ static void	build_progress_snapshot(t_nmap_config *config,
 	progress->done = config->runtime.done_count;
 	progress->queued = config->runtime.queued_count;
 	progress->outstanding = config->runtime.outstanding_count;
+	progress->benched = config->runtime.benched_count;
 	pthread_mutex_unlock(&config->runtime.lock);
 	accounted = progress->done
 		+ progress->queued
-		+ progress->outstanding;
+		+ progress->outstanding
+		+ progress->benched;
 	progress->pending = 0;
 	if (progress->total >= accounted)
 		progress->pending = progress->total - accounted;

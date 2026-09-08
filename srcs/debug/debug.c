@@ -33,6 +33,8 @@ static const char	*debug_probe_state_name(t_probe_state state)
 		return ("QUEUED");
 	if (state == PROBE_OUTSTANDING)
 		return ("OUTSTANDING");
+	if (state == PROBE_BENCHED)
+		return ("BENCHED");
 	if (state == PROBE_DONE)
 		return ("DONE");
 	return ("UNKNOWN");
@@ -70,7 +72,7 @@ void	nmap_debug_dev_config(const t_nmap_config *config)
 		config->scan.port_count, config->scan.scan_mask, config->scan.retries,
 		config->scan.tcp_timeout_ms, config->scan.udp_timeout_ms);
 	fprintf(stderr,
-		"[debug][config] threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
+		"[debug][config] extra_threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
 		config->scan.thread_count, config->scan.window_size,
 		config->scan.udp_window_size, config->scan.udp_send_gap_ms);
 }
@@ -100,10 +102,11 @@ void	nmap_debug_runtime(const t_nmap_config *config)
 	if (!config)
 		return ;
 	fprintf(stderr,
-		"[debug][runtime] probes=%zu done=%zu queued=%zu outstanding=%zu src_base=%u\n",
+		"[debug][runtime] probes=%zu done=%zu queued=%zu "
+		"outstanding=%zu benched=%zu src_base=%u\n",
 		config->runtime.probe_count, config->runtime.done_count,
 		config->runtime.queued_count, config->runtime.outstanding_count,
-		config->runtime.source_port_base);
+		config->runtime.benched_count, config->runtime.source_port_base);
 }
 
 /** Print one send attempt. */

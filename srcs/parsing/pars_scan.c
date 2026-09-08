@@ -12,9 +12,11 @@
 
 
 #include "ft_nmap.h"
+#include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
-int	scan_name_to_mask(const char *name, uint32_t *mask)
+static int	scan_name_to_mask(const char *name, uint32_t *mask)
 {
 	if (!name || !mask)
 		return (0);
@@ -105,7 +107,6 @@ int	parse_scan(t_nmap_config *config, int argc, char **argv, int *i)
 			argv[*i]);
 		return (0);
 	}
-	config->cli.scan_arg = argv[*i];
 	config->cli.scan_mask = mask;
 	config->cli.scan_specified = 1;
 	return (1);

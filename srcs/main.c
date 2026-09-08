@@ -1,6 +1,8 @@
 #include "ft_nmap.h"
 #include "debug/debug.h"
 
+#include <stdio.h>
+
 /** Print the command-line options supported by the current parser. */
 static void	print_help(const char *progname)
 {
@@ -11,9 +13,9 @@ static void	print_help(const char *progname)
 	printf("  --file <file>              Read targets from file\n");
 	printf("  --ports <list|range>       Ports to scan (default: 1-1024)\n");
 	printf("  --scan <types>             SYN,NULL,FIN,XMAS,ACK,UDP\n");
-	printf("  --speedup <0-250>          Number of sender workers\n");
+	printf("  --speedup <0-250>          Additional sender threads\n");
 	printf("  --timeout <ms>             Override TCP/UDP probe timeout\n");
-	printf("  --retries <count>          Number of retransmissions\n");
+	printf("  --retries <count>          Maximum retransmissions\n");
 	printf("  --no-dns                   Disable reverse DNS lookups\n");
 	printf("  --version                  Enable service version detection\n");
 	printf("  --os                       Enable OS detection\n");

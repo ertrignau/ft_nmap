@@ -54,9 +54,12 @@ void			nmap_timing_init(t_nmap_config *config);
 uint64_t		nmap_timing_probe_timeout_ms(
 					const t_nmap_config *config,
 					const t_probe *probe);
-void			nmap_timing_note_reply_locked(
+size_t			nmap_timing_udp_allowed_retries_locked(
+					const t_nmap_config *config);
+int				nmap_timing_note_reply_locked(
 					t_nmap_config *config,
 					const t_probe *probe,
+					const t_scan_reason *reason,
 					uint64_t now_ms);
 
 #endif

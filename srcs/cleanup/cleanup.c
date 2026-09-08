@@ -15,6 +15,8 @@ static void	cleanup_runtime(t_nmap_runtime *runtime)
 		return ;
 	free(runtime->probe_by_src_port);
 	free(runtime->probes);
+	if (runtime->probe_cond_initialized)
+		pthread_cond_destroy(&runtime->probe_cond);
 	if (runtime->lock_initialized)
 		pthread_mutex_destroy(&runtime->lock);
 	memset(runtime, 0, sizeof(*runtime));

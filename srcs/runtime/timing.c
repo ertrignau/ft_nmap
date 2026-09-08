@@ -2,7 +2,6 @@
 
 #define NMAP_RTO_MIN_MS 100ULL
 
-#define NMAP_UDP_BACKOFF_RECOVERIES 2
 #define NMAP_UDP_WINDOW_RECOVERY_REPLIES 8
 
 #define NMAP_UDP_BACKOFF_INITIAL_GAP_MS 50ULL
@@ -26,11 +25,30 @@ static uint64_t	clamp_rto(const t_nmap_timing *timing, uint64_t rto)
 	return (rto);
 }
 
+/** Return the currently justified number of UDP retransmissions. */
+size_t	nmap_timing_udp_allowed_retries_locked(
+		const t_nmap_config *config)
+{
+	const t_nmap_timing	*timing;
+	size_t				allowed;
+
+	if (!config)
+		return (0);
+	timing = &config->runtime.timing;
+	if (timing->udp_retry_limit == 0)
+		return (0);
+	allowed = timing->udp_max_successful_retry + 1;
+	if (allowed > timing->udp_retry_limit)
+		allowed = timing->udp_retry_limit;
+	return (allowed);
+}
+
 /**
  * @brief Initialize target-local adaptive timing policy.
  *
- * The configured TCP timeout is both the conservative initial RTO and the
- * maximum value allowed by this first adaptive implementation.
+ * TCP starts with the configured timeout as a conservative RTO ceiling.
+ * UDP starts with at most one justified retransmission; higher retry levels
+ * must be proven useful by successful replies from earlier retry levels.
  */
 void	nmap_timing_init(t_nmap_config *config)
 {
@@ -67,6 +85,9 @@ void	nmap_timing_init(t_nmap_config *config)
 	timing->udp_send_gap_max_ms = NMAP_UDP_BACKOFF_MAX_GAP_MS;
 	if (timing->udp_send_gap_ms > timing->udp_send_gap_max_ms)
 		timing->udp_send_gap_max_ms = timing->udp_send_gap_ms;
+
+	if (config->scan.retries > 0)
+		timing->udp_retry_limit = (size_t)config->scan.retries;
 }
 
 /**
@@ -150,23 +171,41 @@ static void	backoff_rto(t_nmap_timing *timing)
 	timing->rto_ms = clamp_rto(timing, next);
 }
 
-/**
- * @brief Reduce UDP parallelism and increase per-target pacing.
- *
- * The delay never decreases during one target scan. This deliberately keeps
- * the controller monotonic and easy to reason about once rate limiting has
- * been observed.
- */
-static void	backoff_udp(t_nmap_timing *timing)
+/** Set a minimum UDP send gap without reducing an existing larger gap. */
+static void	ensure_udp_gap(t_nmap_timing *timing, uint64_t minimum)
 {
-	size_t	next_window;
+	if (minimum > timing->udp_send_gap_max_ms)
+		minimum = timing->udp_send_gap_max_ms;
+	if (timing->udp_send_gap_ms < minimum)
+		timing->udp_send_gap_ms = minimum;
+}
+
+/**
+ * @brief React to an ICMP response that was recovered only after a UDP retry.
+ *
+ * The first observation stops zero-gap bursts. The second observation confirms
+ * the pattern, halves UDP parallelism once, and doubles the gap. Further
+ * observations keep doubling the gap up to the configured ceiling.
+ */
+static void	note_udp_icmp_retry_recovery(t_nmap_timing *timing)
+{
+	size_t		next_window;
 	uint64_t	next_gap;
 
-	next_window = (timing->udp_window + 1) / 2;
-	if (next_window < timing->udp_window_min)
-		next_window = timing->udp_window_min;
-	timing->udp_window = next_window;
-
+	timing->udp_clean_replies = 0;
+	timing->udp_rate_limit_evidence++;
+	if (timing->udp_rate_limit_evidence == 1)
+	{
+		ensure_udp_gap(timing, NMAP_UDP_BACKOFF_INITIAL_GAP_MS);
+		return ;
+	}
+	if (timing->udp_rate_limit_evidence == 2)
+	{
+		next_window = (timing->udp_window + 1) / 2;
+		if (next_window < timing->udp_window_min)
+			next_window = timing->udp_window_min;
+		timing->udp_window = next_window;
+	}
 	if (timing->udp_send_gap_ms == 0)
 		next_gap = NMAP_UDP_BACKOFF_INITIAL_GAP_MS;
 	else if (timing->udp_send_gap_ms
@@ -177,14 +216,12 @@ static void	backoff_udp(t_nmap_timing *timing)
 	if (next_gap > timing->udp_send_gap_max_ms)
 		next_gap = timing->udp_send_gap_max_ms;
 	timing->udp_send_gap_ms = next_gap;
-
-	timing->udp_clean_replies = 0;
 }
 
 /**
  * @brief Slowly restore UDP window capacity after clean first-attempt replies.
  *
- * The pacing delay is intentionally not reduced during the target scan.
+ * The pacing delay deliberately never decreases during one target scan.
  */
 static void	note_clean_udp_reply(t_nmap_timing *timing)
 {
@@ -194,25 +231,38 @@ static void	note_clean_udp_reply(t_nmap_timing *timing)
 		return ;
 	if (timing->udp_window < timing->udp_window_max)
 		timing->udp_window++;
-	timing->udp_retry_recoveries = 0;
 	timing->udp_clean_replies = 0;
 }
 
 /**
- * @brief Record a UDP response recovered only after retransmission.
+ * @brief Record that one concrete UDP retry level produced useful evidence.
  *
- * One recovery may simply be ordinary packet loss. Two nearby recoveries are
- * required before changing pacing/window policy.
+ * A success after retry N justifies trying retry N+1 on still-silent probes,
+ * never more than one level at a time and never beyond udp_retry_limit.
+ *
+ * @return 1 when the currently allowed retry level increased.
  */
-static void	note_udp_retry_recovery(t_nmap_timing *timing)
+static int	note_udp_retry_success(t_nmap_timing *timing,
+		const t_probe *probe)
 {
-	timing->udp_clean_replies = 0;
-	timing->udp_retry_recoveries++;
-	if (timing->udp_retry_recoveries
-		< NMAP_UDP_BACKOFF_RECOVERIES)
-		return ;
-	backoff_udp(timing);
-	timing->udp_retry_recoveries = 0;
+	size_t	before;
+	size_t	retry_number;
+	size_t	after;
+
+	if (probe->attempts_sent <= 1)
+		return (0);
+	before = timing->udp_max_successful_retry + 1;
+	if (before > timing->udp_retry_limit)
+		before = timing->udp_retry_limit;
+	retry_number = (size_t)probe->attempts_sent - 1;
+	if (retry_number > timing->udp_retry_limit)
+		retry_number = timing->udp_retry_limit;
+	if (retry_number > timing->udp_max_successful_retry)
+		timing->udp_max_successful_retry = retry_number;
+	after = timing->udp_max_successful_retry + 1;
+	if (after > timing->udp_retry_limit)
+		after = timing->udp_retry_limit;
+	return (after > before);
 }
 
 /**
@@ -221,33 +271,49 @@ static void	note_udp_retry_recovery(t_nmap_timing *timing)
  * @note runtime.lock must already be held.
  *
  * Karn rule:
- *   attempts_sent == 1 -> RTT sample is unambiguous.
- *   attempts_sent > 1  -> classify the reply, but never use it as RTT sample.
+ *   attempts_sent == 1 and sent_at_ms != 0 -> unambiguous RTT sample.
+ *   attempts_sent > 1                      -> never update RTT.
+ *
+ * For UDP, any useful retry may justify one additional retry level, while
+ * only an ICMP recovered after retry is treated as rate-limit evidence.
+ *
+ * @return 1 when UDP retry policy expanded and BENCHED probes may be released.
  */
-void	nmap_timing_note_reply_locked(t_nmap_config *config,
-		const t_probe *probe, uint64_t now_ms)
+int	nmap_timing_note_reply_locked(t_nmap_config *config,
+		const t_probe *probe, const t_scan_reason *reason,
+		uint64_t now_ms)
 {
 	t_nmap_timing	*timing;
 	uint64_t		sample_ms;
+	int				retry_level_increased;
+	int				first_attempt_sample;
 
-	if (!config || !probe || probe->attempts_sent == 0)
-		return ;
+	if (!config || !probe || !reason || probe->attempts_sent == 0)
+		return (0);
 	timing = &config->runtime.timing;
-	if (probe->attempts_sent == 1
-		&& probe->sent_at_ms != 0
-		&& now_ms >= probe->sent_at_ms)
+	retry_level_increased = 0;
+	first_attempt_sample = (probe->attempts_sent == 1
+			&& probe->sent_at_ms != 0
+			&& now_ms >= probe->sent_at_ms);
+	if (first_attempt_sample)
 	{
 		sample_ms = now_ms - probe->sent_at_ms;
 		update_rtt(timing, sample_ms);
 	}
-
 	if (nmap_probe_is_udp(probe))
 	{
 		if (probe->attempts_sent > 1)
-			note_udp_retry_recovery(timing);
-		else
+		{
+			retry_level_increased =
+				note_udp_retry_success(timing, probe);
+			timing->udp_clean_replies = 0;
+			if (reason->kind == SCAN_REASON_ICMP)
+				note_udp_icmp_retry_recovery(timing);
+		}
+		else if (first_attempt_sample)
 			note_clean_udp_reply(timing);
 	}
 	else if (probe->attempts_sent > 1)
 		backoff_rto(timing);
+	return (retry_level_increased);
 }

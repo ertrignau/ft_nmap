@@ -8,8 +8,6 @@
 # include <pthread.h>
 # include <stddef.h>
 # include <stdint.h>
-# include <stdio.h>
-# include <string.h>
 
 # define NMAP_MAX_PORTS 1024
 # define NMAP_MAX_TARGETS 1024
@@ -82,8 +80,6 @@ typedef struct s_nmap_cli
 	const char	*program_name;
 	const char	*target;
 	const char	*target_file;
-	const char	*ports_arg;
-	const char	*scan_arg;
 
 	uint32_t	scan_mask;
 
@@ -128,8 +124,6 @@ typedef struct s_nmap_target
 	const char		*name;
 	t_nmap_ip_addr	addr;
 	char			ip[NMAP_ADDR_TEXT_MAX];
-	int				error;
-	int				gai_error;
 }	t_nmap_target;
 
 /**
@@ -144,7 +138,6 @@ typedef struct s_nmap_route
 	unsigned int	ifindex;
 	t_nmap_ip_addr	src_addr;
 	char			src_ip[NMAP_ADDR_TEXT_MAX];
-	int				error;
 }	t_nmap_route;
 
 /**
@@ -154,7 +147,6 @@ typedef struct s_nmap_socket
 {
 	int			send_fd;
 	sa_family_t	family;
-	int			error;
 }	t_nmap_socket;
 
 /**
@@ -166,7 +158,6 @@ typedef struct s_nmap_capture
 	char	errbuf[PCAP_ERRBUF_SIZE];
 	int		fd;
 	int		datalink;
-	int		error;
 }	t_nmap_capture;
 
 /**
