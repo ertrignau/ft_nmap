@@ -130,7 +130,11 @@ void	nmap_output_begin_scan(const t_nmap_config *config)
 	if (!config)
 		return ;
 	printf("ft_nmap scan configuration\n");
-	if (config->target.name
+	if (config->target.hostname[0] != '\0'
+		&& strcmp(config->target.hostname, config->target.ip) != 0)
+		printf("Target   : %s (%s)\n",
+			config->target.hostname, config->target.ip);
+	else if (config->target.name
 		&& strcmp(config->target.name, config->target.ip) != 0)
 		printf("Target   : %s (%s)\n",
 			config->target.name, config->target.ip);

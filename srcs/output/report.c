@@ -231,6 +231,75 @@ static void	print_legend(void)
 		"ERR=error\n");
 }
 
+/** Print the best available target identity. */
+static void	print_target_identity(const t_nmap_config *config)
+{
+	if (config->target.hostname[0] != '\0'
+		&& strcmp(config->target.hostname, config->target.ip) != 0)
+	{
+		printf("ft_nmap scan report for %s (%s)\n",
+			config->target.hostname, config->target.ip);
+		return ;
+	}
+	if (config->target.name
+		&& strcmp(config->target.name, config->target.ip) != 0)
+	{
+		printf("ft_nmap scan report for %s (%s)\n",
+			config->target.name, config->target.ip);
+		return ;
+	}
+	printf("ft_nmap scan report for %s\n", config->target.ip);
+}
+
+/** Return the deliberately broad OS family associated with one TTL bucket. */
+static const char	*os_guess_name(uint8_t initial_hop_limit)
+{
+	if (initial_hop_limit == 64)
+		return ("Unix/Linux-like");
+	if (initial_hop_limit == 128)
+		return ("Windows-like");
+	if (initial_hop_limit == 255)
+		return ("Network/Unix-like");
+	return ("unknown");
+}
+
+/**
+ * @brief Print lightweight OS detection based on TTL/Hop Limit.
+ *
+ * This is deliberately labelled as a guess: many systems can customize their
+ * initial TTL and several operating systems share the same conventional value.
+ */
+static void	print_os_guess(const t_nmap_config *config)
+{
+	const char	*label;
+
+	if (!config->scan.os_detection)
+		return ;
+	if (config->target.observed_hop_limit == 0
+		|| config->target.initial_hop_limit == 0)
+	{
+		printf("OS guess : unavailable (no direct target reply)\n");
+		return ;
+	}
+	label = os_guess_name(config->target.initial_hop_limit);
+	if (config->target.addr.family == AF_INET6)
+	{
+		printf("OS guess : %s "
+			"(Hop Limit observed %u, initial ~%u)\n",
+			label,
+			(unsigned int)config->target.observed_hop_limit,
+			(unsigned int)config->target.initial_hop_limit);
+	}
+	else
+	{
+		printf("OS guess : %s "
+			"(TTL observed %u, initial ~%u)\n",
+			label,
+			(unsigned int)config->target.observed_hop_limit,
+			(unsigned int)config->target.initial_hop_limit);
+	}
+}
+
 /**
  * @brief Print one successfully completed target.
  *
@@ -243,8 +312,9 @@ void	nmap_output_print_target_report(const t_nmap_config *config,
 
 	if (!config)
 		return ;
-	printf("ft_nmap scan report for %s (%s)\n\n",
-		config->target.name, config->target.ip);
+	print_target_identity(config);
+	print_os_guess(config);
+	printf("\n");
 	print_result_table(config);
 	print_legend();
 	nmap_output_format_duration(elapsed_ms,

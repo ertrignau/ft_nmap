@@ -14,6 +14,7 @@
 # define NMAP_TARGET_INITIAL_CAPACITY 16
 # define NMAP_MAX_THREADS 250
 # define NMAP_IFACE_NAME_MAX 64
+# define NMAP_HOSTNAME_MAX 256
 
 /**
  * @brief Scan families required by the ft_nmap subject.
@@ -124,6 +125,17 @@ typedef struct s_nmap_target
 	const char		*name;
 	t_nmap_ip_addr	addr;
 	char			ip[NMAP_ADDR_TEXT_MAX];
+	char			hostname[NMAP_HOSTNAME_MAX];
+
+	/*
+	 * Lightweight OS fingerprint.
+	 *
+	 * observed_hop_limit is the IPv4 TTL or IPv6 Hop Limit received from
+	 * the target itself. initial_hop_limit is the nearest conventional
+	 * initial value inferred from that observation: 64, 128 or 255.
+	 */
+	uint8_t			observed_hop_limit;
+	uint8_t			initial_hop_limit;
 }	t_nmap_target;
 
 /**

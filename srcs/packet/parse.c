@@ -192,6 +192,7 @@ static int	parse_ipv4_packet(const unsigned char *packet,
 		return (0);
 	set_ipv4_addr(&reply->src_addr, packet + ip_offset + 12);
 	set_ipv4_addr(&reply->dst_addr, packet + ip_offset + 16);
+	reply->hop_limit = packet[ip_offset + 8];
 	protocol = packet[ip_offset + 9];
 	if (protocol == IPPROTO_TCP)
 		return (parse_tcp(packet, end, ip_offset + header_len, reply));
@@ -372,6 +373,7 @@ static int	parse_ipv6_packet(const unsigned char *packet,
 		return (0);
 	set_ipv6_addr(&reply->src_addr, packet + ip_offset + 8);
 	set_ipv6_addr(&reply->dst_addr, packet + ip_offset + 24);
+	reply->hop_limit = packet[ip_offset + 7];
 	if (!ipv6_find_upper(packet, end, ip_offset + NMAP_IPV6_HEADER_LEN,
 			packet[ip_offset + 6], &upper_offset, &protocol))
 		return (0);

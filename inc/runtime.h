@@ -125,6 +125,13 @@ typedef struct s_nmap_reply
 {
 	t_nmap_reply_type	type;
 
+	/*
+	 * IPv4 TTL or IPv6 Hop Limit from the outer packet.
+	 * This is presentation/fingerprint evidence only; it is never used to
+	 * match or classify a port.
+	 */
+	uint8_t				hop_limit;
+
 	t_nmap_ip_addr		src_addr;
 	t_nmap_ip_addr		dst_addr;
 	uint16_t			src_port;
