@@ -165,7 +165,9 @@ void	nmap_debug_hexdump(const char *title, const void *data, size_t len)
 			if (i + j < len)
 				fprintf(stderr, "%02x ", bytes[i + j]);
 			else
+			{
 				fprintf(stderr, "   ");
+			}
 			if (j == 7)
 				fprintf(stderr, " ");
 			j++;
@@ -177,7 +179,9 @@ void	nmap_debug_hexdump(const char *title, const void *data, size_t len)
 			if (isprint(bytes[i + j]))
 				fprintf(stderr, "%c", bytes[i + j]);
 			else
+			{
 				fprintf(stderr, ".");
+			}
 			j++;
 		}
 		fprintf(stderr, "|\n");

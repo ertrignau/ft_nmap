@@ -34,7 +34,9 @@ int	parse_flag(t_nmap_config *config, int argc, char **argv, int *i)
 		return (parse_scan(config, argc, argv, i));
 	if (nmap_streq(argv[*i], "--retries"))
 		return (parse_retries(config, argc, argv, i));
-	if (nmap_streq(argv[*i], "--no-dns") || nmap_streq(argv[*i], "--open") || nmap_streq(argv[*i], "--reason") || nmap_streq(argv[*i], "--version") || nmap_streq(argv[*i], "--os"))
+	if (nmap_streq(argv[*i], "--ttl"))
+		return (parse_ttl(config, argc, argv, i));
+	if (nmap_streq(argv[*i], "--no-dns") || nmap_streq(argv[*i], "--open") || nmap_streq(argv[*i], "--reason") || nmap_streq(argv[*i], "--os"))
 		return (parse_bool_flag(config, argv[*i]));
 	fprintf(stderr, "ft_nmap: unknown flag: %s\n", argv[*i]);
 	return (0);

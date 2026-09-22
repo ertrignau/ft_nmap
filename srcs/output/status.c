@@ -105,8 +105,10 @@ static void	print_timeouts(const t_nmap_config *config)
 		printf("Timeout  : %d ms\n",
 			config->scan.udp_timeout_ms);
 	else
+	{
 		printf("Timeout  : %d ms\n",
 			config->scan.tcp_timeout_ms);
+	}
 }
 
 /** Print Estimated Time of Completion. */
@@ -124,6 +126,29 @@ static void	print_etc(uint64_t remaining_ms)
 	printf("%s", buffer);
 }
 
+/** Print the execution policy selected by --speedup. */
+static void	print_execution_policy(const t_nmap_config *config)
+{
+	if (config->scan.thread_count == 0)
+	{
+		printf("Mode     : adaptive core (--speedup 0)\n");
+		printf("Window   : %d probes\n", config->scan.window_size);
+		if (config->scan.scan_mask & NMAP_SCAN_UDP)
+		{
+			printf("UDP pace : window %zu, gap %llums\n",
+				config->runtime.timing.udp_window,
+				(unsigned long long)
+				config->runtime.timing.udp_send_gap_ms);
+		}
+		return ;
+	}
+	printf("Mode     : threaded (--speedup %d)\n",
+		config->scan.thread_count);
+	printf("Workers  : %d, one outstanding probe per worker\n",
+		config->scan.thread_count);
+	printf("Policy   : fixed timeout and retry count\n");
+}
+
 /** Print effective configuration before one target scan. */
 void	nmap_output_begin_scan(const t_nmap_config *config)
 {
@@ -139,20 +164,28 @@ void	nmap_output_begin_scan(const t_nmap_config *config)
 		printf("Target   : %s (%s)\n",
 			config->target.name, config->target.ip);
 	else
+	{
 		printf("Target   : %s\n", config->target.ip);
+	}
 	print_ports(config);
 	print_scans(config);
-	printf("Extra threads : %d\n", config->scan.thread_count);
-	printf("Retries       : %d\n", config->scan.retries);
+	printf("Retries  : %d\n", config->scan.retries);
 	print_timeouts(config);
-	if (config->scan.thread_count > 0)
-		printf("Send mode     : naive threaded\n");
+	print_execution_policy(config);
+	if (config->target.addr.family == AF_INET6)
+	{
+		printf("HopLimit : %d\n", config->scan.ttl);
+	}
 	else
-		printf("Window        : %d\n", config->scan.window_size);
+	{
+		printf("TTL      : %d\n", config->scan.ttl);
+	}
 	if (isatty(STDIN_FILENO))
 		printf("\nStarting scan... (press Enter for progress)\n\n");
 	else
+	{
 		printf("\nStarting scan...\n\n");
+	}
 	fflush(stdout);
 }
 

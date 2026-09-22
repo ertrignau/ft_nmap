@@ -81,7 +81,9 @@ int	nmap_send_udp_probe(t_nmap_config *config, t_probe *probe)
 	else if (config->target.addr.family == AF_INET6)
 		packet_len = build_ipv6_udp_packet(config, probe, packet);
 	else
+	{
 		packet_len = 0;
+	}
 	PROF_ADD(NMAP_PROF_SEND_BUILD, prof_start);
 	if (packet_len == 0)
 	{

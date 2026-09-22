@@ -25,7 +25,9 @@ static void	print_colored_token(const char *token, const char *color,
 			nmap_output_color_reset(),
 			width - (int)strlen(token), "");
 	else
+	{
 		printf("%-*s", width, token);
+	}
 }
 
 /** Print one scan state column. */
@@ -105,7 +107,9 @@ static void	print_inline_token(const char *token, const char *color,
 		printf("%s%s%s", color, token,
 			nmap_output_color_reset());
 	else
+	{
 		printf("%s", token);
+	}
 }
 
 /**
@@ -322,7 +326,9 @@ void	nmap_output_print_target_report(const t_nmap_config *config,
 	if (multi_target)
 		printf("\nTarget completed in %s\n", duration);
 	else
+	{
 		printf("\nScan completed in %s\n", duration);
+	}
 }
 
 /** Print the process-level footer for a multi-target run. */

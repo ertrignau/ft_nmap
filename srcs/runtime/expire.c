@@ -70,8 +70,14 @@ static void	finalize_no_response_locked(t_nmap_config *config,
 		"no matching response after retransmission policy");
 }
 
-/** Apply the original fixed retry policy to one TCP-family probe. */
-static void	expire_tcp_probe_locked(t_nmap_config *config, t_probe *probe)
+/**
+ * @brief Apply a fixed retry count without adaptive retry learning.
+ *
+ * This policy is used by TCP in the adaptive core and by every protocol in
+ * --speedup mode.
+ */
+static void	expire_fixed_retry_probe_locked(t_nmap_config *config,
+		t_probe *probe)
 {
 	size_t	hard_limit;
 
@@ -123,10 +129,18 @@ static void	expire_probe_locked(t_nmap_config *config, t_probe *probe)
 	remove_outstanding_count(config, probe);
 	DEBUG_PROBE_TIMEOUT(probe);
 	PROF_COUNT(NMAP_PROF_PACKET_TIMEOUT);
-	if (nmap_probe_is_udp(probe))
+	if (!nmap_runtime_uses_adaptive_core(config))
+	{
+		expire_fixed_retry_probe_locked(config, probe);
+	}
+	else if (nmap_probe_is_udp(probe))
+	{
 		expire_udp_probe_locked(config, probe);
+	}
 	else
-		expire_tcp_probe_locked(config, probe);
+	{
+		expire_fixed_retry_probe_locked(config, probe);
+	}
 	pthread_cond_broadcast(&config->runtime.probe_cond);
 }
 
@@ -163,7 +177,8 @@ static void	finalize_stalled_bench_locked(t_nmap_config *config)
 {
 	size_t	i;
 
-	if (config->runtime.benched_count == 0
+	if (!nmap_runtime_uses_adaptive_core(config)
+		|| config->runtime.benched_count == 0
 		|| has_retry_decision_source_locked(config))
 		return ;
 	i = 0;

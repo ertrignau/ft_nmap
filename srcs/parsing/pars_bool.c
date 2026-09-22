@@ -22,11 +22,11 @@ int	parse_bool_flag(t_nmap_config *config, const char *flag)
 		config->cli.open_only = 1;
 	else if (nmap_streq(flag, "--reason"))
 		config->cli.show_reason = 1;
-	else if (nmap_streq(flag, "--version"))
-		config->cli.version_detection = 1;
 	else if (nmap_streq(flag, "--os"))
 		config->cli.os_detection = 1;
 	else
+	{
 		return (0);
+	}
 	return (1);
 }

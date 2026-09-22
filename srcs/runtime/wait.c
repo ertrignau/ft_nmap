@@ -109,7 +109,8 @@ static int	get_next_wait_ms(t_nmap_config *config,
 		}
 		i++;
 	}
-	if (has_pending_udp_locked(config))
+	if (nmap_runtime_uses_adaptive_core(config)
+		&& has_pending_udp_locked(config))
 	{
 		remaining = remaining_udp_gap_ms(config, now_ms);
 		if (remaining > 0)

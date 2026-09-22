@@ -90,7 +90,9 @@ t_probe	*nmap_find_matching_probe(t_nmap_config *config, t_nmap_reply *reply)
 			|| reply->type == NMAP_REPLY_ICMP6))
 		matches = icmp_reply_matches(config, probe, reply);
 	else
+	{
 		matches = 0;
+	}
 	pthread_mutex_unlock(&config->runtime.lock);
 	if (!matches)
 		return (NULL);

@@ -1,0 +1,156 @@
+// ============================================================================
+// Parsing validation
+//
+// Un test = une commande.
+// Le resultat attendu est explicite et verifie automatiquement.
+// ============================================================================
+
+
+[test ttl-min]
+// Valeur minimale acceptee pour --ttl.
+expect: success
+ft: ./ft_nmap --help --ttl 0 >/dev/null
+
+
+[test ttl-max]
+// Valeur maximale acceptee pour --ttl.
+expect: success
+ft: ./ft_nmap --help --ttl 255 >/dev/null
+
+
+[test ttl-negative]
+// Les entiers signes ne font pas partie de la grammaire.
+expect: failure
+ft: ./ft_nmap --help --ttl -1 >/dev/null
+
+
+[test ttl-too-high]
+// 256 depasse la valeur maximale d'un TTL / Hop Limit.
+expect: failure
+ft: ./ft_nmap --help --ttl 256 >/dev/null
+
+
+[test ttl-plus-sign]
+// Le parseur accepte uniquement des chiffres decimaux ASCII.
+expect: failure
+ft: ./ft_nmap --help --ttl +1 >/dev/null
+
+
+[test speedup-zero]
+// Zero selectionne le moteur adaptatif sans workers supplementaires.
+expect: success
+ft: ./ft_nmap --help --speedup 0 >/dev/null
+
+
+[test speedup-max]
+// 250 est la limite maximale imposee par le sujet.
+expect: success
+ft: ./ft_nmap --help --speedup 250 >/dev/null
+
+
+[test speedup-too-high]
+// 251 doit etre refuse.
+expect: failure
+ft: ./ft_nmap --help --speedup 251 >/dev/null
+
+
+[test port-min]
+// Premier port TCP/UDP valide.
+expect: success
+ft: ./ft_nmap --help --ports 1 >/dev/null
+
+
+[test port-max]
+// Dernier numero de port valide.
+expect: success
+ft: ./ft_nmap --help --ports 65535 >/dev/null
+
+
+[test ports-1024]
+// Le sujet autorise au maximum 1024 ports selectionnes.
+expect: success
+ft: ./ft_nmap --help --ports 1-1024 >/dev/null
+
+
+[test ports-1025]
+// Une selection de 1025 ports doit etre refusee.
+expect: failure
+ft: ./ft_nmap --help --ports 1-1025 >/dev/null
+
+
+[test ports-empty-field]
+// strtok ne doit pas permettre de masquer un element vide.
+expect: failure
+ft: ./ft_nmap --help --ports 1,,2 >/dev/null
+
+
+[test ports-leading-comma]
+// Une liste ne peut pas commencer par une virgule.
+expect: failure
+ft: ./ft_nmap --help --ports ,1 >/dev/null
+
+
+[test ports-trailing-comma]
+// Une liste ne peut pas finir par une virgule.
+expect: failure
+ft: ./ft_nmap --help --ports 1, >/dev/null
+
+
+[test ports-reversed-range]
+// Le debut d'une plage doit etre inferieur ou egal a sa fin.
+expect: failure
+ft: ./ft_nmap --help --ports 100-1 >/dev/null
+
+
+[test ports-invalid-range]
+// Une plage ne peut contenir qu'un seul separateur '-'.
+expect: failure
+ft: ./ft_nmap --help --ports 1-2-3 >/dev/null
+
+
+[test scans-all]
+// Les six techniques de scan sont acceptees.
+expect: success
+ft: ./ft_nmap --help --scan SYN,NULL,FIN,XMAS,ACK,UDP >/dev/null
+
+
+[test scans-empty-field]
+// Une liste de scans ne peut contenir un element vide.
+expect: failure
+ft: ./ft_nmap --help --scan SYN,,UDP >/dev/null
+
+
+[test scans-unknown]
+// TCP n'est pas le nom d'une technique de scan acceptee.
+expect: failure
+ft: ./ft_nmap --help --scan TCP >/dev/null
+
+
+[test duplicate-ttl]
+// Une option a valeur ne doit pas etre definie deux fois.
+expect: failure
+ft: ./ft_nmap --help --ttl 64 --ttl 32 >/dev/null
+
+
+[test duplicate-ports]
+// Deux definitions de --ports sont ambiguës et doivent etre refusees.
+expect: failure
+ft: ./ft_nmap --help --ports 22 --ports 80 >/dev/null
+
+
+[test duplicate-scan]
+// Deux definitions de --scan doivent etre refusees.
+expect: failure
+ft: ./ft_nmap --help --scan SYN --scan UDP >/dev/null
+
+
+[test missing-ttl]
+// --ttl exige une valeur.
+expect: failure
+ft: ./ft_nmap --ttl >/dev/null
+
+
+[test ip-file-exclusive]
+// Une cible directe et un fichier de cibles sont mutuellement exclusifs.
+expect: failure
+ft: ./ft_nmap --ip 127.0.0.1 --file /tmp/whatever >/dev/null

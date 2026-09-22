@@ -32,7 +32,7 @@ size_t	nmap_timing_udp_allowed_retries_locked(
 	const t_nmap_timing	*timing;
 	size_t				allowed;
 
-	if (!config)
+	if (!config || !nmap_runtime_uses_adaptive_core(config))
 		return (0);
 	timing = &config->runtime.timing;
 	if (timing->udp_retry_limit == 0)
@@ -59,6 +59,8 @@ void	nmap_timing_init(t_nmap_config *config)
 	if (!config)
 		return ;
 	timing = &config->runtime.timing;
+	if (!nmap_runtime_uses_adaptive_core(config))
+		return ;
 	timing->rto_max_ms = (uint64_t)config->scan.tcp_timeout_ms;
 	if (timing->rto_max_ms == 0)
 		timing->rto_max_ms = NMAP_RTO_MIN_MS;
@@ -101,6 +103,12 @@ uint64_t	nmap_timing_probe_timeout_ms(const t_nmap_config *config,
 {
 	if (!config || !probe)
 		return (0);
+	if (!nmap_runtime_uses_adaptive_core(config))
+	{
+		if (nmap_probe_is_udp(probe))
+			return ((uint64_t)config->scan.udp_timeout_ms);
+		return ((uint64_t)config->scan.tcp_timeout_ms);
+	}
 	if (nmap_probe_is_udp(probe))
 		return ((uint64_t)config->scan.udp_timeout_ms);
 	if (!config->runtime.timing.rtt_valid)
@@ -139,7 +147,9 @@ static void	update_rtt(t_nmap_timing *timing, uint64_t sample_ms)
 		if (sample_ms > timing->srtt_ms)
 			delta = sample_ms - timing->srtt_ms;
 		else
+		{
 			delta = timing->srtt_ms - sample_ms;
+		}
 		timing->rttvar_ms =
 			(3 * timing->rttvar_ms + delta) / 4;
 		timing->srtt_ms =
@@ -167,7 +177,9 @@ static void	backoff_rto(t_nmap_timing *timing)
 	if (timing->rto_ms > timing->rto_max_ms / 2)
 		next = timing->rto_max_ms;
 	else
+	{
 		next = timing->rto_ms * 2;
+	}
 	timing->rto_ms = clamp_rto(timing, next);
 }
 
@@ -212,7 +224,9 @@ static void	note_udp_icmp_retry_recovery(t_nmap_timing *timing)
 		> timing->udp_send_gap_max_ms / 2)
 		next_gap = timing->udp_send_gap_max_ms;
 	else
+	{
 		next_gap = timing->udp_send_gap_ms * 2;
+	}
 	if (next_gap > timing->udp_send_gap_max_ms)
 		next_gap = timing->udp_send_gap_max_ms;
 	timing->udp_send_gap_ms = next_gap;
@@ -288,7 +302,8 @@ int	nmap_timing_note_reply_locked(t_nmap_config *config,
 	int				retry_level_increased;
 	int				first_attempt_sample;
 
-	if (!config || !probe || !reason || probe->attempts_sent == 0)
+	if (!config || !probe || !reason || probe->attempts_sent == 0
+		|| !nmap_runtime_uses_adaptive_core(config))
 		return (0);
 	timing = &config->runtime.timing;
 	retry_level_increased = 0;

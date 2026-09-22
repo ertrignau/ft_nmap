@@ -42,7 +42,9 @@ static int	build_pcap_filter(const t_nmap_config *config,
 				config->route.src_ip);
 	}
 	else
+	{
 		return (0);
+	}
 	return (ret >= 0 && (size_t)ret < filter_size);
 }
 

@@ -53,7 +53,10 @@ static int	probe_can_be_reserved_locked(const t_nmap_config *config,
 	 * inline network window or UDP pacing policy.
 	 */
 	if (config->sender_pool.worker_count > 0)
-		return (1);
+	{
+		return (active_count_locked(config)
+			< (size_t)config->sender_pool.worker_count);
+	}
 
 	if (active_count_locked(config) >= (size_t)config->scan.window_size)
 		return (0);
@@ -179,10 +182,13 @@ static int	global_window_full(t_nmap_config *config)
 }
 
 /**
- * @brief Schedule every currently eligible PENDING probe while capacity allows.
+ * @brief Schedule every currently eligible PENDING probe.
  *
- * This function owns send order and window policy. Workers can only execute a
- * generation already reserved here and cannot bypass global/UDP limits.
+ * With --speedup 0, the main thread enforces the global window and UDP pacing.
+ *
+ * With --speedup N, those adaptive limits are deliberately bypassed: the N
+ * workers themselves form the concurrency limit, with one outstanding probe
+ * per worker.
  */
 int	nmap_runtime_schedule_ready(t_nmap_config *config, int *exit_status)
 {

@@ -115,6 +115,8 @@ int	nmap_ip_ntop(const t_nmap_ip_addr *addr, char *dst, size_t dst_size)
 	else if (addr->family == AF_INET6)
 		src = &addr->addr.v6;
 	else
+	{
 		return (0);
+	}
 	return (inet_ntop(addr->family, src, dst, dst_size) != NULL);
 }

@@ -297,7 +297,9 @@ static int	ipv6_find_upper(const unsigned char *packet, size_t end,
 				return (0);
 		}
 		else
+		{
 			return (0);
+		}
 	}
 }
 

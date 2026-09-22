@@ -10,6 +10,15 @@ uint64_t		nmap_now_ms(void);
 /** Return whether one logical probe belongs to the UDP scan family. */
 int				nmap_probe_is_udp(const t_probe *probe);
 
+/**
+ * Return whether the advanced single-threaded scan core is active.
+ *
+ * --speedup 0 uses adaptive timing/window/retry policy.
+ * --speedup N deliberately switches to the subject's naive worker model.
+ */
+int				nmap_runtime_uses_adaptive_core(
+					const t_nmap_config *config);
+
 /** Return whether a reply may still legally complete this logical probe. */
 int				nmap_probe_can_match(const t_probe *probe);
 

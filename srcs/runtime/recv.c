@@ -70,7 +70,9 @@ static t_scan_reason	reply_reason(const t_nmap_reply *reply)
 		if (reply->type == NMAP_REPLY_ICMP4)
 			reason.family = AF_INET;
 		else
+		{
 			reason.family = AF_INET6;
+		}
 		reason.icmp_type = reply->icmp_type;
 		reason.icmp_code = reply->icmp_code;
 	}

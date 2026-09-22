@@ -55,8 +55,10 @@ static void	format_icmp4_reason(const t_scan_reason *reason,
 	else if (reason->icmp_type == 11 && reason->icmp_code == 1)
 		snprintf(dst, dst_size, "frag-timeout");
 	else
+	{
 		snprintf(dst, dst_size, "icmp4-%u/%u",
 			reason->icmp_type, reason->icmp_code);
+	}
 }
 
 /** Format one ICMPv6 reason using a stable, concise vocabulary. */
@@ -82,8 +84,10 @@ static void	format_icmp6_reason(const t_scan_reason *reason,
 	else if (reason->icmp_type == 3 && reason->icmp_code == 1)
 		snprintf(dst, dst_size, "frag-timeout");
 	else
+	{
 		snprintf(dst, dst_size, "icmp6-%u/%u",
 			reason->icmp_type, reason->icmp_code);
+	}
 }
 
 /**
@@ -115,8 +119,10 @@ void	nmap_output_reason_name(const t_probe *probe,
 		else if (reason->tcp_flags & NMAP_TCP_SYN)
 			snprintf(dst, dst_size, "syn");
 		else
+		{
 			snprintf(dst, dst_size, "tcp-0x%02x",
 				reason->tcp_flags);
+		}
 	}
 	else if (reason->kind == SCAN_REASON_UDP_REPLY)
 		snprintf(dst, dst_size, "udp-reply");
@@ -131,7 +137,9 @@ void	nmap_output_reason_name(const t_probe *probe,
 		&& reason->family == AF_INET6)
 		format_icmp6_reason(reason, dst, dst_size);
 	else
+	{
 		snprintf(dst, dst_size, "-");
+	}
 }
 
 /** Return the compact representation of one aggregate verdict. */

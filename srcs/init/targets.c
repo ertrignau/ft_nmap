@@ -48,7 +48,9 @@ static int	grow_targets(t_nmap_targets *targets)
 	if (targets->capacity == 0)
 		new_capacity = NMAP_TARGET_INITIAL_CAPACITY;
 	else
+	{
 		new_capacity = targets->capacity * 2;
+	}
 	if (new_capacity > NMAP_MAX_TARGETS)
 		new_capacity = NMAP_MAX_TARGETS;
 	if (new_capacity <= targets->capacity)
@@ -179,7 +181,9 @@ int	nmap_prepare_targets(t_nmap_config *config, int *exit_status)
 	else if (config->cli.file_specified)
 		success = load_target_file(&config->targets, config->cli.target_file);
 	else
+	{
 		success = 0;
+	}
 	if (success)
 		return (1);
 	clear_targets(&config->targets);

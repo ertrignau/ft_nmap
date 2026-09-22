@@ -40,7 +40,9 @@ static int	family_from_ethertype(uint16_t ethertype, sa_family_t *family)
 	else if (ethertype == NMAP_ETHERTYPE_IPV6)
 		*family = AF_INET6;
 	else
+	{
 		return (0);
+	}
 	return (1);
 }
 
@@ -60,7 +62,9 @@ static int	family_from_version(const unsigned char *packet,
 	else if (version == 6)
 		*family = AF_INET6;
 	else
+	{
 		return (0);
+	}
 	return (1);
 }
 

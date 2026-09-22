@@ -172,9 +172,12 @@ typedef enum e_nmap_wait_result
 /**
  * @brief Adaptive timing state for the current target.
  *
+ * This state is active only with --speedup 0. In --speedup N mode, the
+ * scanner deliberately uses fixed configured timeouts/retries and the worker
+ * count itself limits concurrency.
+ *
  * RTT estimation and UDP pacing are target-local. The configured scan values
- * remain immutable limits while this structure contains the policy currently
- * selected by the runtime.
+ * remain immutable limits while this structure contains the adaptive policy.
  *
  * rto_ms is used for TCP-family retransmission deadlines. UDP keeps its longer
  * configured timeout because silence is a valid open|filtered outcome.

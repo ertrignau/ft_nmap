@@ -21,7 +21,9 @@ static int	tcp_flags_for_scan(uint32_t scan_type, uint8_t *flags)
 	else if (scan_type == NMAP_SCAN_ACK)
 		*flags = NMAP_TCP_ACK;
 	else
+	{
 		return (0);
+	}
 	return (1);
 }
 
@@ -101,7 +103,9 @@ int	nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe)
 	else if (config->target.addr.family == AF_INET6)
 		packet_len = build_ipv6_tcp_packet(config, probe, packet);
 	else
+	{
 		packet_len = 0;
+	}
 	PROF_ADD(NMAP_PROF_SEND_BUILD, prof_start);
 	if (packet_len == 0)
 	{

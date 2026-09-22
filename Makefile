@@ -76,6 +76,7 @@ SRCS := srcs/main.c \
 	srcs/parsing/pars_scan.c \
 	srcs/parsing/pars_ip.c \
 	srcs/parsing/pars_timeout.c \
+	srcs/parsing/pars_ttl.c \
 	srcs/parsing/pars_retries.c \
 	srcs/parsing/pars_file.c \
 	srcs/parsing/pars_bool.c \
@@ -141,6 +142,13 @@ profile-run: profile
 	sudo ./$(NAME)
 
 # **************************************************************************** #
+#                                    TESTS                                     #
+# **************************************************************************** #
+
+test: all
+	@python3 tools/test_runner.py
+
+# **************************************************************************** #
 #                                  DOCKER LAB                                  #
 # **************************************************************************** #
 
@@ -201,7 +209,7 @@ lab-profile-%:
 -include $(DEBUG_DEPS)
 -include $(PROFILE_DEPS)
 
-.PHONY: all debug profile clean fclean re run debug-run profile-run \
+.PHONY: all debug profile clean fclean re run debug-run profile-run test \
 	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell \
 	lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed \
 	lab-mostly-closed lab-filtered-heavy

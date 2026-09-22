@@ -16,8 +16,8 @@ static void	print_help(const char *progname)
 	printf("  --speedup <0-250>          Additional sender threads\n");
 	printf("  --timeout <ms>             Override TCP/UDP probe timeout\n");
 	printf("  --retries <count>          Maximum retransmissions\n");
+	printf("  --ttl <0-255>             Set IPv4 TTL / IPv6 Hop Limit\n");
 	printf("  --no-dns                   Disable reverse DNS lookups\n");
-	printf("  --version                  Enable service version detection\n");
 	printf("  --os                       Enable OS detection\n");
 	printf("  --open                     Show only open/open|filtered ports\n");
 	printf("  --reason                   Show the reason for each state\n");

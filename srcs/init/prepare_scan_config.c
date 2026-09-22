@@ -15,6 +15,7 @@
 #define NMAP_MAX_RETRIES 10
 #define NMAP_DEFAULT_TCP_TIMEOUT_MS 1000
 #define NMAP_DEFAULT_UDP_TIMEOUT_MS 2500
+#define NMAP_DEFAULT_TTL 64
 #define NMAP_DEFAULT_WINDOW_SIZE 50
 #define NMAP_DEFAULT_UDP_WINDOW 10
 #define NMAP_DEFAULT_UDP_SEND_GAP_MS 50
@@ -54,7 +55,9 @@ static int	prepare_selection(t_nmap_config *config)
 	if (config->cli.scan_specified)
 		config->scan.scan_mask = config->cli.scan_mask;
 	else
+	{
 		config->scan.scan_mask = NMAP_ALL_SCAN_TYPES;
+	}
 	if (config->scan.scan_mask == 0
 		|| (config->scan.scan_mask & ~NMAP_ALL_SCAN_TYPES) != 0)
 	{
@@ -65,11 +68,11 @@ static int	prepare_selection(t_nmap_config *config)
 }
 
 /**
- * @brief Build the fixed timing/window policy consumed by the runtime.
+ * @brief Build the timing limits consumed by both execution modes.
  *
- * @note Sender-thread count and network window are intentionally independent.
- *       A later RTT/cwnd controller can replace window_size without changing
- *       the worker pool or packet parser.
+ * --speedup 0 uses these values as limits for the adaptive core.
+ * --speedup N uses the configured timeout/retry values directly and ignores
+ * adaptive window/UDP pacing controls.
  */
 static int	prepare_timing(t_nmap_config *config)
 {
@@ -81,9 +84,18 @@ static int	prepare_timing(t_nmap_config *config)
 	}
 	config->scan.thread_count = config->cli.speedup;
 	if (config->cli.retries_specified)
+	{
 		config->scan.retries = config->cli.retries;
+	}
+	else if (config->cli.speedup_specified
+		&& config->cli.speedup > 0)
+	{
+		config->scan.retries = 0;
+	}
 	else
+	{
 		config->scan.retries = NMAP_DEFAULT_RETRIES;
+	}
 	if (config->scan.retries < 0 || config->scan.retries > NMAP_MAX_RETRIES)
 	{
 		fprintf(stderr, "ft_nmap: retries must be between 0 and %d\n",
@@ -105,6 +117,12 @@ static int	prepare_timing(t_nmap_config *config)
 		config->scan.tcp_timeout_ms = NMAP_DEFAULT_TCP_TIMEOUT_MS;
 		config->scan.udp_timeout_ms = NMAP_DEFAULT_UDP_TIMEOUT_MS;
 	}
+	if (config->cli.ttl_specified)
+		config->scan.ttl = config->cli.ttl;
+	else
+	{
+		config->scan.ttl = NMAP_DEFAULT_TTL;
+	}
 	config->scan.window_size = NMAP_DEFAULT_WINDOW_SIZE;
 	config->scan.udp_window_size = NMAP_DEFAULT_UDP_WINDOW;
 	if (config->scan.udp_window_size > config->scan.window_size)
@@ -119,7 +137,6 @@ static int	prepare_timing(t_nmap_config *config)
 static void	prepare_features(t_nmap_config *config)
 {
 	config->scan.no_dns = config->cli.no_dns;
-	config->scan.version_detection = config->cli.version_detection;
 	config->scan.os_detection = config->cli.os_detection;
 	config->scan.open_only = config->cli.open_only;
 	config->scan.show_reason = config->cli.show_reason;

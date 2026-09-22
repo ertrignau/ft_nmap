@@ -115,7 +115,9 @@ void	nmap_prof_report(void)
 		if (i >= NMAP_PROF_PACKET_SEEN)
 			print_counter_slot(&g_prof[i]);
 		else
+		{
 			print_timed_slot(&g_prof[i]);
+		}
 		i++;
 	}
 	fprintf(stderr, "[profile] ====================================\n");

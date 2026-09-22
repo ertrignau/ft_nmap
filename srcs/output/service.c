@@ -218,5 +218,7 @@ void	nmap_output_service_name(const t_nmap_port_view *view,
 	else if (have_udp)
 		snprintf(dst, dst_size, "%s", udp);
 	else
+	{
 		snprintf(dst, dst_size, "unknown");
+	}
 }

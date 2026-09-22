@@ -33,7 +33,9 @@ static int	scan_name_to_mask(const char *name, uint32_t *mask)
 	else if (nmap_streq(name, "UDP"))
 		*mask = NMAP_SCAN_UDP;
 	else
+	{
 		return (0);
+	}
 	return (1);
 }
 

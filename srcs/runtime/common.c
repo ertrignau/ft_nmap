@@ -22,6 +22,18 @@ int	nmap_probe_is_udp(const t_probe *probe)
 }
 
 /**
+ * @brief Return whether the advanced scan core owns network concurrency.
+ *
+ * With --speedup 0, the main event loop controls windows, pacing and adaptive
+ * timing. With --speedup N, N workers deliberately provide the only
+ * concurrency limit and use fixed timeout/retry policy.
+ */
+int	nmap_runtime_uses_adaptive_core(const t_nmap_config *config)
+{
+	return (config && config->scan.thread_count == 0);
+}
+
+/**
  * @brief Check whether an incoming reply may still complete this probe.
  *
  * PENDING remains matchable after an earlier successful send. QUEUED remains

@@ -28,7 +28,7 @@ void	nmap_build_ipv6_header(t_nmap_config *config,
 	ip->version_tc_flow = htonl(6U << 28);
 	ip->payload_length = htons((uint16_t)payload_len);
 	ip->next_header = next_header;
-	ip->hop_limit = 64;
+	ip->hop_limit = (uint8_t)config->scan.ttl;
 	ip->src = config->route.src_addr.addr.v6;
 	ip->dst = config->target.addr.addr.v6;
 }

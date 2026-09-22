@@ -92,7 +92,9 @@ static int	find_source_interface(const t_nmap_ip_addr *src_addr,
 		if (src_addr->family == AF_INET)
 			addr_len = sizeof(struct sockaddr_in);
 		else
+		{
 			addr_len = sizeof(struct sockaddr_in6);
+		}
 		current_ifindex = 0;
 		if (current->ifa_name)
 			current_ifindex = if_nametoindex(current->ifa_name);

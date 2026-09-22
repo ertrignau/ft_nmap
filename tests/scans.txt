@@ -1,0 +1,68 @@
+// ============================================================================
+// Scan techniques
+//
+// Comparaison directe entre ft_nmap et Nmap sur le lab local.
+// -Pn est utilise pour que Nmap scanne la cible sans host discovery.
+// -n desactive le DNS, comme --no-dns cote ft_nmap.
+// --reason permet de comparer la raison de chaque classification.
+// ============================================================================
+
+
+[test syn]
+// SYN scan sur deux comportements deja observes dans le lab.
+// TCP/80 est ouvert lorsque le lab est actif.
+// TCP/81 est silencieux / filtre.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 80,81 --scan SYN --reason --no-dns
+nmap: sudo nmap -Pn -n -sS -p 80,81 --reason 172.28.0.10
+
+
+[test ack]
+// ACK scan sur les memes ports.
+// Un RST produit UNFILTERED ; une absence de reponse produit FILTERED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 80,81 --scan ACK --reason --no-dns
+nmap: sudo nmap -Pn -n -sA -p 80,81 --reason 172.28.0.10
+
+
+[test null]
+// NULL scan.
+// Sur un port ouvert ou silencieux, l'absence de reponse conduit typiquement
+// a OPEN|FILTERED. Une reponse RST permettrait de conclure CLOSED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 80,81 --scan NULL --reason --no-dns
+nmap: sudo nmap -Pn -n -sN -p 80,81 --reason 172.28.0.10
+
+
+[test fin]
+// FIN scan sur la meme cible afin de comparer exactement la classification
+// et les raisons retournees par les deux scanners.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 80,81 --scan FIN --reason --no-dns
+nmap: sudo nmap -Pn -n -sF -p 80,81 --reason 172.28.0.10
+
+
+[test xmas]
+// XMAS scan : FIN + PSH + URG.
+// Meme comparaison que NULL et FIN avec la technique correspondante de Nmap.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 80,81 --scan XMAS --reason --no-dns
+nmap: sudo nmap -Pn -n -sX -p 80,81 --reason 172.28.0.10
+
+
+[test udp]
+// UDP utilise ici des ports dont le comportement a deja ete observe.
+// UDP/53 repond dans le lab ; UDP/80 et UDP/81 permettent d'observer
+// les classifications produites par les ICMP Port Unreachable.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 53,80,81 --scan UDP --reason --no-dns
+nmap: sudo nmap -Pn -n -sU -p 53,80,81 --reason 172.28.0.10
+
+
+[test syn-full-range]
+// Scan SYN sur la plage maximale de 1024 ports imposee par le sujet.
+// Ce test exerce le scheduler sur une vraie amplitude tout en restant local.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-1024 --scan SYN --reason --no-dns
+nmap: sudo nmap -Pn -n -sS -p 1-1024 --reason 172.28.0.10
+
+
+[test simultaneous]
+// Fonction specifique de ft_nmap : plusieurs techniques sont executees
+// dans le meme scan. Les tests precedents donnent la reference Nmap
+// technique par technique, car Nmap ne permet pas de combiner ainsi
+// plusieurs types de scans TCP incompatibles dans une seule commande.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 53,80,81 --scan SYN,NULL,FIN,XMAS,ACK,UDP --reason --no-dns

@@ -31,7 +31,7 @@ void	nmap_build_ipv4_header(t_nmap_config *config, t_probe *probe,
 	ip->version_ihl = 0x45;
 	ip->total_length = htons((uint16_t)(NMAP_IPV4_HEADER_LEN + payload_len));
 	ip->identification = htons(probe->src_port);
-	ip->ttl = 64;
+	ip->ttl = (uint8_t)config->scan.ttl;
 	ip->protocol = protocol;
 	ip->src = config->route.src_addr.addr.v4;
 	ip->dst = config->target.addr.addr.v4;

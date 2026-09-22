@@ -86,7 +86,6 @@ typedef struct s_nmap_cli
 
 	int			help;
 	int			no_dns;
-	int			version_detection;
 	int			os_detection;
 	int			open_only;
 	int			show_reason;
@@ -94,6 +93,7 @@ typedef struct s_nmap_cli
 	int			speedup;
 	int			retries;
 	int			timeout_ms;
+	int			ttl;
 
 	int			ip_specified;
 	int			file_specified;
@@ -102,6 +102,7 @@ typedef struct s_nmap_cli
 	int			speedup_specified;
 	int			retries_specified;
 	int			timeout_specified;
+	int			ttl_specified;
 }	t_nmap_cli;
 
 /**
@@ -175,9 +176,9 @@ typedef struct s_nmap_capture
 /**
  * @brief Effective scan configuration consumed by the engine.
  *
- * @note window_size is global. It deliberately does not depend on the number
- *       of sender workers: thread parallelism and network in-flight capacity
- *       are separate concerns.
+ * @note With --speedup 0, window_size/UDP pacing belong to the adaptive core.
+ *       With --speedup N, those limits are intentionally ignored: N workers,
+ *       each with at most one outstanding probe, define concurrency directly.
  */
 typedef struct s_nmap_scan
 {
@@ -189,13 +190,13 @@ typedef struct s_nmap_scan
 	int			retries;
 	int			tcp_timeout_ms;
 	int			udp_timeout_ms;
+	int			ttl;
 
 	int			window_size;
 	int			udp_window_size;
 	int			udp_send_gap_ms;
 
 	int			no_dns;
-	int			version_detection;
 	int			os_detection;
 	int			open_only;
 	int			show_reason;

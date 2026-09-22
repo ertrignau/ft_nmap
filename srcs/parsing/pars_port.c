@@ -86,13 +86,37 @@ static int	parse_port_token(t_nmap_config *config, char *token)
 	return (parse_single_port(config, token));
 }
 
+/**
+ * Validate separators before strtok_r(), which otherwise silently skips
+ * empty fields such as "1,,2", ",1" or "1,".
+ */
+static int	port_list_is_valid(const char *arg)
+{
+	size_t	i;
+	size_t	len;
+
+	if (!arg || arg[0] == '\0')
+		return (0);
+	len = strlen(arg);
+	if (arg[0] == ',' || arg[len - 1] == ',')
+		return (0);
+	i = 0;
+	while (arg[i] != '\0')
+	{
+		if (arg[i] == ',' && arg[i + 1] == ',')
+			return (0);
+		i++;
+	}
+	return (1);
+}
+
 int	nmap_parse_ports(t_nmap_config *config, const char *arg)
 {
 	char	*copy;
 	char	*token;
 	char	*saveptr;
 
-	if (!config || !arg || arg[0] == '\0')
+	if (!config || !port_list_is_valid(arg))
 		return (0);
 	config->scan.port_count = 0;
 	copy = strdup(arg);

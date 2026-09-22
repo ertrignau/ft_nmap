@@ -1,0 +1,253 @@
+name: ft-nmap-lab
+
+x-target-common: &target-common
+  image: ft-nmap-lab-target:local
+  build:
+    context: ./target
+  cap_add:
+    - NET_ADMIN
+    - NET_RAW
+  restart: "no"
+
+services:
+  target-10:
+    <<: *target-common
+    container_name: ft_nmap_target_10
+    env_file:
+      - ./configs/target-10.env
+    profiles:
+      - "full"
+      - "fleet"
+      - "ipv6"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.10
+        ipv6_address: fd42:28::10
+
+  target-11:
+    <<: *target-common
+    container_name: ft_nmap_target_11
+    env_file:
+      - ./configs/target-11.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.11
+
+  target-12:
+    <<: *target-common
+    container_name: ft_nmap_target_12
+    env_file:
+      - ./configs/target-12.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.12
+
+  target-13:
+    <<: *target-common
+    container_name: ft_nmap_target_13
+    env_file:
+      - ./configs/target-13.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.13
+
+  target-14:
+    <<: *target-common
+    container_name: ft_nmap_target_14
+    env_file:
+      - ./configs/target-14.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.14
+
+  target-15:
+    <<: *target-common
+    container_name: ft_nmap_target_15
+    env_file:
+      - ./configs/target-15.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.15
+
+  target-16:
+    <<: *target-common
+    container_name: ft_nmap_target_16
+    env_file:
+      - ./configs/target-16.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.16
+
+  target-17:
+    <<: *target-common
+    container_name: ft_nmap_target_17
+    env_file:
+      - ./configs/target-17.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.17
+
+  target-18:
+    <<: *target-common
+    container_name: ft_nmap_target_18
+    env_file:
+      - ./configs/target-18.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.18
+
+  target-19:
+    <<: *target-common
+    container_name: ft_nmap_target_19
+    env_file:
+      - ./configs/target-19.env
+    profiles:
+      - "fleet"
+    networks:
+      net-a:
+        ipv4_address: 172.28.0.19
+
+  target-20:
+    <<: *target-common
+    container_name: ft_nmap_target_20
+    env_file:
+      - ./configs/target-20.env
+    profiles:
+      - "fleet"
+      - "ipv6"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.20
+        ipv6_address: fd42:29::20
+
+  target-21:
+    <<: *target-common
+    container_name: ft_nmap_target_21
+    env_file:
+      - ./configs/target-21.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.21
+
+  target-22:
+    <<: *target-common
+    container_name: ft_nmap_target_22
+    env_file:
+      - ./configs/target-22.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.22
+
+  target-23:
+    <<: *target-common
+    container_name: ft_nmap_target_23
+    env_file:
+      - ./configs/target-23.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.23
+
+  target-24:
+    <<: *target-common
+    container_name: ft_nmap_target_24
+    env_file:
+      - ./configs/target-24.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.24
+
+  target-25:
+    <<: *target-common
+    container_name: ft_nmap_target_25
+    env_file:
+      - ./configs/target-25.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.25
+
+  target-26:
+    <<: *target-common
+    container_name: ft_nmap_target_26
+    env_file:
+      - ./configs/target-26.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.26
+
+  target-27:
+    <<: *target-common
+    container_name: ft_nmap_target_27
+    env_file:
+      - ./configs/target-27.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.27
+
+  target-28:
+    <<: *target-common
+    container_name: ft_nmap_target_28
+    env_file:
+      - ./configs/target-28.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.28
+
+  target-29:
+    <<: *target-common
+    container_name: ft_nmap_target_29
+    env_file:
+      - ./configs/target-29.env
+    profiles:
+      - "fleet"
+    networks:
+      net-b:
+        ipv4_address: 172.29.0.29
+
+networks:
+  net-a:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+        - subnet: fd42:28::/64
+
+  net-b:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+        - subnet: fd42:29::/64
