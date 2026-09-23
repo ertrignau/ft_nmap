@@ -2,227 +2,231 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
-/** Return whether the selected ports form one continuous range. */
-static int	ports_are_contiguous(const t_nmap_config *config)
+/** A fixed scan banner is emitted once, after ALL routes and captures exist. */
+static void print_ports(const t_nmap_scan *scan)
 {
-	size_t	i;
+    size_t i;
+    int contiguous;
 
-	if (!config || config->scan.port_count == 0)
-		return (0);
-	i = 1;
-	while (i < config->scan.port_count)
-	{
-		if (config->scan.ports[i]
-			!= (uint16_t)(config->scan.ports[i - 1] + 1))
-			return (0);
-		i++;
-	}
-	return (1);
+    contiguous = (scan->port_count > 0);
+    for (i = 1; i < scan->port_count; ++i)
+        if (scan->ports[i] != (uint16_t)(scan->ports[i - 1] + 1))
+            contiguous = 0;
+    printf("Ports      : ");
+    if (contiguous && scan->port_count > 1)
+        printf("%u-%u (%zu)\n", scan->ports[0],
+            scan->ports[scan->port_count - 1], scan->port_count);
+    else if (scan->port_count <= 12)
+    {
+        for (i = 0; i < scan->port_count; ++i)
+            printf("%s%u", i ? "," : "", scan->ports[i]);
+        printf(" (%zu)\n", scan->port_count);
+    }
+    else
+        printf("%zu selected ports\n", scan->port_count);
 }
 
-/** Print the selected ports without flooding the terminal. */
-static void	print_ports(const t_nmap_config *config)
+static void print_scan_name(uint32_t mask, uint32_t flag,
+        const char *name, int *first)
 {
-	size_t	i;
-
-	printf("Ports    : ");
-	if (config->scan.port_count == 1)
-	{
-		printf("%u (1 port)\n", config->scan.ports[0]);
-		return ;
-	}
-	if (ports_are_contiguous(config))
-	{
-		printf("%u-%u (%zu ports)\n",
-			config->scan.ports[0],
-			config->scan.ports[config->scan.port_count - 1],
-			config->scan.port_count);
-		return ;
-	}
-	if (config->scan.port_count <= 12)
-	{
-		i = 0;
-		while (i < config->scan.port_count)
-		{
-			if (i != 0)
-				printf(",");
-			printf("%u", config->scan.ports[i]);
-			i++;
-		}
-		printf(" (%zu ports)\n", config->scan.port_count);
-		return ;
-	}
-	printf("%zu selected ports\n", config->scan.port_count);
+    if (!(mask & flag))
+        return ;
+    printf("%s%s", *first ? "" : ",", name);
+    *first = 0;
 }
 
-/** Print one enabled scan name. */
-static void	print_scan(uint32_t mask, uint32_t scan,
-		const char *name, int *first)
+static void print_scans(uint32_t mask)
 {
-	if ((mask & scan) == 0)
-		return ;
-	if (!*first)
-		printf(",");
-	printf("%s", name);
-	*first = 0;
+    int first;
+
+    first = 1;
+    printf("Scans      : ");
+    print_scan_name(mask, NMAP_SCAN_SYN, "SYN", &first);
+    print_scan_name(mask, NMAP_SCAN_NULL, "NULL", &first);
+    print_scan_name(mask, NMAP_SCAN_FIN, "FIN", &first);
+    print_scan_name(mask, NMAP_SCAN_XMAS, "XMAS", &first);
+    print_scan_name(mask, NMAP_SCAN_ACK, "ACK", &first);
+    print_scan_name(mask, NMAP_SCAN_UDP, "UDP", &first);
+    putchar('\n');
 }
 
-/** Print all enabled scan names. */
-static void	print_scans(const t_nmap_config *config)
+static void print_timing(const t_nmap_scan *scan)
 {
-	int	first;
+    const uint32_t tcp = NMAP_SCAN_SYN | NMAP_SCAN_NULL
+        | NMAP_SCAN_FIN | NMAP_SCAN_XMAS | NMAP_SCAN_ACK;
 
-	first = 1;
-	printf("Scans    : ");
-	print_scan(config->scan.scan_mask, NMAP_SCAN_SYN, "SYN", &first);
-	print_scan(config->scan.scan_mask, NMAP_SCAN_NULL, "NULL", &first);
-	print_scan(config->scan.scan_mask, NMAP_SCAN_FIN, "FIN", &first);
-	print_scan(config->scan.scan_mask, NMAP_SCAN_XMAS, "XMAS", &first);
-	print_scan(config->scan.scan_mask, NMAP_SCAN_ACK, "ACK", &first);
-	print_scan(config->scan.scan_mask, NMAP_SCAN_UDP, "UDP", &first);
-	printf("\n");
+    printf("Retries    : %d\n", scan->retries);
+    if ((scan->scan_mask & tcp) && (scan->scan_mask & NMAP_SCAN_UDP))
+        printf("Timeouts   : TCP %dms / UDP %dms\n",
+            scan->tcp_timeout_ms, scan->udp_timeout_ms);
+    else if (scan->scan_mask & NMAP_SCAN_UDP)
+        printf("Timeout    : UDP %dms\n", scan->udp_timeout_ms);
+    else
+        printf("Timeout    : TCP %dms\n", scan->tcp_timeout_ms);
+    printf("TTL / Hop  : %d\n", scan->ttl);
+    if (scan->thread_count == 0)
+    {
+        printf("Mode       : adaptive (multi-target / multi-interface)\n");
+        printf("Window     : %d per interface, target-local UDP pacing\n",
+            scan->window_size);
+    }
+    else
+    {
+        printf("Mode       : naive (%d workers, global cap %d)\n",
+            scan->thread_count, scan->thread_count);
+        printf("Policy     : fixed timeouts/retries; no pacing or congestion window\n");
+    }
 }
 
-/** Print the effective timeout policy. */
-static void	print_timeouts(const t_nmap_config *config)
+/** Count interfaces with at least one runnable destination. */
+static size_t count_used_interfaces(const t_nmap_engine *engine)
 {
-	uint32_t	tcp_mask;
-	int			has_tcp;
-	int			has_udp;
+    size_t i;
+    size_t j;
+    size_t count;
 
-	tcp_mask = NMAP_SCAN_SYN | NMAP_SCAN_NULL | NMAP_SCAN_FIN
-		| NMAP_SCAN_XMAS | NMAP_SCAN_ACK;
-	has_tcp = ((config->scan.scan_mask & tcp_mask) != 0);
-	has_udp = ((config->scan.scan_mask & NMAP_SCAN_UDP) != 0);
-	if (has_tcp && has_udp)
-		printf("Timeouts : TCP %d ms / UDP %d ms\n",
-			config->scan.tcp_timeout_ms,
-			config->scan.udp_timeout_ms);
-	else if (has_udp)
-		printf("Timeout  : %d ms\n",
-			config->scan.udp_timeout_ms);
-	else
-	{
-		printf("Timeout  : %d ms\n",
-			config->scan.tcp_timeout_ms);
-	}
+    count = 0;
+    for (i = 0; i < engine->iface_count; ++i)
+        for (j = 0; j < engine->target_count; ++j)
+            if (engine->targets[j].iface == &engine->ifaces[i]
+                && engine->targets[j].status == NMAP_TARGET_PREPARED)
+            {
+                count++;
+                break ;
+            }
+    return (count);
 }
 
-/** Print Estimated Time of Completion. */
-static void	print_etc(uint64_t remaining_ms)
+static void print_interface_targets(const t_nmap_engine *engine, size_t index)
 {
-	time_t		finish;
-	struct tm	local;
-	char		buffer[16];
+    const t_nmap_iface_ctx *iface;
+    const t_nmap_target_ctx *ctx;
+    size_t i;
 
-	finish = time(NULL) + (time_t)(remaining_ms / 1000ULL);
-	if (!localtime_r(&finish, &local))
-		return ;
-	if (strftime(buffer, sizeof(buffer), "%H:%M", &local) == 0)
-		return ;
-	printf("%s", buffer);
+    iface = &engine->ifaces[index];
+    printf("\n  %s (ifindex %u)\n", iface->iface, iface->ifindex);
+    for (i = 0; i < engine->target_count; ++i)
+    {
+        ctx = &engine->targets[i];
+        if (ctx->status != NMAP_TARGET_PREPARED || ctx->iface != iface)
+            continue ;
+        printf("    %-5s %-39s  source %s",
+            ctx->target.addr.family == AF_INET6 ? "IPv6" : "IPv4",
+            ctx->target.ip, ctx->route.src_ip);
+        if (ctx->target.hostname[0] != '\0')
+            printf("  (%s)", ctx->target.hostname);
+        putchar('\n');
+    }
 }
 
-/** Print the execution policy selected by --speedup. */
-static void	print_execution_policy(const t_nmap_config *config)
+void nmap_output_print_scan_banner(const t_nmap_engine *engine)
 {
-	if (config->scan.thread_count == 0)
-	{
-		printf("Mode     : adaptive core (--speedup 0)\n");
-		printf("Window   : %d probes\n", config->scan.window_size);
-		if (config->scan.scan_mask & NMAP_SCAN_UDP)
-		{
-			printf("UDP pace : window %zu, gap %llums\n",
-				config->runtime.timing.udp_window,
-				(unsigned long long)
-				config->runtime.timing.udp_send_gap_ms);
-		}
-		return ;
-	}
-	printf("Mode     : threaded (--speedup %d)\n",
-		config->scan.thread_count);
-	printf("Workers  : %d, one outstanding probe per worker\n",
-		config->scan.thread_count);
-	printf("Policy   : fixed timeout and retry count\n");
+    const t_nmap_scan *scan;
+    size_t i;
+    size_t skipped;
+
+    if (!engine || !engine->config)
+        return ;
+    scan = &engine->config->scan;
+    skipped = engine->target_count - engine->effective_targets;
+    puts("\n================ ft_nmap ================");
+    printf("Targets    : %zu ready / %zu unique",
+        engine->effective_targets - engine->failed_count,
+        engine->effective_targets);
+    if (engine->failed_count || skipped)
+        printf(" (%zu failed preparation, %zu duplicate(s) skipped)",
+            engine->failed_count, skipped);
+    putchar('\n');
+    printf("Interfaces : %zu\n", count_used_interfaces(engine));
+    print_ports(scan);
+    print_scans(scan->scan_mask);
+    print_timing(scan);
+    puts("\nDestinations grouped by outgoing interface:");
+    for (i = 0; i < engine->iface_count; ++i)
+    {
+        size_t j;
+
+        for (j = 0; j < engine->target_count; ++j)
+            if (engine->targets[j].iface == &engine->ifaces[i]
+                && engine->targets[j].status == NMAP_TARGET_PREPARED)
+                break ;
+        if (j < engine->target_count)
+            print_interface_targets(engine, i);
+    }
+    if (engine->failed_count)
+    {
+        puts("\nPreparation failures:");
+        for (i = 0; i < engine->target_count; ++i)
+            if (engine->targets[i].status == NMAP_TARGET_FAILED)
+                printf("    %s\n", engine->config->targets.items[i]);
+    }
+    puts("\n-----------------------------------------");
+    if (isatty(STDIN_FILENO))
+        puts("Scanning... Press Enter for progress by target.\n");
+    else
+        puts("Scanning...\n");
+    fflush(stdout);
 }
 
-/** Print effective configuration before one target scan. */
-void	nmap_output_begin_scan(const t_nmap_config *config)
+static const char *status_name(t_nmap_target_status status)
 {
-	if (!config)
-		return ;
-	printf("ft_nmap scan configuration\n");
-	if (config->target.hostname[0] != '\0'
-		&& strcmp(config->target.hostname, config->target.ip) != 0)
-		printf("Target   : %s (%s)\n",
-			config->target.hostname, config->target.ip);
-	else if (config->target.name
-		&& strcmp(config->target.name, config->target.ip) != 0)
-		printf("Target   : %s (%s)\n",
-			config->target.name, config->target.ip);
-	else
-	{
-		printf("Target   : %s\n", config->target.ip);
-	}
-	print_ports(config);
-	print_scans(config);
-	printf("Retries  : %d\n", config->scan.retries);
-	print_timeouts(config);
-	print_execution_policy(config);
-	if (config->target.addr.family == AF_INET6)
-	{
-		printf("HopLimit : %d\n", config->scan.ttl);
-	}
-	else
-	{
-		printf("TTL      : %d\n", config->scan.ttl);
-	}
-	if (isatty(STDIN_FILENO))
-		printf("\nStarting scan... (press Enter for progress)\n\n");
-	else
-	{
-		printf("\nStarting scan...\n\n");
-	}
-	fflush(stdout);
+    if (status == NMAP_TARGET_PREPARED)
+        return ("WAITING");
+    if (status == NMAP_TARGET_ACTIVE)
+        return ("ACTIVE");
+    if (status == NMAP_TARGET_FINISHED)
+        return ("DONE");
+    if (status == NMAP_TARGET_FAILED)
+        return ("FAILED");
+    return ("SKIPPED");
 }
 
-/** Print one immutable progress snapshot. */
-void	nmap_output_print_progress(const t_nmap_progress *progress)
+/** No runtime locks here: the event loop passes immutable snapshots. */
+void nmap_output_print_target_progress(const t_nmap_progress *global,
+        const t_nmap_target_progress *targets, size_t target_count,
+        const t_nmap_iface_ctx *ifaces, size_t iface_count,
+        size_t completed_targets, size_t expected_targets)
 {
-	uint64_t	remaining;
-	double		percent;
-	char		elapsed[32];
-	char		remaining_text[32];
+    size_t i;
+    size_t j;
+    double pct;
 
-	if (!progress)
-		return ;
-	percent = 0.0;
-	if (progress->total != 0)
-		percent = (double)progress->done
-			* 100.0 / (double)progress->total;
-	nmap_output_format_hms(progress->elapsed_ms,
-		elapsed, sizeof(elapsed));
-	printf("Stats: %s elapsed; %zu/%zu probes completed (%.1f%%); "
-		"%zu outstanding; %zu queued; %zu benched; %zu pending\n",
-		elapsed, progress->done, progress->total, percent,
-		progress->outstanding, progress->queued,
-		progress->benched, progress->pending);
-	if (progress->done == 0 || progress->done >= progress->total)
-	{
-		printf("Timing: About %.1f%% done\n", percent);
-		fflush(stdout);
-		return ;
-	}
-	remaining = (uint64_t)(((long double)progress->elapsed_ms
-			* (long double)(progress->total - progress->done))
-			/ (long double)progress->done);
-	nmap_output_format_hms(remaining,
-		remaining_text, sizeof(remaining_text));
-	printf("Timing: About %.1f%% done; ETC: ", percent);
-	print_etc(remaining);
-	printf(" (%s remaining)\n", remaining_text);
-	fflush(stdout);
+    if (!global || !targets)
+        return ;
+    pct = global->total ? 100.0 * (double)global->done
+        / (double)global->total : 100.0;
+    printf("\n========== PROGRESS (global: %llums) ==========\n",
+        (unsigned long long)global->elapsed_ms);
+    printf("Targets : %zu/%zu complete | Probes: %zu/%zu (%.1f%%) | "
+        "queued %zu | inflight %zu | benched %zu\n",
+        completed_targets, expected_targets, global->done, global->total,
+        pct, global->queued, global->outstanding, global->benched);
+    for (i = 0; i < iface_count; ++i)
+    {
+        int printed;
+
+        printed = 0;
+        for (j = 0; j < target_count; ++j)
+        {
+            if (targets[j].ifindex != ifaces[i].ifindex
+                || targets[j].status == NMAP_TARGET_DUPLICATE)
+                continue ;
+            if (!printed++)
+                printf("\n  %s\n", ifaces[i].iface);
+            pct = targets[j].total ? 100.0 * (double)targets[j].done
+                / (double)targets[j].total : 0.0;
+            printf("    %-39s %-8s %5zu/%-5zu %5.1f%%"
+                "  queued %-4zu inflight %-4zu benched %-4zu\n",
+                targets[j].name, status_name(targets[j].status),
+                targets[j].done, targets[j].total, pct, targets[j].queued,
+                targets[j].outstanding, targets[j].benched);
+        }
+    }
+    for (j = 0; j < target_count; ++j)
+        if (targets[j].status == NMAP_TARGET_FAILED && !targets[j].ifindex)
+            printf("  %-39s FAILED (preparation)\n", targets[j].name);
+    puts("=============================================\n");
+    fflush(stdout);
 }

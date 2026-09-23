@@ -94,6 +94,7 @@ typedef struct s_probe
 	uint32_t		seq;
 	uint32_t		scan_type;
 	uint64_t		sent_at_ms;
+	uint64_t		deadline_ms;
 	uint8_t			attempts_sent;
 	uint32_t		dispatch_id;
 	uint32_t		sending_dispatch_id;

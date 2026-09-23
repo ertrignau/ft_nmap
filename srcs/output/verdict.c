@@ -146,7 +146,7 @@ static t_nmap_port_verdict	compute_udp_verdict(const t_probe *probe)
  * Output deliberately depends only on semantic probe results. It does not
  * parse packets, classify responses or mutate runtime state.
  */
-void	nmap_output_build_port_view(const t_nmap_config *config,
+void	nmap_output_build_port_view(const t_nmap_target_ctx *ctx,
 		uint16_t port, t_nmap_port_view *view)
 {
 	size_t	i;
@@ -155,35 +155,17 @@ void	nmap_output_build_port_view(const t_nmap_config *config,
 		return ;
 	memset(view, 0, sizeof(*view));
 	view->port = port;
-	if (!config || !config->runtime.probes)
+	if (!ctx || !ctx->runtime.probes)
 		return ;
 	i = 0;
-	while (i < config->runtime.probe_count)
+	while (i < ctx->runtime.probe_count)
 	{
-		if (config->runtime.probes[i].dst_port == port
-			&& (is_tcp_scan(config->runtime.probes[i].scan_type)
-				|| config->runtime.probes[i].scan_type == NMAP_SCAN_UDP))
-			attach_probe(view, &config->runtime.probes[i]);
+		if (ctx->runtime.probes[i].dst_port == port
+			&& (is_tcp_scan(ctx->runtime.probes[i].scan_type)
+				|| ctx->runtime.probes[i].scan_type == NMAP_SCAN_UDP))
+			attach_probe(view, &ctx->runtime.probes[i]);
 		i++;
 	}
 	view->tcp_verdict = compute_tcp_verdict(view);
 	view->udp_verdict = compute_udp_verdict(view->udp);
-}
-
-/**
- * @brief Return whether --open should keep this port visible.
- *
- * MIXED is visible because it necessarily contains an OPEN observation.
- * UNFILTERED alone does not mean open and therefore does not pass --open.
- */
-int	nmap_output_view_is_open_like(const t_nmap_port_view *view)
-{
-	if (!view)
-		return (0);
-	if (view->tcp_verdict == NMAP_VERDICT_OPEN
-		|| view->tcp_verdict == NMAP_VERDICT_OPEN_FILTERED
-		|| view->tcp_verdict == NMAP_VERDICT_MIXED)
-		return (1);
-	return (view->udp_verdict == NMAP_VERDICT_OPEN
-		|| view->udp_verdict == NMAP_VERDICT_OPEN_FILTERED);
 }

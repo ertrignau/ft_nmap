@@ -7,6 +7,9 @@
 /** Return a monotonic millisecond timestamp used by runtime deadlines. */
 uint64_t		nmap_now_ms(void);
 
+/** Free a global + interface concurrency reservation after completion. */
+void            nmap_release_inflight(t_nmap_target_ctx *ctx);
+
 /** Return whether one logical probe belongs to the UDP scan family. */
 int				nmap_probe_is_udp(const t_probe *probe);
 
@@ -17,7 +20,7 @@ int				nmap_probe_is_udp(const t_probe *probe);
  * --speedup N deliberately switches to the subject's naive worker model.
  */
 int				nmap_runtime_uses_adaptive_core(
-					const t_nmap_config *config);
+					const t_nmap_target_ctx *ctx);
 
 /** Return whether a reply may still legally complete this logical probe. */
 int				nmap_probe_can_match(const t_probe *probe);
@@ -26,11 +29,11 @@ int				nmap_probe_can_match(const t_probe *probe);
  * Atomically claim one QUEUED generation immediately before sendto().
  * snapshot may be NULL; when supplied it receives a race-free debug copy.
  */
-int				nmap_runtime_begin_send(t_nmap_config *config, t_probe *probe,
+int				nmap_runtime_begin_send(t_nmap_target_ctx *ctx, t_probe *probe,
 					uint32_t dispatch_id, t_probe *snapshot);
 
 /** Commit one successful physical send as OUTSTANDING when still relevant. */
-void			nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
+void			nmap_runtime_complete_send(t_nmap_target_ctx *ctx, t_probe *probe,
 					uint32_t dispatch_id, uint64_t sent_at_ms);
 
 /**
@@ -38,35 +41,35 @@ void			nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
  * Return 1 when the failure is fatal for the target, 0 when the send belonged
  * to a retry already made irrelevant by a valid late reply.
  */
-int				nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
+int				nmap_runtime_fail_send(t_nmap_target_ctx *ctx, t_probe *probe,
 					uint32_t dispatch_id);
 
 /** Find and fully validate the logical probe corresponding to one reply. */
-t_probe			*nmap_find_matching_probe(t_nmap_config *config,
+t_probe			*nmap_find_matching_probe(t_nmap_target_ctx *ctx,
 					t_nmap_reply *reply);
 
 /** Classify one already-matched network reply. */
-t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+t_scan_result	nmap_classify_reply(const t_nmap_target_ctx *ctx,
 					const t_probe *probe, const t_nmap_reply *reply);
 
 /** Classify final absence of any useful reply after retransmission policy. */
 t_scan_result	nmap_classify_no_response(uint32_t scan_type);
 
 /** Atomically finalize one logical probe and update runtime counters. */
-void			nmap_mark_probe_done(t_nmap_config *config,
+void			nmap_mark_probe_done(t_nmap_target_ctx *ctx,
 					t_probe *probe, t_scan_result result,
 					t_scan_reason reason, const char *debug_reason);
 
 
 /* adaptive target timing */
-void			nmap_timing_init(t_nmap_config *config);
+void			nmap_timing_init(t_nmap_target_ctx *ctx);
 uint64_t		nmap_timing_probe_timeout_ms(
-					const t_nmap_config *config,
+					const t_nmap_target_ctx *ctx,
 					const t_probe *probe);
 size_t			nmap_timing_udp_allowed_retries_locked(
-					const t_nmap_config *config);
+					const t_nmap_target_ctx *ctx);
 int				nmap_timing_note_reply_locked(
-					t_nmap_config *config,
+					t_nmap_target_ctx *ctx,
 					const t_probe *probe,
 					const t_scan_reason *reason,
 					uint64_t now_ms);

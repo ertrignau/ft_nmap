@@ -27,14 +27,14 @@ static uint64_t	clamp_rto(const t_nmap_timing *timing, uint64_t rto)
 
 /** Return the currently justified number of UDP retransmissions. */
 size_t	nmap_timing_udp_allowed_retries_locked(
-		const t_nmap_config *config)
+		const t_nmap_target_ctx *ctx)
 {
 	const t_nmap_timing	*timing;
 	size_t				allowed;
 
-	if (!config || !nmap_runtime_uses_adaptive_core(config))
+	if (!ctx || !nmap_runtime_uses_adaptive_core(ctx))
 		return (0);
-	timing = &config->runtime.timing;
+	timing = &ctx->runtime.timing;
 	if (timing->udp_retry_limit == 0)
 		return (0);
 	allowed = timing->udp_max_successful_retry + 1;
@@ -50,18 +50,18 @@ size_t	nmap_timing_udp_allowed_retries_locked(
  * UDP starts with at most one justified retransmission; higher retry levels
  * must be proven useful by successful replies from earlier retry levels.
  */
-void	nmap_timing_init(t_nmap_config *config)
+void	nmap_timing_init(t_nmap_target_ctx *ctx)
 {
 	t_nmap_timing	*timing;
 	size_t			global_window;
 	size_t			udp_window;
 
-	if (!config)
+	if (!ctx)
 		return ;
-	timing = &config->runtime.timing;
-	if (!nmap_runtime_uses_adaptive_core(config))
+	timing = &ctx->runtime.timing;
+	if (!nmap_runtime_uses_adaptive_core(ctx))
 		return ;
-	timing->rto_max_ms = (uint64_t)config->scan.tcp_timeout_ms;
+	timing->rto_max_ms = (uint64_t)ctx->scan->tcp_timeout_ms;
 	if (timing->rto_max_ms == 0)
 		timing->rto_max_ms = NMAP_RTO_MIN_MS;
 	timing->rto_min_ms = NMAP_RTO_MIN_MS;
@@ -69,8 +69,8 @@ void	nmap_timing_init(t_nmap_config *config)
 		timing->rto_min_ms = timing->rto_max_ms;
 	timing->rto_ms = timing->rto_max_ms;
 
-	global_window = (size_t)config->scan.window_size;
-	udp_window = (size_t)config->scan.udp_window_size;
+	global_window = (size_t)ctx->scan->window_size;
+	udp_window = (size_t)ctx->scan->udp_window_size;
 	if (global_window == 0)
 		global_window = 1;
 	if (udp_window == 0)
@@ -81,15 +81,15 @@ void	nmap_timing_init(t_nmap_config *config)
 		timing->udp_window_max = 1;
 	timing->udp_window = timing->udp_window_max;
 
-	if (config->scan.udp_send_gap_ms > 0)
+	if (ctx->scan->udp_send_gap_ms > 0)
 		timing->udp_send_gap_ms =
-			(uint64_t)config->scan.udp_send_gap_ms;
+			(uint64_t)ctx->scan->udp_send_gap_ms;
 	timing->udp_send_gap_max_ms = NMAP_UDP_BACKOFF_MAX_GAP_MS;
 	if (timing->udp_send_gap_ms > timing->udp_send_gap_max_ms)
 		timing->udp_send_gap_max_ms = timing->udp_send_gap_ms;
 
-	if (config->scan.retries > 0)
-		timing->udp_retry_limit = (size_t)config->scan.retries;
+	if (ctx->scan->retries > 0)
+		timing->udp_retry_limit = (size_t)ctx->scan->retries;
 }
 
 /**
@@ -98,22 +98,22 @@ void	nmap_timing_init(t_nmap_config *config)
  * TCP-family scans use the target adaptive RTO after the first valid RTT
  * sample. UDP deliberately keeps the configured UDP timeout.
  */
-uint64_t	nmap_timing_probe_timeout_ms(const t_nmap_config *config,
+uint64_t	nmap_timing_probe_timeout_ms(const t_nmap_target_ctx *ctx,
 		const t_probe *probe)
 {
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return (0);
-	if (!nmap_runtime_uses_adaptive_core(config))
+	if (!nmap_runtime_uses_adaptive_core(ctx))
 	{
 		if (nmap_probe_is_udp(probe))
-			return ((uint64_t)config->scan.udp_timeout_ms);
-		return ((uint64_t)config->scan.tcp_timeout_ms);
+			return ((uint64_t)ctx->scan->udp_timeout_ms);
+		return ((uint64_t)ctx->scan->tcp_timeout_ms);
 	}
 	if (nmap_probe_is_udp(probe))
-		return ((uint64_t)config->scan.udp_timeout_ms);
-	if (!config->runtime.timing.rtt_valid)
-		return ((uint64_t)config->scan.tcp_timeout_ms);
-	return (config->runtime.timing.rto_ms);
+		return ((uint64_t)ctx->scan->udp_timeout_ms);
+	if (!ctx->runtime.timing.rtt_valid)
+		return ((uint64_t)ctx->scan->tcp_timeout_ms);
+	return (ctx->runtime.timing.rto_ms);
 }
 
 /**
@@ -293,7 +293,7 @@ static int	note_udp_retry_success(t_nmap_timing *timing,
  *
  * @return 1 when UDP retry policy expanded and BENCHED probes may be released.
  */
-int	nmap_timing_note_reply_locked(t_nmap_config *config,
+int	nmap_timing_note_reply_locked(t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_scan_reason *reason,
 		uint64_t now_ms)
 {
@@ -302,10 +302,10 @@ int	nmap_timing_note_reply_locked(t_nmap_config *config,
 	int				retry_level_increased;
 	int				first_attempt_sample;
 
-	if (!config || !probe || !reason || probe->attempts_sent == 0
-		|| !nmap_runtime_uses_adaptive_core(config))
+	if (!ctx || !probe || !reason || probe->attempts_sent == 0
+		|| !nmap_runtime_uses_adaptive_core(ctx))
 		return (0);
-	timing = &config->runtime.timing;
+	timing = &ctx->runtime.timing;
 	retry_level_increased = 0;
 	first_attempt_sample = (probe->attempts_sent == 1
 			&& probe->sent_at_ms != 0

@@ -59,54 +59,54 @@ static const char	*debug_scan_result_name(t_scan_result result)
 }
 
 /** Print resolved target, route and effective scan policy. */
-void	nmap_debug_dev_config(const t_nmap_config *config)
+void	nmap_debug_dev_config(const t_nmap_target_ctx *ctx)
 {
-	if (!config)
+	if (!ctx)
 		return ;
-	fprintf(stderr, "[debug][config] target=%s target_ip=%s family=%d\n",
-		config->target.name, config->target.ip, config->target.addr.family);
-	fprintf(stderr, "[debug][config] iface=%s ifindex=%u src_ip=%s\n",
-		config->route.iface, config->route.ifindex, config->route.src_ip);
+	fprintf(stderr, "[debug][ctx] target=%s target_ip=%s family=%d\n",
+		ctx->target.name, ctx->target.ip, ctx->target.addr.family);
+	fprintf(stderr, "[debug][ctx] iface=%s ifindex=%u src_ip=%s\n",
+		ctx->route.iface, ctx->route.ifindex, ctx->route.src_ip);
 	fprintf(stderr,
-		"[debug][config] ports=%zu scan_mask=0x%x retries=%d tcp_timeout=%d udp_timeout=%d\n",
-		config->scan.port_count, config->scan.scan_mask, config->scan.retries,
-		config->scan.tcp_timeout_ms, config->scan.udp_timeout_ms);
+		"[debug][ctx] ports=%zu scan_mask=0x%x retries=%d tcp_timeout=%d udp_timeout=%d\n",
+		ctx->scan->port_count, ctx->scan->scan_mask, ctx->scan->retries,
+		ctx->scan->tcp_timeout_ms, ctx->scan->udp_timeout_ms);
 	fprintf(stderr,
-		"[debug][config] extra_threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
-		config->scan.thread_count, config->scan.window_size,
-		config->scan.udp_window_size, config->scan.udp_send_gap_ms);
+		"[debug][ctx] extra_threads=%d window=%d udp_window=%d udp_gap_ms=%d\n",
+		ctx->scan->thread_count, ctx->scan->window_size,
+		ctx->scan->udp_window_size, ctx->scan->udp_send_gap_ms);
 }
 
 /** Print raw socket state. */
-void	nmap_debug_socket(const t_nmap_config *config)
+void	nmap_debug_socket(const t_nmap_target_ctx *ctx)
 {
-	if (!config)
+	if (!ctx)
 		return ;
 	fprintf(stderr, "[debug][socket] send_fd=%d family=%d\n",
-		config->socket.send_fd, config->socket.family);
+		ctx->socket->send_fd, ctx->socket->family);
 }
 
 /** Print pcap state. */
-void	nmap_debug_pcap(const t_nmap_config *config)
+void	nmap_debug_pcap(const t_nmap_target_ctx *ctx)
 {
-	if (!config)
+	if (!ctx)
 		return ;
 	fprintf(stderr, "[debug][pcap] handle=%p fd=%d datalink=%d\n",
-		(void *)config->capture.handle, config->capture.fd,
-		config->capture.datalink);
+		(void *)ctx->iface->capture.handle, ctx->iface->capture.fd,
+		ctx->iface->capture.datalink);
 }
 
 /** Print aggregate runtime counters. */
-void	nmap_debug_runtime(const t_nmap_config *config)
+void	nmap_debug_runtime(const t_nmap_target_ctx *ctx)
 {
-	if (!config)
+	if (!ctx)
 		return ;
 	fprintf(stderr,
 		"[debug][runtime] probes=%zu done=%zu queued=%zu "
 		"outstanding=%zu benched=%zu src_base=%u\n",
-		config->runtime.probe_count, config->runtime.done_count,
-		config->runtime.queued_count, config->runtime.outstanding_count,
-		config->runtime.benched_count, config->runtime.source_port_base);
+		ctx->runtime.probe_count, ctx->runtime.done_count,
+		ctx->runtime.queued_count, ctx->runtime.outstanding_count,
+		ctx->runtime.benched_count, ctx->runtime.source_port_base);
 }
 
 /** Print one send attempt. */

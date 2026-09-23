@@ -50,7 +50,7 @@ static t_scan_result	classify_tcp_packet(const t_probe *probe,
 /**
  * @brief Classify one matched ICMPv4 error.
  */
-static t_scan_result	classify_icmp4(const t_nmap_config *config,
+static t_scan_result	classify_icmp4(const t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_nmap_reply *reply)
 {
 	if (reply->icmp_type == 11)
@@ -60,7 +60,7 @@ static t_scan_result	classify_icmp4(const t_nmap_config *config,
 		return (SCAN_RESULT_UNKNOWN);
 	if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 3)
 	{
-		if (nmap_ip_equal(&reply->src_addr, &config->target.addr))
+		if (nmap_ip_equal(&reply->src_addr, &ctx->target.addr))
 			return (SCAN_RESULT_CLOSED);
 		return (SCAN_RESULT_FILTERED);
 	}
@@ -76,13 +76,13 @@ static t_scan_result	classify_icmp4(const t_nmap_config *config,
  * Packet Too Big and Parameter Problem are not port-state evidence here and
  * deliberately remain UNKNOWN instead of inventing an OPEN result.
  */
-static t_scan_result	classify_icmp6(const t_nmap_config *config,
+static t_scan_result	classify_icmp6(const t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_nmap_reply *reply)
 {
 	if (reply->icmp_type == 1 && reply->icmp_code <= 6)
 	{
 		if (probe->scan_type == NMAP_SCAN_UDP && reply->icmp_code == 4
-			&& nmap_ip_equal(&reply->src_addr, &config->target.addr))
+			&& nmap_ip_equal(&reply->src_addr, &ctx->target.addr))
 			return (SCAN_RESULT_CLOSED);
 		return (SCAN_RESULT_FILTERED);
 	}
@@ -94,19 +94,19 @@ static t_scan_result	classify_icmp6(const t_nmap_config *config,
 /**
  * @brief Apply the per-scan response decision tree to one already-matched reply.
  */
-t_scan_result	nmap_classify_reply(const t_nmap_config *config,
+t_scan_result	nmap_classify_reply(const t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (!config || !probe || !reply)
+	if (!ctx || !probe || !reply)
 		return (SCAN_RESULT_UNKNOWN);
 	if (reply->type == NMAP_REPLY_TCP && probe->scan_type != NMAP_SCAN_UDP)
 		return (classify_tcp_packet(probe, reply));
 	if (reply->type == NMAP_REPLY_UDP && probe->scan_type == NMAP_SCAN_UDP)
 		return (SCAN_RESULT_OPEN);
 	if (reply->type == NMAP_REPLY_ICMP4)
-		return (classify_icmp4(config, probe, reply));
+		return (classify_icmp4(ctx, probe, reply));
 	if (reply->type == NMAP_REPLY_ICMP6)
-		return (classify_icmp6(config, probe, reply));
+		return (classify_icmp6(ctx, probe, reply));
 	return (SCAN_RESULT_UNKNOWN);
 }
 

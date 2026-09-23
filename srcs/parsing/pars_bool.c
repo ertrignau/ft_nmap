@@ -18,8 +18,8 @@ int	parse_bool_flag(t_nmap_config *config, const char *flag)
 		return (0);
 	if (nmap_streq(flag, "--no-dns"))
 		config->cli.no_dns = 1;
-	else if (nmap_streq(flag, "--open"))
-		config->cli.open_only = 1;
+	else if (nmap_streq(flag, "--short"))
+		config->cli.short_output = 1;
 	else if (nmap_streq(flag, "--reason"))
 		config->cli.show_reason = 1;
 	else if (nmap_streq(flag, "--os"))

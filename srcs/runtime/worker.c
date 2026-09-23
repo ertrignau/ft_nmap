@@ -6,280 +6,206 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * @brief Pop one job from the shared sender queue, blocking until work/stop.
- */
-static int	pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
+/** Each worker owns at most one reserved or OUTSTANDING probe at a time. */
+static int pool_pop_job(t_nmap_sender_pool *pool, t_nmap_send_job *job)
 {
-	pthread_mutex_lock(&pool->lock);
-	while (pool->queue_count == 0 && !pool->stop_requested)
-		pthread_cond_wait(&pool->cond, &pool->lock);
-	if (pool->stop_requested)
-	{
-		pthread_mutex_unlock(&pool->lock);
-		return (0);
-	}
-	*job = pool->queue[pool->queue_head];
-	pool->queue_head = (pool->queue_head + 1) % pool->queue_capacity;
-	pool->queue_count--;
-	pthread_mutex_unlock(&pool->lock);
-	return (1);
+    pthread_mutex_lock(&pool->lock);
+    while (pool->queue_count == 0 && !pool->stop_requested)
+        pthread_cond_wait(&pool->cond, &pool->lock);
+    if (pool->stop_requested)
+    {
+        pthread_mutex_unlock(&pool->lock);
+        return (0);
+    }
+    *job = pool->queue[pool->queue_head];
+    pool->queue_head = (pool->queue_head + 1) % pool->queue_capacity;
+    pool->queue_count--;
+    pthread_mutex_unlock(&pool->lock);
+    return (1);
 }
 
-/** Return whether pool shutdown has been requested. */
-static int	pool_is_stopping(t_nmap_sender_pool *pool)
+static int pool_is_stopping(t_nmap_sender_pool *pool)
 {
-	int	stopping;
+    int stopping;
 
-	pthread_mutex_lock(&pool->lock);
-	stopping = pool->stop_requested;
-	pthread_mutex_unlock(&pool->lock);
-	return (stopping);
+    pthread_mutex_lock(&pool->lock);
+    stopping = pool->stop_requested;
+    pthread_mutex_unlock(&pool->lock);
+    return (stopping);
 }
 
-/** Record a fatal sender error visible to the main event loop. */
-static void	set_send_error(t_nmap_sender_pool *pool)
+static void set_send_error(t_nmap_sender_pool *pool)
 {
-	pthread_mutex_lock(&pool->lock);
-	pool->send_error = 1;
-	pthread_mutex_unlock(&pool->lock);
+    pthread_mutex_lock(&pool->lock);
+    pool->send_error = 1;
+    pthread_mutex_unlock(&pool->lock);
 }
 
-/**
- * @brief Wait until the main thread releases this physical attempt.
- *
- * The worker owns no receive path. Once sendto() succeeds, it cannot consume
- * another job while this probe remains OUTSTANDING.
- *
- * The main thread releases it by changing the probe to:
- *
- *   DONE      valid reply or final timeout
- *   PENDING   timeout requiring another retry
- *   BENCHED   UDP retry temporarily held by adaptive policy
- *
- * A single shared condition variable is deliberately used for simplicity.
- * broadcast wakes all workers; each one re-checks its own probe predicate.
- */
-static void	wait_for_probe(t_nmap_worker *worker, t_probe *probe)
+/** Never hold pool.lock while blocking on a target's probe_cond. */
+static void wait_for_probe(t_nmap_worker *worker,
+        t_nmap_target_ctx *ctx, t_probe *probe)
 {
-	t_nmap_runtime		*runtime;
-	t_nmap_sender_pool	*pool;
+    t_nmap_runtime *rt = &ctx->runtime;
+    t_nmap_sender_pool *pool = &worker->engine->sender_pool;
 
-	runtime = &worker->config->runtime;
-	pool = &worker->config->sender_pool;
-	pthread_mutex_lock(&runtime->lock);
-	while (probe->state == PROBE_OUTSTANDING)
-	{
-		if (pool_is_stopping(pool))
-			break ;
-		pthread_cond_wait(&runtime->probe_cond, &runtime->lock);
-	}
-	pthread_mutex_unlock(&runtime->lock);
+    pthread_mutex_lock(&rt->lock);
+    while (probe->state == PROBE_OUTSTANDING)
+    {
+        if (pool_is_stopping(pool))
+            break ;
+        pthread_cond_wait(&rt->probe_cond, &rt->lock);
+    }
+    pthread_mutex_unlock(&rt->lock);
 }
 
-/**
- * @brief Execute exactly one already-reserved physical send.
- *
- * @return 1 when sendto() succeeded and the worker must wait for the main
- *         thread to resolve/expire this attempt, 0 for stale/failed jobs.
- */
-static int	execute_job(t_nmap_worker *worker,
-		const t_nmap_send_job *job)
+static int execute_job(t_nmap_worker *worker, const t_nmap_send_job *job)
 {
-	t_probe		snapshot;
-	uint64_t	sent_at_ms;
-	int			fatal;
+    t_probe snapshot;
+    int fatal;
 
-	if (!nmap_runtime_begin_send(worker->config, job->probe,
-			job->dispatch_id, &snapshot))
-		return (0);
-	DEBUG_PROBE_SEND(&snapshot);
-	if (!nmap_send_probe(worker->config, job->probe))
-	{
-		fatal = nmap_runtime_fail_send(worker->config,
-				job->probe, job->dispatch_id);
-		if (fatal)
-			set_send_error(&worker->config->sender_pool);
-		return (0);
-	}
-	sent_at_ms = nmap_now_ms();
-	nmap_runtime_complete_send(worker->config, job->probe,
-		job->dispatch_id, sent_at_ms);
-	return (1);
+    if (!nmap_runtime_begin_send(job->ctx, job->probe,
+            job->dispatch_id, &snapshot))
+        return (0);
+    DEBUG_PROBE_SEND(&snapshot);
+    if (!nmap_send_probe(job->ctx, job->probe))
+    {
+        fatal = nmap_runtime_fail_send(job->ctx, job->probe,
+                job->dispatch_id);
+        if (fatal)
+            set_send_error(&worker->engine->sender_pool);
+        return (0);
+    }
+    nmap_runtime_complete_send(job->ctx, job->probe,
+        job->dispatch_id, nmap_now_ms());
+    return (1);
 }
 
-/**
- * @brief Sender worker entry point.
- *
- * One worker has at most one physical probe in flight.
- *
- * It only:
- *   1. consumes one reserved job,
- *   2. sends it,
- *   3. waits until the main thread resolves/expires that attempt,
- *   4. consumes another job.
- *
- * Pcap, matching, classification, retry policy and timeout policy stay owned
- * exclusively by the main event loop.
- */
-static void	*worker_main(void *arg)
+static void *worker_main(void *arg)
 {
-	t_nmap_worker	*worker;
-	t_nmap_send_job	job;
+    t_nmap_worker *worker = arg;
+    t_nmap_send_job job;
 
-	worker = (t_nmap_worker *)arg;
-	while (pool_pop_job(&worker->config->sender_pool, &job))
-	{
-		if (execute_job(worker, &job))
-			wait_for_probe(worker, job.probe);
-	}
-	return (NULL);
+    while (pool_pop_job(&worker->engine->sender_pool, &job))
+    {
+        if (execute_job(worker, &job))
+            wait_for_probe(worker, job.ctx, job.probe);
+        /* Main cannot reclaim target runtime until all such tickets retire. */
+        atomic_fetch_sub_explicit(&job.ctx->live_jobs, 1,
+            memory_order_release);
+    }
+    return (NULL);
 }
 
-/** Initialize and start one sender worker. */
-static int	init_worker(t_nmap_config *config, t_nmap_worker *worker,
-		int id)
+int nmap_prepare_sender_pool(t_nmap_engine *engine, int *exit_status)
 {
-	memset(worker, 0, sizeof(*worker));
-	worker->config = config;
-	worker->id = id;
-	if (pthread_create(&worker->thread, NULL, worker_main, worker) != 0)
-		return (0);
-	worker->started = 1;
-	return (1);
-}
+    t_nmap_sender_pool *pool;
+    int i;
 
-/**
- * @brief Initialize the shared sender queue and requested worker threads.
- *
- * @note speedup=0 intentionally keeps an inline main-thread sender and does
- *       not initialize pool synchronization primitives.
- */
-int	nmap_prepare_sender_pool(t_nmap_config *config, int *exit_status)
-{
-	int	i;
-
-	if (!config)
-		goto fail;
-	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
-	config->sender_pool.worker_count = config->scan.thread_count;
-	if (config->sender_pool.worker_count <= 0)
-	{
-		config->sender_pool.worker_count = 0;
-		return (1);
-	}
-	if (pthread_mutex_init(&config->sender_pool.lock, NULL) != 0)
-		goto fail;
-	if (pthread_cond_init(&config->sender_pool.cond, NULL) != 0)
-	{
-		pthread_mutex_destroy(&config->sender_pool.lock);
-		goto fail;
-	}
-	config->sender_pool.initialized = 1;
-	config->sender_pool.queue_capacity = config->runtime.probe_count;
-	if (config->sender_pool.queue_capacity == 0)
-		goto fail_initialized;
-	config->sender_pool.queue = calloc(config->sender_pool.queue_capacity,
-			sizeof(*config->sender_pool.queue));
-	config->sender_pool.workers = calloc(config->sender_pool.worker_count,
-			sizeof(*config->sender_pool.workers));
-	if (!config->sender_pool.queue || !config->sender_pool.workers)
-		goto fail_initialized;
-	i = 0;
-	while (i < config->sender_pool.worker_count)
-	{
-		if (!init_worker(config, &config->sender_pool.workers[i], i))
-			goto fail_initialized;
-		i++;
-	}
-	return (1);
+    if (!engine)
+        goto fail;
+    pool = &engine->sender_pool;
+    memset(pool, 0, sizeof(*pool));
+    pool->worker_count = engine->config->scan.thread_count;
+    if (pool->worker_count <= 0)
+        return (1);
+    if (pthread_mutex_init(&pool->lock, NULL) != 0)
+        goto fail;
+    if (pthread_cond_init(&pool->cond, NULL) != 0)
+    {
+        pthread_mutex_destroy(&pool->lock);
+        goto fail;
+    }
+    pool->initialized = 1;
+    /* The scheduler's global N-slot invariant bounds queue occupancy by N. */
+    pool->queue_capacity = (size_t)pool->worker_count;
+    pool->queue = calloc(pool->queue_capacity, sizeof(*pool->queue));
+    pool->workers = calloc(pool->worker_count, sizeof(*pool->workers));
+    if (!pool->queue || !pool->workers)
+        goto fail_initialized;
+    for (i = 0; i < pool->worker_count; ++i)
+    {
+        pool->workers[i].engine = engine;
+        pool->workers[i].id = i;
+        if (pthread_create(&pool->workers[i].thread, NULL,
+                worker_main, &pool->workers[i]) != 0)
+            goto fail_initialized;
+        pool->workers[i].started = 1;
+    }
+    return (1);
 fail_initialized:
-	if (exit_status)
-		*exit_status = 1;
-	nmap_stop_sender_pool(config);
-	return (0);
+    nmap_stop_sender_pool(engine);
 fail:
-	if (exit_status)
-		*exit_status = 1;
-	return (0);
+    if (exit_status)
+        *exit_status = 1;
+    return (0);
 }
 
-/**
- * @brief Stop and join every sender worker, then release pool resources.
- */
-void	nmap_stop_sender_pool(t_nmap_config *config)
+void nmap_stop_sender_pool(t_nmap_engine *engine)
 {
-	int	i;
+    t_nmap_sender_pool *pool;
+    size_t i;
 
-	if (!config || !config->sender_pool.initialized)
-		return ;
-	pthread_mutex_lock(&config->sender_pool.lock);
-	config->sender_pool.stop_requested = 1;
-	pthread_cond_broadcast(&config->sender_pool.cond);
-	pthread_mutex_unlock(&config->sender_pool.lock);
-
-	/*
-	 * Some workers may be waiting for an OUTSTANDING probe rather than for a
-	 * queue job. Wake them as well so they can observe stop_requested.
-	 */
-	if (config->runtime.probe_cond_initialized)
-	{
-		pthread_mutex_lock(&config->runtime.lock);
-		pthread_cond_broadcast(&config->runtime.probe_cond);
-		pthread_mutex_unlock(&config->runtime.lock);
-	}
-
-	i = 0;
-	while (i < config->sender_pool.worker_count)
-	{
-		if (config->sender_pool.workers
-			&& config->sender_pool.workers[i].started)
-			pthread_join(config->sender_pool.workers[i].thread, NULL);
-		i++;
-	}
-	free(config->sender_pool.workers);
-	free(config->sender_pool.queue);
-	pthread_cond_destroy(&config->sender_pool.cond);
-	pthread_mutex_destroy(&config->sender_pool.lock);
-	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
+    if (!engine || !engine->sender_pool.initialized)
+        return ;
+    pool = &engine->sender_pool;
+    pthread_mutex_lock(&pool->lock);
+    pool->stop_requested = 1;
+    pthread_cond_broadcast(&pool->cond);
+    pthread_mutex_unlock(&pool->lock);
+    for (i = 0; i < engine->target_count; ++i)
+    {
+        t_nmap_runtime *rt = &engine->targets[i].runtime;
+        if (!rt->lock_initialized || !rt->probe_cond_initialized)
+            continue ;
+        pthread_mutex_lock(&rt->lock);
+        pthread_cond_broadcast(&rt->probe_cond);
+        pthread_mutex_unlock(&rt->lock);
+    }
+    for (i = 0; i < (size_t)pool->worker_count; ++i)
+        if (pool->workers && pool->workers[i].started)
+            pthread_join(pool->workers[i].thread, NULL);
+    free(pool->workers);
+    free(pool->queue);
+    pthread_cond_destroy(&pool->cond);
+    pthread_mutex_destroy(&pool->lock);
+    memset(pool, 0, sizeof(*pool));
 }
 
-/** Return whether any relevant sender job reported a fatal send failure. */
-int	nmap_sender_pool_has_error(t_nmap_config *config)
+int nmap_sender_pool_has_error(t_nmap_engine *engine)
 {
-	int	error;
+    int err;
+    t_nmap_sender_pool *pool;
 
-	if (!config || !config->sender_pool.initialized)
-		return (0);
-	pthread_mutex_lock(&config->sender_pool.lock);
-	error = config->sender_pool.send_error;
-	pthread_mutex_unlock(&config->sender_pool.lock);
-	return (error != 0);
+    if (!engine || !engine->sender_pool.initialized)
+        return (0);
+    pool = &engine->sender_pool;
+    pthread_mutex_lock(&pool->lock);
+    err = pool->send_error;
+    pthread_mutex_unlock(&pool->lock);
+    return (err);
 }
 
-/**
- * @brief Push one already-reserved probe generation into the shared queue.
- */
-int	nmap_dispatch_probe_to_sender(t_nmap_config *config, t_probe *probe,
-		uint32_t dispatch_id)
+int nmap_dispatch_probe_to_sender(t_nmap_engine *engine,
+        t_nmap_target_ctx *ctx, t_probe *probe, uint32_t dispatch_id)
 {
-	t_nmap_sender_pool	*pool;
+    t_nmap_sender_pool *pool;
 
-	if (!config || !probe || !config->sender_pool.initialized)
-		return (0);
-	pool = &config->sender_pool;
-	pthread_mutex_lock(&pool->lock);
-	if (pool->stop_requested || pool->send_error
-		|| pool->queue_count >= pool->queue_capacity)
-	{
-		pthread_mutex_unlock(&pool->lock);
-		return (0);
-	}
-	pool->queue[pool->queue_tail].probe = probe;
-	pool->queue[pool->queue_tail].dispatch_id = dispatch_id;
-	pool->queue_tail = (pool->queue_tail + 1) % pool->queue_capacity;
-	pool->queue_count++;
-	pthread_cond_signal(&pool->cond);
-	pthread_mutex_unlock(&pool->lock);
-	return (1);
+    if (!engine || !ctx || !probe || !engine->sender_pool.initialized)
+        return (0);
+    pool = &engine->sender_pool;
+    pthread_mutex_lock(&pool->lock);
+    if (pool->stop_requested || pool->send_error
+        || pool->queue_count >= pool->queue_capacity)
+    {
+        pthread_mutex_unlock(&pool->lock);
+        return (0);
+    }
+    /* Ticket is visible BEFORE another thread can pop this queue item. */
+    atomic_fetch_add_explicit(&ctx->live_jobs, 1, memory_order_relaxed);
+    pool->queue[pool->queue_tail] = (t_nmap_send_job){ctx, probe, dispatch_id};
+    pool->queue_tail = (pool->queue_tail + 1) % pool->queue_capacity;
+    pool->queue_count++;
+    pthread_cond_signal(&pool->cond);
+    pthread_mutex_unlock(&pool->lock);
+    return (1);
 }

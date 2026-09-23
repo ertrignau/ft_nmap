@@ -24,9 +24,6 @@ int	nmap_init_config(t_nmap_config *config, const char *program_name,
 		return (0);
 	}
 	memset(config, 0, sizeof(*config));
-	config->socket.send_fd = -1;
-	config->capture.fd = -1;
-	config->capture.datalink = -1;
 	config->cli.program_name = program_name;
 	return (1);
 }

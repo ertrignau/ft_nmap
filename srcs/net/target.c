@@ -134,17 +134,17 @@ static void	resolve_reverse_dns(t_nmap_target *target)
  * --no-dns only disables the optional reverse lookup. Forward resolution of a
  * user-supplied hostname remains necessary to obtain the destination address.
  */
-int	nmap_prepare_target(t_nmap_config *config, const char *target_name,
+int	nmap_prepare_target(t_nmap_target_ctx *ctx, const char *target_name,
 		int *exit_status)
 {
-	if (!config || !resolve_host(&config->target, target_name))
+	if (!ctx || !resolve_host(&ctx->target, target_name))
 	{
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!config->scan.no_dns
+	if (!ctx->scan->no_dns
 		&& target_is_numeric(target_name))
-		resolve_reverse_dns(&config->target);
+		resolve_reverse_dns(&ctx->target);
 	return (1);
 }

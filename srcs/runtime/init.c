@@ -132,7 +132,7 @@ static int	init_probe(t_nmap_runtime *runtime, t_probe *probe,
 }
 
 /** Fill the complete [port x scan-type] logical probe table. */
-static int	fill_probes(t_nmap_config *config, size_t scan_count)
+static int	fill_probes(t_nmap_target_ctx *ctx, size_t scan_count)
 {
 	size_t		port_index;
 	size_t		scan_index;
@@ -143,15 +143,15 @@ static int	fill_probes(t_nmap_config *config, size_t scan_count)
 	seq_seed = random_u32();
 	probe_index = 0;
 	port_index = 0;
-	while (port_index < config->scan.port_count)
+	while (port_index < ctx->scan->port_count)
 	{
 		scan_index = 0;
 		while (scan_index < scan_count)
 		{
-			scan_type = scan_type_at(config->scan.scan_mask, scan_index);
-			if (!scan_type || !init_probe(&config->runtime,
-					&config->runtime.probes[probe_index],
-					config->scan.ports[port_index], scan_type,
+			scan_type = scan_type_at(ctx->scan->scan_mask, scan_index);
+			if (!scan_type || !init_probe(&ctx->runtime,
+					&ctx->runtime.probes[probe_index],
+					ctx->scan->ports[port_index], scan_type,
 					probe_index, seq_seed))
 				return (0);
 			probe_index++;
@@ -177,37 +177,37 @@ static void	cleanup_partial_runtime(t_nmap_runtime *runtime)
 /**
  * @brief Allocate and initialize the complete runtime for the current target.
  */
-int	nmap_prepare_runtime(t_nmap_config *config, int *exit_status)
+int	nmap_prepare_runtime(t_nmap_target_ctx *ctx, int *exit_status)
 {
 	size_t	scan_count;
 	size_t	probe_count;
 
-	if (!config)
+	if (!ctx)
 		goto fail;
-	memset(&config->runtime, 0, sizeof(config->runtime));
-	if (pthread_mutex_init(&config->runtime.lock, NULL) != 0)
+	memset(&ctx->runtime, 0, sizeof(ctx->runtime));
+	if (pthread_mutex_init(&ctx->runtime.lock, NULL) != 0)
 		goto fail;
-	config->runtime.lock_initialized = 1;
-	if (pthread_cond_init(&config->runtime.probe_cond, NULL) != 0)
+	ctx->runtime.lock_initialized = 1;
+	if (pthread_cond_init(&ctx->runtime.probe_cond, NULL) != 0)
 		goto partial_fail;
-	config->runtime.probe_cond_initialized = 1;
-	nmap_timing_init(config);
-	scan_count = count_scan_types(config->scan.scan_mask);
-	if (config->scan.port_count == 0 || scan_count == 0)
+	ctx->runtime.probe_cond_initialized = 1;
+	nmap_timing_init(ctx);
+	scan_count = count_scan_types(ctx->scan->scan_mask);
+	if (ctx->scan->port_count == 0 || scan_count == 0)
 		goto partial_fail;
-	probe_count = config->scan.port_count * scan_count;
-	config->runtime.probe_count = probe_count;
-	if (!choose_source_port_base(&config->runtime))
+	probe_count = ctx->scan->port_count * scan_count;
+	ctx->runtime.probe_count = probe_count;
+	if (!choose_source_port_base(&ctx->runtime))
 		goto partial_fail;
-	config->runtime.probes = calloc(probe_count, sizeof(t_probe));
-	config->runtime.probe_by_src_port = calloc(65536, sizeof(t_probe *));
-	if (!config->runtime.probes || !config->runtime.probe_by_src_port)
+	ctx->runtime.probes = calloc(probe_count, sizeof(t_probe));
+	ctx->runtime.probe_by_src_port = calloc(65536, sizeof(t_probe *));
+	if (!ctx->runtime.probes || !ctx->runtime.probe_by_src_port)
 		goto partial_fail;
-	if (!fill_probes(config, scan_count))
+	if (!fill_probes(ctx, scan_count))
 		goto partial_fail;
 	return (1);
 partial_fail:
-	cleanup_partial_runtime(&config->runtime);
+	cleanup_partial_runtime(&ctx->runtime);
 fail:
 	if (exit_status)
 		*exit_status = 1;
@@ -217,14 +217,14 @@ fail:
 /**
  * @brief Check whether every logical probe reached DONE.
  */
-int	nmap_runtime_is_finished(t_nmap_config *config)
+int	nmap_runtime_is_finished(t_nmap_target_ctx *ctx)
 {
 	int	finished;
 
-	if (!config || !config->runtime.lock_initialized)
+	if (!ctx || !ctx->runtime.lock_initialized)
 		return (1);
-	pthread_mutex_lock(&config->runtime.lock);
-	finished = (config->runtime.done_count >= config->runtime.probe_count);
-	pthread_mutex_unlock(&config->runtime.lock);
+	pthread_mutex_lock(&ctx->runtime.lock);
+	finished = (ctx->runtime.done_count >= ctx->runtime.probe_count);
+	pthread_mutex_unlock(&ctx->runtime.lock);
 	return (finished);
 }

@@ -19,7 +19,7 @@ static void	print_help(const char *progname)
 	printf("  --ttl <0-255>             Set IPv4 TTL / IPv6 Hop Limit\n");
 	printf("  --no-dns                   Disable reverse DNS lookups\n");
 	printf("  --os                       Enable OS detection\n");
-	printf("  --open                     Show only open/open|filtered ports\n");
+	printf("  --short                    Hide repetitive and inconclusive port rows\n");
 	printf("  --reason                   Show the reason for each state\n");
 }
 

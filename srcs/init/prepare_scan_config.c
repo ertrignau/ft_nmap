@@ -1,4 +1,3 @@
-
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
@@ -138,7 +137,7 @@ static void	prepare_features(t_nmap_config *config)
 {
 	config->scan.no_dns = config->cli.no_dns;
 	config->scan.os_detection = config->cli.os_detection;
-	config->scan.open_only = config->cli.open_only;
+	config->scan.short_output = config->cli.short_output;
 	config->scan.show_reason = config->cli.show_reason;
 }
 

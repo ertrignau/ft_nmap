@@ -1,0 +1,11 @@
+// Cross-interface and cross-family multi-target regression tests.
+// Run from the project root; requires the new lab/ networks to be started.
+
+[test adaptive-mixed-v4-v6]
+ft: sudo ./ft_nmap --file lab/targets-mixed.txt --ports 30,31,32,36 --scan SYN --reason --no-dns
+
+[test naive-mixed-v4-v6]
+ft: sudo ./ft_nmap --file lab/targets-mixed.txt --ports 30,31,32,36 --scan SYN --speedup 4 --retries 0 --reason --no-dns
+
+[test adaptive-ipv6-udp]
+ft: sudo ./ft_nmap --file lab/targets-v6.txt --ports 30,31,33,37 --scan UDP --reason --no-dns

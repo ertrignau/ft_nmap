@@ -6,11 +6,11 @@
 /**
  * @brief Validate a direct TCP/UDP reply against one candidate probe.
  */
-static int	direct_reply_matches(const t_nmap_config *config,
+static int	direct_reply_matches(const t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (!nmap_ip_equal(&reply->src_addr, &config->target.addr)
-		|| !nmap_ip_equal(&reply->dst_addr, &config->route.src_addr)
+	if (!nmap_ip_equal(&reply->src_addr, &ctx->target.addr)
+		|| !nmap_ip_equal(&reply->dst_addr, &ctx->route.src_addr)
 		|| reply->src_port != probe->dst_port
 		|| reply->dst_port != probe->src_port)
 		return (0);
@@ -29,12 +29,12 @@ static int	direct_reply_matches(const t_nmap_config *config,
  *       errors. Classification later uses the outer sender where semantics
  *       depend on whether the target itself emitted the message.
  */
-static int	icmp_reply_matches(const t_nmap_config *config,
+static int	icmp_reply_matches(const t_nmap_target_ctx *ctx,
 		const t_probe *probe, const t_nmap_reply *reply)
 {
-	if (!nmap_ip_equal(&reply->dst_addr, &config->route.src_addr)
-		|| !nmap_ip_equal(&reply->original_src_addr, &config->route.src_addr)
-		|| !nmap_ip_equal(&reply->original_dst_addr, &config->target.addr)
+	if (!nmap_ip_equal(&reply->dst_addr, &ctx->route.src_addr)
+		|| !nmap_ip_equal(&reply->original_src_addr, &ctx->route.src_addr)
+		|| !nmap_ip_equal(&reply->original_dst_addr, &ctx->target.addr)
 		|| reply->original_src_port != probe->src_port
 		|| reply->original_dst_port != probe->dst_port)
 		return (0);
@@ -72,28 +72,28 @@ static int	reply_index_key(const t_nmap_reply *reply, uint16_t *key)
  * @note Lookup is O(1), but no packet is trusted from source-port identity
  *       alone. All protocol/address/port fields are validated afterwards.
  */
-t_probe	*nmap_find_matching_probe(t_nmap_config *config, t_nmap_reply *reply)
+t_probe	*nmap_find_matching_probe(t_nmap_target_ctx *ctx, t_nmap_reply *reply)
 {
 	t_probe		*probe;
 	uint16_t	key;
 	int			matches;
 
-	if (!config || !reply || !reply_index_key(reply, &key))
+	if (!ctx || !reply || !reply_index_key(reply, &key))
 		return (NULL);
-	pthread_mutex_lock(&config->runtime.lock);
-	probe = config->runtime.probe_by_src_port[key];
+	pthread_mutex_lock(&ctx->runtime.lock);
+	probe = ctx->runtime.probe_by_src_port[key];
 	matches = nmap_probe_can_match(probe);
 	if (matches && (reply->type == NMAP_REPLY_TCP
 			|| reply->type == NMAP_REPLY_UDP))
-		matches = direct_reply_matches(config, probe, reply);
+		matches = direct_reply_matches(ctx, probe, reply);
 	else if (matches && (reply->type == NMAP_REPLY_ICMP4
 			|| reply->type == NMAP_REPLY_ICMP6))
-		matches = icmp_reply_matches(config, probe, reply);
+		matches = icmp_reply_matches(ctx, probe, reply);
 	else
 	{
 		matches = 0;
 	}
-	pthread_mutex_unlock(&config->runtime.lock);
+	pthread_mutex_unlock(&ctx->runtime.lock);
 	if (!matches)
 		return (NULL);
 	return (probe);

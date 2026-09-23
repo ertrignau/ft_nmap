@@ -6,6 +6,7 @@
 
 # include <pcap/pcap.h>
 # include <pthread.h>
+# include <stdatomic.h>
 # include <stddef.h>
 # include <stdint.h>
 
@@ -29,7 +30,10 @@ typedef enum e_nmap_scan_type
 	NMAP_SCAN_UDP = 1 << 5
 }	t_nmap_scan_type;
 
-typedef struct s_nmap_worker	t_nmap_worker;
+typedef struct s_nmap_worker       t_nmap_worker;
+typedef struct s_nmap_target_ctx  t_nmap_target_ctx;
+typedef struct s_nmap_iface_ctx   t_nmap_iface_ctx;
+typedef struct s_nmap_engine      t_nmap_engine;
 
 /**
  * @brief One immutable sender-pool job.
@@ -40,6 +44,7 @@ typedef struct s_nmap_worker	t_nmap_worker;
  */
 typedef struct s_nmap_send_job
 {
+	t_nmap_target_ctx *ctx;
 	t_probe		*probe;
 	uint32_t	dispatch_id;
 }	t_nmap_send_job;
@@ -87,7 +92,7 @@ typedef struct s_nmap_cli
 	int			help;
 	int			no_dns;
 	int			os_detection;
-	int			open_only;
+	int			short_output;
 	int			show_reason;
 
 	int			speedup;
@@ -198,28 +203,77 @@ typedef struct s_nmap_scan
 
 	int			no_dns;
 	int			os_detection;
-	int			open_only;
+	int			short_output;
 	int			show_reason;
 }	t_nmap_scan;
 
-/**
- * @brief Complete process state.
- *
- * Parsing/options and the target list are process-scoped. target/route/socket/
- * capture/runtime/sender_pool are prepared and cleaned for each resolved
- * target.
- */
+/** Process-level options and immutable effective scan plan. */
 typedef struct s_nmap_config
 {
-	t_nmap_cli			cli;
-	t_nmap_targets		targets;
-	t_nmap_target		target;
-	t_nmap_route		route;
-	t_nmap_socket		socket;
-	t_nmap_capture		capture;
-	t_nmap_scan			scan;
-	t_nmap_runtime		runtime;
-	t_nmap_sender_pool	sender_pool;
-}	t_nmap_config;
+    t_nmap_cli       cli;
+    t_nmap_targets   targets;
+    t_nmap_scan      scan;
+}   t_nmap_config;
+
+typedef enum e_nmap_target_status
+{
+    NMAP_TARGET_PREPARED = 0,
+    NMAP_TARGET_ACTIVE,
+    NMAP_TARGET_FINISHED,
+    NMAP_TARGET_FAILED,
+    NMAP_TARGET_DUPLICATE
+}   t_nmap_target_status;
+
+/** Network resources belong to the interface, never to an individual target. */
+struct s_nmap_iface_ctx
+{
+    char            iface[NMAP_IFACE_NAME_MAX];
+    unsigned int    ifindex;
+    t_nmap_capture  capture;
+    t_nmap_socket   socket4;
+    t_nmap_socket   socket6;
+    size_t          adaptive_window;
+    size_t          active_targets;
+    atomic_size_t   inflight_jobs;
+};
+
+/** Identity, routing and all mutable probe/timing state for ONE destination. */
+struct s_nmap_target_ctx
+{
+    t_nmap_target       target;
+    t_nmap_route        route;
+    t_nmap_runtime      runtime;
+    t_nmap_iface_ctx    *iface;
+    t_nmap_socket       *socket;
+    const t_nmap_scan   *scan;
+    t_nmap_engine       *engine;
+    t_nmap_target_status status;
+    size_t              next_probe_cursor;
+    atomic_size_t       live_jobs;
+    uint64_t            started_ms;
+    uint64_t            finished_ms;
+};
+
+/** One global event loop, optional naive sender pool and stable target slots. */
+struct s_nmap_engine
+{
+    const t_nmap_config *config;
+    t_nmap_target_ctx  *targets;
+    size_t             target_count;
+    t_nmap_iface_ctx   *ifaces;
+    size_t             iface_count;
+    size_t             iface_cursor;
+    size_t             target_cursor;
+    size_t             active_count;
+    atomic_size_t      inflight_jobs;
+    size_t             max_active;
+    size_t             completed_count;
+    size_t             failed_count;
+    size_t             effective_targets;
+    size_t             planned_probes;
+    size_t             finished_probes;
+    uint64_t           started_ms;
+    t_nmap_sender_pool sender_pool;
+};
 
 #endif

@@ -52,9 +52,8 @@ typedef struct s_nmap_port_view
 }	t_nmap_port_view;
 
 /* port view / verdict */
-void		nmap_output_build_port_view(const t_nmap_config *config,
+void		nmap_output_build_port_view(const t_nmap_target_ctx *ctx,
 				uint16_t port, t_nmap_port_view *view);
-int			nmap_output_view_is_open_like(const t_nmap_port_view *view);
 
 /* formatting */
 const char	*nmap_output_state_name(const t_probe *probe);

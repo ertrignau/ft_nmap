@@ -134,42 +134,42 @@ static int	find_source_interface(const t_nmap_ip_addr *src_addr,
 /**
  * @brief Prepare source address, interface and scope for the current target.
  */
-int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
+int	nmap_prepare_route(t_nmap_target_ctx *ctx, int *exit_status)
 {
 	unsigned int	expected_ifindex;
 	int				error;
 
-	if (!config || (config->target.addr.family != AF_INET
-			&& config->target.addr.family != AF_INET6))
+	if (!ctx || (ctx->target.addr.family != AF_INET
+			&& ctx->target.addr.family != AF_INET6))
 	{
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (config->target.addr.family == AF_INET6
-		&& IN6_IS_ADDR_LINKLOCAL(&config->target.addr.addr.v6)
-		&& config->target.addr.scope_id == 0)
+	if (ctx->target.addr.family == AF_INET6
+		&& IN6_IS_ADDR_LINKLOCAL(&ctx->target.addr.addr.v6)
+		&& ctx->target.addr.scope_id == 0)
 	{
 		fprintf(stderr,
 			"ft_nmap: link-local IPv6 target %s requires a zone "
-			"identifier (for example %%eth0)\n", config->target.name);
+			"identifier (for example %%eth0)\n", ctx->target.name);
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	memset(&config->route, 0, sizeof(config->route));
+	memset(&ctx->route, 0, sizeof(ctx->route));
 	error = 0;
-	if (!find_source_address(&config->target,
-			&config->route.src_addr, &error))
+	if (!find_source_address(&ctx->target,
+			&ctx->route.src_addr, &error))
 	{
 		fprintf(stderr, "ft_nmap: no route to %s: %s\n",
-			config->target.ip, strerror(error));
+			ctx->target.ip, strerror(error));
 		if (exit_status)
 			*exit_status = 1;
 		return (0);
 	}
-	if (!nmap_ip_ntop(&config->route.src_addr,
-			config->route.src_ip, sizeof(config->route.src_ip)))
+	if (!nmap_ip_ntop(&ctx->route.src_addr,
+			ctx->route.src_ip, sizeof(ctx->route.src_ip)))
 	{
 		perror("ft_nmap: inet_ntop route source");
 		if (exit_status)
@@ -177,16 +177,16 @@ int	nmap_prepare_route(t_nmap_config *config, int *exit_status)
 		return (0);
 	}
 	expected_ifindex = 0;
-	if (config->target.addr.family == AF_INET6)
-		expected_ifindex = config->target.addr.scope_id;
-	if (expected_ifindex == 0 && config->route.src_addr.family == AF_INET6)
-		expected_ifindex = config->route.src_addr.scope_id;
-	if (!find_source_interface(&config->route.src_addr, expected_ifindex,
-			config->route.iface, sizeof(config->route.iface),
-			&config->route.ifindex, &error))
+	if (ctx->target.addr.family == AF_INET6)
+		expected_ifindex = ctx->target.addr.scope_id;
+	if (expected_ifindex == 0 && ctx->route.src_addr.family == AF_INET6)
+		expected_ifindex = ctx->route.src_addr.scope_id;
+	if (!find_source_interface(&ctx->route.src_addr, expected_ifindex,
+			ctx->route.iface, sizeof(ctx->route.iface),
+			&ctx->route.ifindex, &error))
 	{
 		fprintf(stderr, "ft_nmap: cannot find interface for source %s: %s\n",
-			config->route.src_ip, strerror(error));
+			ctx->route.src_ip, strerror(error));
 		if (exit_status)
 			*exit_status = 1;
 		return (0);

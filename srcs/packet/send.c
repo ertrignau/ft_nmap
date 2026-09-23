@@ -25,7 +25,7 @@ static int	is_tcp_scan(uint32_t scan_type)
  * @note This is the only packet-layer function that calls sendto(). Builders
  *       remain testable without a live raw socket.
  */
-int	nmap_send_raw_packet(t_nmap_config *config,
+int	nmap_send_raw_packet(t_nmap_target_ctx *ctx,
 		const unsigned char *packet, size_t packet_len)
 {
 	struct sockaddr_storage	dst;
@@ -33,15 +33,15 @@ int	nmap_send_raw_packet(t_nmap_config *config,
 	ssize_t					sent;
 	uint64_t				prof_start;
 
-	if (!config || !packet || packet_len == 0
-		|| config->socket.send_fd < 0
-		|| config->socket.family != config->target.addr.family)
+	if (!ctx || !packet || packet_len == 0
+		|| ctx->socket->send_fd < 0
+		|| ctx->socket->family != ctx->target.addr.family)
 		return (0);
-	if (!nmap_ip_to_sockaddr(&config->target.addr, 0, &dst, &dst_len))
+	if (!nmap_ip_to_sockaddr(&ctx->target.addr, 0, &dst, &dst_len))
 		return (0);
 	DEBUG_SEND_PACKET(packet, packet_len);
 	prof_start = PROF_START();
-	sent = sendto(config->socket.send_fd, packet, packet_len, 0,
+	sent = sendto(ctx->socket->send_fd, packet, packet_len, 0,
 			(struct sockaddr *)&dst, dst_len);
 	PROF_ADD(NMAP_PROF_SEND_SENDTO, prof_start);
 	if (sent < 0 || (size_t)sent != packet_len)
@@ -59,14 +59,14 @@ int	nmap_send_raw_packet(t_nmap_config *config,
  * @note IP version is deliberately not selected here. TCP/UDP builders inspect
  *       the current target family and call the appropriate IP encapsulation.
  */
-int	nmap_send_probe(t_nmap_config *config, t_probe *probe)
+int	nmap_send_probe(t_nmap_target_ctx *ctx, t_probe *probe)
 {
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return (0);
 	if (is_tcp_scan(probe->scan_type))
-		return (nmap_send_tcp_probe(config, probe));
+		return (nmap_send_tcp_probe(ctx, probe));
 	if (probe->scan_type == NMAP_SCAN_UDP)
-		return (nmap_send_udp_probe(config, probe));
+		return (nmap_send_udp_probe(ctx, probe));
 	fprintf(stderr, "ft_nmap: invalid scan type: 0x%x\n", probe->scan_type);
 	return (0);
 }

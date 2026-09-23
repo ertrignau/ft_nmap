@@ -17,8 +17,8 @@ typedef struct s_prof_slot
 }	t_prof_slot;
 
 static t_prof_slot	g_prof[NMAP_PROF_EVENT_COUNT] = {
-	[NMAP_PROF_SELECT_REQUESTED] = {"select requested", 0, 0, 0, 0},
-	[NMAP_PROF_SELECT_WAIT] = {"select wait", 0, 0, 0, 0},
+	[NMAP_PROF_SELECT_REQUESTED] = {"poll requested", 0, 0, 0, 0},
+	[NMAP_PROF_SELECT_WAIT] = {"poll wait", 0, 0, 0, 0},
 	[NMAP_PROF_PCAP_NEXT_EX] = {"pcap_next_ex", 0, 0, 0, 0},
 	[NMAP_PROF_PACKET_PARSE_TOTAL] = {"packet parse total", 0, 0, 0, 0},
 	[NMAP_PROF_LINK_OFFSET] = {"link offset", 0, 0, 0, 0},

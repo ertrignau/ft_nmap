@@ -1,72 +1,81 @@
-#include "config.h"
-#include "runtime/worker.h"
-
+#include "ft_nmap.h"
 #include <pcap/pcap.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-/**
- * @brief Release allocations and synchronization state owned by the runtime.
- */
-static void	cleanup_runtime(t_nmap_runtime *runtime)
+/** Caller must ensure no worker still references this context. */
+void nmap_cleanup_target_ctx(t_nmap_target_ctx *ctx)
 {
-	if (!runtime)
-		return ;
-	free(runtime->probe_by_src_port);
-	free(runtime->probes);
-	if (runtime->probe_cond_initialized)
-		pthread_cond_destroy(&runtime->probe_cond);
-	if (runtime->lock_initialized)
-		pthread_mutex_destroy(&runtime->lock);
-	memset(runtime, 0, sizeof(*runtime));
+    t_nmap_runtime *rt;
+
+    if (!ctx)
+        return ;
+    rt = &ctx->runtime;
+    free(rt->probe_by_src_port);
+    free(rt->probes);
+    if (rt->probe_cond_initialized)
+        pthread_cond_destroy(&rt->probe_cond);
+    if (rt->lock_initialized)
+        pthread_mutex_destroy(&rt->lock);
+    memset(rt, 0, sizeof(*rt));
 }
 
-/**
- * @brief Release resources owned by the current resolved target.
- *
- * @note Unlike the old IPv4-only design, the raw socket is target-scoped: its
- *       address family depends on the current resolved target.
+/** A finished target keeps ONLY its probes for its final ordered report.
+ * The 65536-pointer matching table and synchronization resources are released
+ * as soon as the last sender ticket retires, before activating more targets.
  */
-void	nmap_cleanup_current_target(t_nmap_config *config)
+void nmap_archive_target_ctx(t_nmap_target_ctx *ctx)
 {
-	if (!config)
-		return ;
-	nmap_stop_sender_pool(config);
-	if (config->capture.handle)
-		pcap_close(config->capture.handle);
-	if (config->socket.send_fd >= 0)
-		close(config->socket.send_fd);
-	cleanup_runtime(&config->runtime);
-	memset(&config->target, 0, sizeof(config->target));
-	memset(&config->route, 0, sizeof(config->route));
-	memset(&config->socket, 0, sizeof(config->socket));
-	memset(&config->capture, 0, sizeof(config->capture));
-	memset(&config->sender_pool, 0, sizeof(config->sender_pool));
-	config->socket.send_fd = -1;
-	config->capture.fd = -1;
-	config->capture.datalink = -1;
+    t_nmap_runtime *rt;
+
+    if (!ctx)
+        return ;
+    rt = &ctx->runtime;
+    free(rt->probe_by_src_port);
+    rt->probe_by_src_port = NULL;
+    if (rt->probe_cond_initialized)
+        pthread_cond_destroy(&rt->probe_cond);
+    if (rt->lock_initialized)
+        pthread_mutex_destroy(&rt->lock);
+    rt->probe_cond_initialized = 0;
+    rt->lock_initialized = 0;
+    /* rt->probes and rt->probe_count survive until the final report. */
 }
 
-/**
- * @brief Release all process-owned resources.
- */
-void	nmap_cleanup_config(t_nmap_config *config)
+/** Shared resources are closed once, AFTER all senders have joined. */
+void nmap_cleanup_engine(t_nmap_engine *engine)
 {
-	size_t	i;
+    size_t i;
 
-	if (!config)
-		return ;
-	nmap_cleanup_current_target(config);
-	i = 0;
-	while (i < config->targets.count)
-	{
-		free(config->targets.items[i]);
-		i++;
-	}
-	free(config->targets.items);
-	memset(config, 0, sizeof(*config));
-	config->socket.send_fd = -1;
-	config->capture.fd = -1;
-	config->capture.datalink = -1;
+    if (!engine)
+        return ;
+    nmap_stop_sender_pool(engine);
+    for (i = 0; engine->targets && i < engine->target_count; ++i)
+        nmap_cleanup_target_ctx(&engine->targets[i]);
+    for (i = 0; engine->ifaces && i < engine->iface_count; ++i)
+    {
+        t_nmap_iface_ctx *iface = &engine->ifaces[i];
+        if (iface->capture.handle)
+            pcap_close(iface->capture.handle);
+        if (iface->socket4.send_fd >= 0)
+            close(iface->socket4.send_fd);
+        if (iface->socket6.send_fd >= 0)
+            close(iface->socket6.send_fd);
+    }
+    free(engine->targets);
+    free(engine->ifaces);
+    memset(engine, 0, sizeof(*engine));
+}
+
+void nmap_cleanup_config(t_nmap_config *config)
+{
+    size_t i;
+
+    if (!config)
+        return ;
+    for (i = 0; i < config->targets.count; ++i)
+        free(config->targets.items[i]);
+    free(config->targets.items);
+    memset(config, 0, sizeof(*config));
 }

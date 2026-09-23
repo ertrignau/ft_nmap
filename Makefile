@@ -36,6 +36,8 @@ PROFILE_OBJS_DIR := objs_profile
 
 SRCS := srcs/main.c \
 	srcs/run.c \
+	srcs/engine/prepare.c \
+	srcs/engine/loop.c \
 	srcs/init/init.c \
 	srcs/init/prepare_scan_config.c \
 	srcs/init/targets.c \
@@ -152,54 +154,25 @@ test: all
 #                                  DOCKER LAB                                  #
 # **************************************************************************** #
 
-LAB_DIR := ft_nmap_lab
+LAB_DIR := lab
 
 lab: lab-up
-
 lab-up:
 	$(MAKE) -C $(LAB_DIR) up
-
 lab-down:
 	$(MAKE) -C $(LAB_DIR) down
-
 lab-re:
 	$(MAKE) -C $(LAB_DIR) re
-
 lab-clean:
 	$(MAKE) -C $(LAB_DIR) clean
-
 lab-logs:
 	$(MAKE) -C $(LAB_DIR) logs
-
 lab-ps:
 	$(MAKE) -C $(LAB_DIR) ps
-
-lab-shell:
-	$(MAKE) -C $(LAB_DIR) shell
-
-lab-profiles:
-	$(MAKE) -C $(LAB_DIR) profiles
-
-lab-default:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=default
-
-lab-tcp-many:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=tcp-many-open
-
-lab-udp-many:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=udp-many-open
-
-lab-mixed:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=mixed
-
-lab-mostly-closed:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=mostly-closed
-
-lab-filtered-heavy:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=filtered-heavy
-
-lab-profile-%:
-	$(MAKE) -C $(LAB_DIR) up PROFILE=$*
+lab-full:
+	$(MAKE) -C $(LAB_DIR) full
+lab-ipv6:
+	$(MAKE) -C $(LAB_DIR) ipv6
 
 # **************************************************************************** #
 #                                DEPENDENCIES                                  #
@@ -210,6 +183,4 @@ lab-profile-%:
 -include $(PROFILE_DEPS)
 
 .PHONY: all debug profile clean fclean re run debug-run profile-run test \
-	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-shell \
-	lab-profiles lab-default lab-tcp-many lab-udp-many lab-mixed \
-	lab-mostly-closed lab-filtered-heavy
+	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-full lab-ipv6

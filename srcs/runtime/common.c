@@ -15,6 +15,15 @@ uint64_t	nmap_now_ms(void)
 		+ (uint64_t)ts.tv_nsec / 1000000ULL);
 }
 
+/** Caller must have removed ONE QUEUED or OUTSTANDING reservation. */
+void nmap_release_inflight(t_nmap_target_ctx *ctx)
+{
+    atomic_fetch_sub_explicit(&ctx->iface->inflight_jobs, 1,
+        memory_order_release);
+    atomic_fetch_sub_explicit(&ctx->engine->inflight_jobs, 1,
+        memory_order_release);
+}
+
 /** Check whether one probe belongs to the UDP scan family. */
 int	nmap_probe_is_udp(const t_probe *probe)
 {
@@ -28,9 +37,9 @@ int	nmap_probe_is_udp(const t_probe *probe)
  * timing. With --speedup N, N workers deliberately provide the only
  * concurrency limit and use fixed timeout/retry policy.
  */
-int	nmap_runtime_uses_adaptive_core(const t_nmap_config *config)
+int	nmap_runtime_uses_adaptive_core(const t_nmap_target_ctx *ctx)
 {
-	return (config && config->scan.thread_count == 0);
+	return (ctx && ctx->scan->thread_count == 0);
 }
 
 /**
@@ -59,14 +68,14 @@ int	nmap_probe_can_match(const t_probe *probe)
  * this function only creates the atomic execution commit point used to reject
  * stale queue entries and to let a very fast reply match safely.
  */
-int	nmap_runtime_begin_send(t_nmap_config *config, t_probe *probe,
+int	nmap_runtime_begin_send(t_nmap_target_ctx *ctx, t_probe *probe,
 		uint32_t dispatch_id, t_probe *snapshot)
 {
 	int	valid;
 
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return (0);
-	pthread_mutex_lock(&config->runtime.lock);
+	pthread_mutex_lock(&ctx->runtime.lock);
 	valid = (probe->state == PROBE_QUEUED
 			&& probe->dispatch_id == dispatch_id
 			&& probe->sending_dispatch_id == 0);
@@ -76,24 +85,24 @@ int	nmap_runtime_begin_send(t_nmap_config *config, t_probe *probe,
 		if (snapshot)
 			*snapshot = *probe;
 	}
-	pthread_mutex_unlock(&config->runtime.lock);
+	pthread_mutex_unlock(&ctx->runtime.lock);
 	return (valid);
 }
 
 /** Remove one QUEUED probe from queue accounting while runtime.lock is held. */
-static void	remove_queued_locked(t_nmap_config *config, const t_probe *probe)
+static void	remove_queued_locked(t_nmap_target_ctx *ctx, const t_probe *probe)
 {
-	if (config->runtime.queued_count > 0)
-		config->runtime.queued_count--;
-	if (nmap_probe_is_udp(probe) && config->runtime.udp_queued_count > 0)
-		config->runtime.udp_queued_count--;
+	if (ctx->runtime.queued_count > 0)
+		ctx->runtime.queued_count--;
+	if (nmap_probe_is_udp(probe) && ctx->runtime.udp_queued_count > 0)
+		ctx->runtime.udp_queued_count--;
 }
 
 /** Remove one BENCHED probe from bench accounting while runtime.lock is held. */
-static void	remove_benched_locked(t_nmap_config *config)
+static void	remove_benched_locked(t_nmap_target_ctx *ctx)
 {
-	if (config->runtime.benched_count > 0)
-		config->runtime.benched_count--;
+	if (ctx->runtime.benched_count > 0)
+		ctx->runtime.benched_count--;
 }
 
 /**
@@ -103,18 +112,18 @@ static void	remove_benched_locked(t_nmap_config *config)
  * currently BENCHED was stopped at the previously allowed level and becomes
  * schedulable when nmap_timing_note_reply_locked() reports one promotion.
  */
-static void	release_benched_locked(t_nmap_config *config)
+static void	release_benched_locked(t_nmap_target_ctx *ctx)
 {
 	size_t	i;
 
 	i = 0;
-	while (i < config->runtime.probe_count)
+	while (i < ctx->runtime.probe_count)
 	{
-		if (config->runtime.probes[i].state == PROBE_BENCHED)
+		if (ctx->runtime.probes[i].state == PROBE_BENCHED)
 		{
-			config->runtime.probes[i].state = PROBE_PENDING;
-			config->runtime.probes[i].sent_at_ms = 0;
-			remove_benched_locked(config);
+			ctx->runtime.probes[i].state = PROBE_PENDING;
+			ctx->runtime.probes[i].sent_at_ms = 0;
+			remove_benched_locked(ctx);
 		}
 		i++;
 	}
@@ -127,16 +136,16 @@ static void	release_benched_locked(t_nmap_config *config)
  * the physical send is still accounted as having happened, but DONE is never
  * reopened and queued/outstanding counters are not touched a second time.
  */
-void	nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
+void	nmap_runtime_complete_send(t_nmap_target_ctx *ctx, t_probe *probe,
 		uint32_t dispatch_id, uint64_t sent_at_ms)
 {
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return ;
-	pthread_mutex_lock(&config->runtime.lock);
+	pthread_mutex_lock(&ctx->runtime.lock);
 	if (probe->dispatch_id != dispatch_id
 		|| probe->sending_dispatch_id != dispatch_id)
 	{
-		pthread_mutex_unlock(&config->runtime.lock);
+		pthread_mutex_unlock(&ctx->runtime.lock);
 		return ;
 	}
 	probe->sending_dispatch_id = 0;
@@ -144,17 +153,19 @@ void	nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
 		PROF_COUNT(NMAP_PROF_PROBE_RETRIED);
 	probe->attempts_sent++;
 	if (nmap_probe_is_udp(probe))
-		config->runtime.last_udp_sent_ms = sent_at_ms;
+		ctx->runtime.last_udp_sent_ms = sent_at_ms;
 	if (probe->state == PROBE_QUEUED)
 	{
-		remove_queued_locked(config, probe);
-		config->runtime.outstanding_count++;
+		remove_queued_locked(ctx, probe);
+		ctx->runtime.outstanding_count++;
 		if (nmap_probe_is_udp(probe))
-			config->runtime.udp_outstanding_count++;
+			ctx->runtime.udp_outstanding_count++;
 		probe->sent_at_ms = sent_at_ms;
+		probe->deadline_ms = sent_at_ms
+			+ nmap_timing_probe_timeout_ms(ctx, probe);
 		probe->state = PROBE_OUTSTANDING;
 	}
-	pthread_mutex_unlock(&config->runtime.lock);
+	pthread_mutex_unlock(&ctx->runtime.lock);
 }
 
 /**
@@ -165,18 +176,19 @@ void	nmap_runtime_complete_send(t_nmap_config *config, t_probe *probe,
  * completes the probe; in that case the already-valid network result wins and
  * the obsolete retry failure does not poison the whole target.
  */
-int	nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
+int	nmap_runtime_fail_send(t_nmap_target_ctx *ctx, t_probe *probe,
 		uint32_t dispatch_id)
 {
 	t_scan_reason	reason;
+    t_probe         debug_snapshot;
 	int				fatal;
 	int				marked_done;
 
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return (0);
 	fatal = 0;
 	marked_done = 0;
-	pthread_mutex_lock(&config->runtime.lock);
+	pthread_mutex_lock(&ctx->runtime.lock);
 	if (probe->dispatch_id == dispatch_id
 		&& probe->sending_dispatch_id == dispatch_id)
 	{
@@ -185,20 +197,22 @@ int	nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
 			fatal = (probe->attempts_sent == 0);
 		else if (probe->state == PROBE_QUEUED)
 		{
-			remove_queued_locked(config, probe);
+			remove_queued_locked(ctx, probe);
+            nmap_release_inflight(ctx);
 			reason = (t_scan_reason){0};
 			reason.kind = SCAN_REASON_SEND_ERROR;
 			probe->state = PROBE_DONE;
 			probe->result = SCAN_RESULT_UNKNOWN;
 			probe->reason = reason;
-			config->runtime.done_count++;
+			ctx->runtime.done_count++;
 			fatal = 1;
+            debug_snapshot = *probe;
 			marked_done = 1;
 		}
 	}
-	pthread_mutex_unlock(&config->runtime.lock);
+	pthread_mutex_unlock(&ctx->runtime.lock);
 	if (marked_done)
-		DEBUG_PROBE_RESULT(probe, "send failure");
+		DEBUG_PROBE_RESULT(&debug_snapshot, "send failure");
 	return (fatal);
 }
 
@@ -213,18 +227,19 @@ int	nmap_runtime_fail_send(t_nmap_config *config, t_probe *probe,
  * BENCHED probes are released only after the current replying probe has been
  * removed from its previous lifecycle accounting and committed as DONE.
  */
-void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
+void	nmap_mark_probe_done(t_nmap_target_ctx *ctx, t_probe *probe,
 		t_scan_result result, t_scan_reason reason, const char *debug_reason)
 {
 	t_probe_state	old_state;
+    t_probe         debug_snapshot;
 	int				retry_level_increased;
 
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return ;
-	pthread_mutex_lock(&config->runtime.lock);
+	pthread_mutex_lock(&ctx->runtime.lock);
 	if (probe->state == PROBE_DONE)
 	{
-		pthread_mutex_unlock(&config->runtime.lock);
+		pthread_mutex_unlock(&ctx->runtime.lock);
 		return ;
 	}
 	old_state = probe->state;
@@ -234,27 +249,32 @@ void	nmap_mark_probe_done(t_nmap_config *config, t_probe *probe,
 		|| reason.kind == SCAN_REASON_ICMP)
 	{
 		retry_level_increased = nmap_timing_note_reply_locked(
-				config, probe, &reason, nmap_now_ms());
+				ctx, probe, &reason, nmap_now_ms());
 	}
 	if (old_state == PROBE_QUEUED)
-		remove_queued_locked(config, probe);
+    {
+		remove_queued_locked(ctx, probe);
+        nmap_release_inflight(ctx);
+    }
 	else if (old_state == PROBE_OUTSTANDING)
 	{
-		if (config->runtime.outstanding_count > 0)
-			config->runtime.outstanding_count--;
+		if (ctx->runtime.outstanding_count > 0)
+			ctx->runtime.outstanding_count--;
+        nmap_release_inflight(ctx);
 		if (nmap_probe_is_udp(probe)
-			&& config->runtime.udp_outstanding_count > 0)
-			config->runtime.udp_outstanding_count--;
+			&& ctx->runtime.udp_outstanding_count > 0)
+			ctx->runtime.udp_outstanding_count--;
 	}
 	else if (old_state == PROBE_BENCHED)
-		remove_benched_locked(config);
+		remove_benched_locked(ctx);
 	probe->state = PROBE_DONE;
 	probe->result = result;
 	probe->reason = reason;
-	config->runtime.done_count++;
+	ctx->runtime.done_count++;
 	if (retry_level_increased)
-		release_benched_locked(config);
-	pthread_cond_broadcast(&config->runtime.probe_cond);
-	pthread_mutex_unlock(&config->runtime.lock);
-	DEBUG_PROBE_RESULT(probe, debug_reason);
+		release_benched_locked(ctx);
+    debug_snapshot = *probe;
+	pthread_cond_broadcast(&ctx->runtime.probe_cond);
+	pthread_mutex_unlock(&ctx->runtime.lock);
+	DEBUG_PROBE_RESULT(&debug_snapshot, debug_reason);
 }

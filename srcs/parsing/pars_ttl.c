@@ -1,4 +1,5 @@
 #include "ft_nmap.h"
+#include <stdio.h>
 
 int	parse_ttl(t_nmap_config *config, int argc, char **argv, int *i)
 {

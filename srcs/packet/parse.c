@@ -394,7 +394,7 @@ static int	parse_ipv6_packet(const unsigned char *packet,
  * @note Datalink location, IP-version parsing and runtime classification are
  *       deliberately separate layers. This function only normalizes wire data.
  */
-int	nmap_parse_pcap_packet(t_nmap_config *config, const unsigned char *packet,
+int	nmap_parse_pcap_packet(const t_nmap_iface_ctx *iface, const unsigned char *packet,
 		size_t len, t_nmap_reply *reply)
 {
 	size_t		ip_offset;
@@ -402,11 +402,11 @@ int	nmap_parse_pcap_packet(t_nmap_config *config, const unsigned char *packet,
 	uint64_t	prof_start;
 	int			ret;
 
-	if (!config || !packet || !reply)
+	if (!iface || !packet || !reply)
 		return (0);
 	memset(reply, 0, sizeof(*reply));
 	prof_start = PROF_START();
-	if (!nmap_get_network_offset(config->capture.datalink,
+	if (!nmap_get_network_offset(iface->capture.datalink,
 			packet, len, &ip_offset, &family))
 	{
 		PROF_ADD(NMAP_PROF_LINK_OFFSET, prof_start);

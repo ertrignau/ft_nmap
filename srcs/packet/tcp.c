@@ -49,7 +49,7 @@ static int	build_tcp_header(const t_probe *probe, t_nmap_tcp_header *tcp)
 /**
  * @brief Build a complete raw IPv4 + TCP scan packet.
  */
-static size_t	build_ipv4_tcp_packet(t_nmap_config *config, t_probe *probe,
+static size_t	build_ipv4_tcp_packet(t_nmap_target_ctx *ctx, t_probe *probe,
 		unsigned char *packet)
 {
 	t_nmap_ipv4_header	*ip;
@@ -59,9 +59,9 @@ static size_t	build_ipv4_tcp_packet(t_nmap_config *config, t_probe *probe,
 	tcp = (t_nmap_tcp_header *)(packet + NMAP_IPV4_HEADER_LEN);
 	if (!build_tcp_header(probe, tcp))
 		return (0);
-	tcp->checksum = nmap_transport_checksum_ipv4(config,
+	tcp->checksum = nmap_transport_checksum_ipv4(ctx,
 			IPPROTO_TCP, tcp, sizeof(*tcp));
-	nmap_build_ipv4_header(config, probe, ip,
+	nmap_build_ipv4_header(ctx, probe, ip,
 		IPPROTO_TCP, sizeof(*tcp));
 	return (NMAP_IPV4_HEADER_LEN + sizeof(*tcp));
 }
@@ -69,7 +69,7 @@ static size_t	build_ipv4_tcp_packet(t_nmap_config *config, t_probe *probe,
 /**
  * @brief Build a complete raw IPv6 + TCP scan packet.
  */
-static size_t	build_ipv6_tcp_packet(t_nmap_config *config, t_probe *probe,
+static size_t	build_ipv6_tcp_packet(t_nmap_target_ctx *ctx, t_probe *probe,
 		unsigned char *packet)
 {
 	t_nmap_ipv6_header	*ip;
@@ -79,29 +79,29 @@ static size_t	build_ipv6_tcp_packet(t_nmap_config *config, t_probe *probe,
 	tcp = (t_nmap_tcp_header *)(packet + NMAP_IPV6_HEADER_LEN);
 	if (!build_tcp_header(probe, tcp))
 		return (0);
-	tcp->checksum = nmap_transport_checksum_ipv6(config,
+	tcp->checksum = nmap_transport_checksum_ipv6(ctx,
 			IPPROTO_TCP, tcp, sizeof(*tcp));
-	nmap_build_ipv6_header(config, ip, IPPROTO_TCP, sizeof(*tcp));
+	nmap_build_ipv6_header(ctx, ip, IPPROTO_TCP, sizeof(*tcp));
 	return (NMAP_IPV6_HEADER_LEN + sizeof(*tcp));
 }
 
 /**
  * @brief Build and send one SYN/NULL/FIN/XMAS/ACK probe.
  */
-int	nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe)
+int	nmap_send_tcp_probe(t_nmap_target_ctx *ctx, t_probe *probe)
 {
 	unsigned char	packet[NMAP_IPV6_HEADER_LEN + NMAP_TCP_HEADER_LEN];
 	size_t			packet_len;
 	uint64_t		prof_start;
 
-	if (!config || !probe)
+	if (!ctx || !probe)
 		return (0);
 	memset(packet, 0, sizeof(packet));
 	prof_start = PROF_START();
-	if (config->target.addr.family == AF_INET)
-		packet_len = build_ipv4_tcp_packet(config, probe, packet);
-	else if (config->target.addr.family == AF_INET6)
-		packet_len = build_ipv6_tcp_packet(config, probe, packet);
+	if (ctx->target.addr.family == AF_INET)
+		packet_len = build_ipv4_tcp_packet(ctx, probe, packet);
+	else if (ctx->target.addr.family == AF_INET6)
+		packet_len = build_ipv6_tcp_packet(ctx, probe, packet);
 	else
 	{
 		packet_len = 0;
@@ -112,5 +112,5 @@ int	nmap_send_tcp_probe(t_nmap_config *config, t_probe *probe)
 		fprintf(stderr, "ft_nmap: cannot build TCP probe\n");
 		return (0);
 	}
-	return (nmap_send_raw_packet(config, packet, packet_len));
+	return (nmap_send_raw_packet(ctx, packet, packet_len));
 }

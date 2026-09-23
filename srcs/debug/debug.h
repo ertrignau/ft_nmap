@@ -66,20 +66,20 @@ void		nmap_prof_report(void);
 
 # ifdef DEBUG
 
-void	nmap_debug_dev_config(const t_nmap_config *config);
-void	nmap_debug_socket(const t_nmap_config *config);
-void	nmap_debug_pcap(const t_nmap_config *config);
-void	nmap_debug_runtime(const t_nmap_config *config);
+void	nmap_debug_dev_config(const t_nmap_target_ctx *ctx);
+void	nmap_debug_socket(const t_nmap_target_ctx *ctx);
+void	nmap_debug_pcap(const t_nmap_target_ctx *ctx);
+void	nmap_debug_runtime(const t_nmap_target_ctx *ctx);
 
 void	nmap_debug_probe_send(const t_probe *probe);
 void	nmap_debug_probe_timeout(const t_probe *probe);
 void	nmap_debug_probe_result(const t_probe *probe, const char *reason);
 void	nmap_debug_hexdump(const char *title, const void *data, size_t len);
 
-#  define DEBUG_DEV_CONFIG(config) nmap_debug_dev_config(config)
-#  define DEBUG_SOCKET(config) nmap_debug_socket(config)
-#  define DEBUG_PCAP(config) nmap_debug_pcap(config)
-#  define DEBUG_RUNTIME(config) nmap_debug_runtime(config)
+#  define DEBUG_DEV_CONFIG(ctx) nmap_debug_dev_config(ctx)
+#  define DEBUG_SOCKET(ctx) nmap_debug_socket(ctx)
+#  define DEBUG_PCAP(ctx) nmap_debug_pcap(ctx)
+#  define DEBUG_RUNTIME(ctx) nmap_debug_runtime(ctx)
 #  define DEBUG_PROBE_SEND(probe) nmap_debug_probe_send(probe)
 #  define DEBUG_PROBE_TIMEOUT(probe) nmap_debug_probe_timeout(probe)
 #  define DEBUG_PROBE_RESULT(probe, reason) \
@@ -91,10 +91,10 @@ void	nmap_debug_hexdump(const char *title, const void *data, size_t len);
 
 # else
 
-#  define DEBUG_DEV_CONFIG(config) ((void)(config))
-#  define DEBUG_SOCKET(config) ((void)(config))
-#  define DEBUG_PCAP(config) ((void)(config))
-#  define DEBUG_RUNTIME(config) ((void)(config))
+#  define DEBUG_DEV_CONFIG(ctx) ((void)(ctx))
+#  define DEBUG_SOCKET(ctx) ((void)(ctx))
+#  define DEBUG_PCAP(ctx) ((void)(ctx))
+#  define DEBUG_RUNTIME(ctx) ((void)(ctx))
 #  define DEBUG_PROBE_SEND(probe) ((void)(probe))
 #  define DEBUG_PROBE_TIMEOUT(probe) ((void)(probe))
 #  define DEBUG_PROBE_RESULT(probe, reason) ((void)(probe), (void)(reason))
