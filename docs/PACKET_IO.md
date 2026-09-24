@@ -1,0 +1,363 @@
+# Packet I/O
+
+This document describes how `ft_nmap` constructs outbound probes, captures inbound traffic with libpcap, normalizes wire data into `t_nmap_reply`, and validates replies against logical probes.
+
+Relevant modules:
+
+- `srcs/net/route.c`
+- `srcs/net/socket.c`
+- `srcs/net/pcap.c`
+- `srcs/packet/wire.h`
+- `srcs/packet/ipv4.c`
+- `srcs/packet/ipv6.c`
+- `srcs/packet/tcp.c`
+- `srcs/packet/udp.c`
+- `srcs/packet/link_offset.c`
+- `srcs/packet/parse.c`
+- `srcs/runtime/match.c`
+- `srcs/runtime/recv.c`
+
+## 1. Send path
+
+`nmap_send_probe()` selects the transport builder from the logical scan type:
+
+```text
+SYN / NULL / FIN / XMAS / ACK -> TCP builder
+UDP                            -> UDP builder
+```
+
+The transport builder then selects IPv4 or IPv6 from the resolved destination family.
+
+```text
+logical t_probe
+    -> TCP or UDP header
+    -> IPv4 or IPv6 header
+    -> complete raw IP packet
+    -> sendto(raw socket)
+```
+
+The transmit buffer starts at the network layer. It contains **no Ethernet or other link-layer header**.
+
+## 2. Wire structures
+
+`srcs/packet/wire.h` defines packed fixed-size structures for the headers written by the scanner:
+
+```text
+IPv4 base header : 20 bytes
+IPv6 base header : 40 bytes
+TCP base header  : 20 bytes
+UDP header       :  8 bytes
+```
+
+Runtime/business structures do not depend on these packed wire representations.
+
+## 3. IPv4 probe construction
+
+### Layout
+
+```text
+0x00  +----------------------------------+
+      | IPv4 header             20 bytes |
+0x14  +----------------------------------+
+      | TCP 20 bytes OR UDP 8 bytes      |
+      +----------------------------------+
+```
+
+### Fields written by `nmap_build_ipv4_header()`
+
+| Field | Value |
+|---|---|
+| Version / IHL | `0x45` |
+| Total Length | IPv4 header + transport length |
+| Identification | probe source port |
+| TTL | configured `--ttl` value |
+| Protocol | TCP or UDP |
+| Source | kernel-selected route source address |
+| Destination | resolved target address |
+| Header checksum | computed over the 20-byte IPv4 header |
+
+TCP and UDP checksums include the IPv4 pseudo-header.
+
+## 4. IPv6 probe construction
+
+### Layout
+
+```text
+0x00  +----------------------------------+
+      | IPv6 base header        40 bytes |
+0x28  +----------------------------------+
+      | TCP 20 bytes OR UDP 8 bytes      |
+      +----------------------------------+
+```
+
+### Fields written by `nmap_build_ipv6_header()`
+
+| Field | Value |
+|---|---|
+| Version | 6 |
+| Payload Length | transport length |
+| Next Header | TCP or UDP |
+| Hop Limit | configured `--ttl` value |
+| Source | kernel-selected route source address |
+| Destination | resolved target address |
+
+IPv6 has no checksum in its base header. TCP and UDP checksums include the IPv6 pseudo-header containing the 128-bit source and destination addresses, upper-layer length and next-header value.
+
+## 5. TCP probes
+
+The TCP builder writes:
+
+| Field | Source |
+|---|---|
+| source port | `probe->src_port` |
+| destination port | scanned port |
+| sequence number | `probe->seq` |
+| acknowledgement | zero for transmitted probes |
+| data offset | 5 (20-byte header, no options) |
+| flags | derived from scan type |
+| window | 1024 |
+| checksum | IPv4/IPv6 pseudo-header + TCP header |
+| urgent pointer | zero |
+
+Flag mapping:
+
+```text
+SYN  -> SYN
+ACK  -> ACK
+NULL -> 0
+FIN  -> FIN
+XMAS -> FIN | PSH | URG
+```
+
+## 6. UDP probes
+
+The generic UDP builder writes an empty datagram:
+
+```text
+source port      = probe source port
+destination port = scanned port
+length           = 8
+payload           = none
+```
+
+The UDP checksum is computed for both IPv4 and IPv6. If the computed IPv4 UDP checksum is zero, the wire value is encoded as `0xffff`.
+
+## 7. Capture with libpcap
+
+Each `t_nmap_iface_ctx` owns one capture handle shared by every target routed through that interface.
+
+Capture setup uses:
+
+```text
+pcap_create(interface)
+snaplen      = 65535
+promiscuous  = false
+read timeout = 1 ms
+BPF filter   = "ip or ip6"
+non-blocking = true
+```
+
+The handle's selectable file descriptor is obtained with `pcap_get_selectable_fd()` and integrated into the engine's `poll()`-driven wait path.
+
+### Capture buffering boundary
+
+`ft_nmap` does not implement or directly manage a packet ring buffer. Buffering, capture transport and any platform-specific zero-copy/ring mechanism are owned by **libpcap and its operating-system backend**.
+
+The scanner's contract begins at the libpcap API:
+
+- wait on the selectable capture descriptor;
+- consume packets with `pcap_next_ex()`;
+- process only the captured bytes and datalink type exposed by libpcap.
+
+This keeps the scanner independent from a specific libpcap backend implementation.
+
+### Why the BPF filter is broad
+
+The capture filter intentionally stops at `ip or ip6` instead of filtering only packets whose outer source is a target.
+
+An ICMP error relevant to a probe may be generated by an intermediate router or firewall. Filtering by the outer sender could discard valid evidence before userspace has a chance to inspect the embedded original packet.
+
+Exact target/probe validation is therefore performed after capture.
+
+## 8. Link-layer parsing
+
+`nmap_get_network_offset()` converts the libpcap datalink format into an IPv4/IPv6 offset.
+
+Supported framing includes:
+
+- Ethernet (`DLT_EN10MB`), including VLAN and QinQ tags;
+- Linux cooked capture v1 (`DLT_LINUX_SLL`);
+- Linux cooked capture v2 (`DLT_LINUX_SLL2`) when available;
+- raw IP (`DLT_RAW`);
+- loopback `DLT_NULL` / `DLT_LOOP` when available;
+- 802.11 data frames;
+- Radiotap + 802.11 data frames.
+
+The link layer is deliberately isolated from IP parsing. `parse.c` receives an IP offset and address family rather than duplicating framing knowledge.
+
+## 9. IP parsing
+
+### IPv4
+
+The parser:
+
+- validates the version and IHL;
+- respects variable IPv4 header length;
+- bounds parsing by the IPv4 Total Length field and captured length;
+- extracts source/destination address and TTL;
+- dispatches TCP, UDP or ICMPv4;
+- ignores non-initial IPv4 fragments because they do not contain the transport header required for exact matching.
+
+### IPv6
+
+The parser validates the fixed base header, records source/destination addresses and Hop Limit, then walks supported Next Header chains.
+
+Supported extension headers:
+
+- Hop-by-Hop Options;
+- Routing;
+- Destination Options;
+- Fragment header for the first fragment only;
+- Authentication Header (AH).
+
+The parser stops when it reaches TCP, UDP or ICMPv6. It does not perform IP fragment reassembly.
+
+## 10. Direct TCP reply format
+
+A captured TCP reply is logically:
+
+```text
+[link-layer header][IPv4/IPv6][TCP]
+```
+
+The TCP parser reads only the fields required by the scanner:
+
+```text
+TCP +0   : source port       16 bits
+TCP +2   : destination port  16 bits
+TCP +4   : sequence number   32 bits
+TCP +8   : acknowledgement   32 bits
+TCP +13  : flags              8 bits
+```
+
+The flags byte uses the normal bit assignments:
+
+```text
+FIN 0x01
+SYN 0x02
+RST 0x04
+PSH 0x08
+ACK 0x10
+URG 0x20
+```
+
+### Example: receiving a RST
+
+The important point is not merely that a packet "contains RST". The scanner first extracts the complete identity needed to decide whether this TCP segment belongs to one of its probes.
+
+```text
+Target                                           Scanner
+192.0.2.10:80  ---------------- RST ---------->  192.0.2.20:40000
+
+TCP header seen by parser:
+
+source port       = 80
+destination port  = 40000
+sequence           = parsed from TCP +4
+acknowledgement    = parsed from TCP +8
+flags              = byte at TCP +13
+flags & 0x04       = true  -> RST present
+```
+
+A RST is then interpreted **in the context of the original scan type**:
+
+```text
+original SYN probe        + RST -> closed
+original ACK probe        + RST -> unfiltered
+original NULL/FIN/XMAS    + RST -> closed
+```
+
+The same wire-level TCP flag therefore has different scan semantics. Packet parsing and scan classification are intentionally separate layers.
+
+## 11. Direct reply matching
+
+Source-port lookup provides an O(1) candidate:
+
+```text
+candidate = runtime->probe_by_src_port[reply destination port]
+```
+
+That lookup is only an index. A direct TCP/UDP reply is accepted only if all required fields also match:
+
+```text
+reply source address      == target address
+reply destination address == route-selected local source address
+reply source port         == scanned destination port
+reply destination port    == probe source port
+reply transport           == probe transport family
+probe state               == matchable state
+```
+
+A packet is never accepted from source-port identity alone.
+
+## 12. ICMP error format
+
+ICMP errors contain enough of the packet that triggered the error to identify the original flow.
+
+### IPv4
+
+```text
+[link layer]
+[outer IPv4: router/firewall/target -> scanner]
+[ICMPv4 header: 8 bytes]
+[quoted original IPv4 header]
+[quoted original TCP/UDP beginning]
+```
+
+### IPv6
+
+```text
+[link layer]
+[outer IPv6]
+[ICMPv6 header: 8 bytes]
+[quoted original IPv6 header + extension chain]
+[quoted original TCP/UDP beginning]
+```
+
+The parser records:
+
+- outer source/destination addresses;
+- ICMP type/code;
+- original protocol;
+- original source/destination addresses;
+- original source/destination ports;
+- original TCP sequence number when enough bytes were quoted.
+
+### ICMP matching
+
+The outer ICMP source is deliberately **not required to equal the target**. Instead the quoted original packet must match the probe:
+
+```text
+original source address      == route-selected local source
+original destination address == target
+original source port         == probe source port
+original destination port    == scanned port
+original protocol            == TCP or UDP for that probe
+original TCP sequence        == probe sequence, when available
+```
+
+This is what allows a filtering router to provide valid evidence without being mistaken for the scanned host.
+
+## 13. Normalized receive representation
+
+After wire parsing, the rest of the runtime does not manipulate raw frame offsets. `t_nmap_reply` normalizes the relevant information into one protocol-independent structure containing:
+
+- reply type (`TCP`, `UDP`, `ICMP4`, `ICMP6`);
+- outer source/destination addresses;
+- ports;
+- TCP flags/sequence/acknowledgement;
+- ICMP type/code;
+- quoted original packet identity;
+- outer TTL/Hop Limit.
+
+This boundary is important: packet layout knowledge ends in the packet module; scan semantics begin in the runtime module.
