@@ -1,0 +1,15 @@
+[test ipv4-fleet]
+// Read all 20 IPv4 lab targets from the repository-provided target file.
+// Only two ports are used so routing/multi-target behavior stays easy to inspect.
+ft: sudo ./ft_nmap --file lab/targets-v4.txt --ports 30-31 --scan SYN --speedup 32 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 -sS -p 30-31 --reason -iL lab/targets-v4.txt
+
+[test ipv6-file]
+// Read the two official IPv6 targets from file.
+ft: sudo ./ft_nmap --file lab/targets-v6.txt --ports 30-33 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 -sS -p 30-33 --reason -iL lab/targets-v6.txt
+
+[test mixed-families]
+// Mixed file combines IPv4, IPv6, network A and network B.
+// This is primarily a ft_nmap routing/interface test; a single Nmap invocation is not an equivalent mixed-family reference.
+ft: sudo ./ft_nmap --file lab/targets-mixed.txt --ports 30-31 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason

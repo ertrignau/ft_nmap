@@ -1,0 +1,13 @@
+[test short-drop]
+// A true DROP forces the configured timeout path.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32 --scan SYN --speedup 1 --timeout 150 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32 --max-retries 0 --initial-rtt-timeout 150ms --min-rtt-timeout 150ms --max-rtt-timeout 150ms --reason 172.28.0.10
+
+[test mixed-protocol]
+// One explicit timeout value applies to both TCP and UDP when requested.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32-33 --scan SYN,UDP --speedup 4 --timeout 425 --retries 0 --no-dns --reason
+
+[test longer-timeout]
+// Longer fixed timeout on silent TCP ports.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32,39 --scan SYN --speedup 2 --timeout 900 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32,39 --max-retries 0 --initial-rtt-timeout 900ms --min-rtt-timeout 900ms --max-rtt-timeout 900ms --reason 172.28.0.10

@@ -1,0 +1,12 @@
+[test direct-evidence]
+// OS guess is based on observed IPv4 TTL from a direct target reply.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns --os --reason
+nmap: sudo nmap -Pn -n -O -sS -p 30-31 --reason 172.28.0.10
+
+[test ipv6-evidence]
+// IPv6 OS hint uses observed Hop Limit evidence.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 30-31 --scan SYN --speedup 4 --timeout 500 --retries 0 --no-dns --os --reason
+
+[test no-direct-reply]
+// A scan containing only a DROP has no direct target reply, so the lightweight OS guess must report unavailable.
+ft: sudo ./ft_nmap --ip 172.28.0.14 --ports 32 --scan SYN --speedup 2 --timeout 250 --retries 0 --no-dns --os --reason

@@ -1,0 +1,22 @@
+[test udp-worker-burst]
+// Target 28 rate-limits kernel ICMP replies on UDP 40-79 to 5/s burst 5.
+// Worker mode deliberately sends without adaptive UDP pacing, so some CLOSED ports can appear OPEN|FILTERED.
+ft: sudo ./ft_nmap --ip 172.29.0.28 --ports 40-79 --scan UDP --speedup 64 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 15s -sU -p 40-79 --reason 172.29.0.28
+
+[test udp-adaptive]
+// Same deterministic ICMP rate limit with the adaptive core and retries enabled.
+// This exercises target-local UDP pacing/window backoff and retry evidence.
+ft: sudo ./ft_nmap --ip 172.29.0.28 --ports 40-79 --scan UDP --speedup 0 --timeout 700 --retries 2 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 2 --host-timeout 25s -sU -p 40-79 --reason 172.29.0.28
+
+[test tcp-rst-worker-burst]
+// Target 29 rate-limits accepted TCP SYN probes on 40-79 to 5/s burst 5.
+// Ports are otherwise CLOSED; dropped SYNs therefore look FILTERED.
+ft: sudo ./ft_nmap --ip 172.29.0.29 --ports 40-79 --scan SYN --speedup 64 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 15s -sS -p 40-79 --reason 172.29.0.29
+
+[test tcp-rst-retries]
+// Repeat the RST-rate-limit stress case with the adaptive core and retransmissions.
+ft: sudo ./ft_nmap --ip 172.29.0.29 --ports 40-79 --scan SYN --speedup 0 --timeout 1000 --retries 2 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 2 --host-timeout 25s -sS -p 40-79 --reason 172.29.0.29

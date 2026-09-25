@@ -1,0 +1,19 @@
+[test single]
+// Single-port selection.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30 --reason 172.28.0.10
+
+[test list-range-dedup]
+// Mixed list/range syntax with duplicates. The effective selection must be unique.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30,34,38,31-33,30,34 --scan SYN --speedup 8 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-34,38 --reason 172.28.0.10
+
+[test upper-port]
+// High valid port outside the default 1-1024 set. The lab leaves it CLOSED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 65535 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 65535 --reason 172.28.0.10
+
+[test default-1024]
+// Omit --ports: ft_nmap must scan its default 1-1024 set.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --scan SYN --speedup 128 --timeout 400 --retries 0 --no-dns --short --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-1024 --reason 172.28.0.10

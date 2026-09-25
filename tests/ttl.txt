@@ -1,0 +1,13 @@
+[test ipv4-ttl]
+// Custom IPv4 TTL. Local Docker routing should still reach the target.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --ttl 42 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-31 --ttl 42 --reason 172.28.0.10
+
+[test ipv6-hop-limit]
+// The same option becomes IPv6 Hop Limit.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 30-31 --scan SYN --speedup 4 --timeout 500 --retries 0 --ttl 42 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-31 --ttl 42 --reason fd42:28::10
+
+[test zero]
+// Boundary value 0 is accepted by the CLI. On a directly connected Docker network it exercises the packet field without relying on a routed destination.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30 --scan SYN --speedup 1 --timeout 300 --retries 0 --ttl 0 --no-dns --reason

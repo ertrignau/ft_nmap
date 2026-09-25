@@ -1,0 +1,14 @@
+[test baseline]
+// ACK scan: RST means UNFILTERED, silence/reject means FILTERED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan ACK --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sA -p 30-39 --reason 172.28.0.10
+
+[test mixed-range]
+// Wider ACK scan across open listeners, native closed ports, drops and rejects.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan ACK --speedup 64 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sA -p 30-79 --reason 172.28.0.10
+
+[test reject-heavy]
+// Explicit firewall REJECT should remain FILTERED in ACK semantics.
+ft: sudo ./ft_nmap --ip 172.29.0.26 --ports 36,40-55 --scan ACK --speedup 32 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 -sA -p 36,40-55 --reason 172.29.0.26

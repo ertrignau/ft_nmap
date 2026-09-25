@@ -1,0 +1,19 @@
+[test syn-baseline]
+// IPv6 SYN scan on the official target. Includes OPEN, CLOSED, DROP and REJECT.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 30-39 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason fd42:28::10
+
+[test udp-baseline]
+// IPv6 UDP scan on the official target.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 30-39 --scan UDP --speedup 16 --timeout 800 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 30-39 --reason fd42:28::10
+
+[test representative-tcp]
+// IPv6-specific representative ports: 80 open, 81 drop, 82 reject, 443 open, 444 drop, 445 reject.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 80-82,443-445 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 80-82,443-445 --reason fd42:28::10
+
+[test representative-udp]
+// IPv6-specific representative UDP ports: 53/123 open, 54/124 drop, 55/125 reject.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 53-55,123-125 --scan UDP --speedup 16 --timeout 800 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 53-55,123-125 --reason fd42:28::10

@@ -1,156 +1,124 @@
-// ============================================================================
-// Parsing validation
-//
-// Un test = une commande.
-// Le resultat attendu est explicite et verifie automatiquement.
-// ============================================================================
-
-
-[test ttl-min]
-// Valeur minimale acceptee pour --ttl.
+[test help]
+// --help must work without a target.
 expect: success
-ft: ./ft_nmap --help --ttl 0 >/dev/null
+ft: ./ft_nmap --help
 
-
-[test ttl-max]
-// Valeur maximale acceptee pour --ttl.
-expect: success
-ft: ./ft_nmap --help --ttl 255 >/dev/null
-
-
-[test ttl-negative]
-// Les entiers signes ne font pas partie de la grammaire.
+[test missing-target]
+// Exactly one target source is required.
 expect: failure
-ft: ./ft_nmap --help --ttl -1 >/dev/null
+ft: ./ft_nmap --ports 30 --scan SYN
 
-
-[test ttl-too-high]
-// 256 depasse la valeur maximale d'un TTL / Hop Limit.
+[test ip-and-file]
+// --ip and --file are mutually exclusive.
 expect: failure
-ft: ./ft_nmap --help --ttl 256 >/dev/null
+ft: ./ft_nmap --ip 172.28.0.10 --file lab/targets-v4.txt --ports 30 --scan SYN
 
-
-[test ttl-plus-sign]
-// Le parseur accepte uniquement des chiffres decimaux ASCII.
+[test unknown-flag]
+// Unknown options must be rejected.
 expect: failure
-ft: ./ft_nmap --help --ttl +1 >/dev/null
+ft: ./ft_nmap --ip 172.28.0.10 --wat
 
+[test missing-ip-value]
+// Missing --ip argument.
+expect: failure
+ft: ./ft_nmap --ip
 
-[test speedup-zero]
-// Zero selectionne le moteur adaptatif sans workers supplementaires.
-expect: success
-ft: ./ft_nmap --help --speedup 0 >/dev/null
+[test duplicate-ip]
+// Duplicate --ip.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ip 172.28.0.11
 
+[test missing-file-value]
+// Missing --file argument.
+expect: failure
+ft: ./ft_nmap --file
 
-[test speedup-max]
-// 250 est la limite maximale imposee par le sujet.
-expect: success
-ft: ./ft_nmap --help --speedup 250 >/dev/null
+[test empty-target-file]
+// A target file containing no valid targets must fail.
+expect: failure
+ft: ./ft_nmap --file /dev/null --ports 30 --scan SYN
 
+[test missing-ports-value]
+// Missing --ports argument.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports
+
+[test port-zero]
+// Port 0 is invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 0 --scan SYN
+
+[test port-overflow]
+// Port 65536 is invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 65536 --scan SYN
+
+[test reversed-port-range]
+// Reversed ranges are invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 40-30 --scan SYN
+
+[test empty-port-item]
+// Empty comma-separated port items are invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30,,31 --scan SYN
+
+[test too-many-ports]
+// The project limit is 1024 selected ports.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 1-1025 --scan SYN
+
+[test missing-scan-value]
+// Missing --scan argument.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30 --scan
+
+[test invalid-scan]
+// Unknown scan names are invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30 --scan CONNECT
+
+[test lowercase-scan]
+// Scan names are intentionally parsed as the documented uppercase tokens.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30 --scan syn
+
+[test empty-scan-item]
+// Malformed scan lists are invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30 --scan SYN,,UDP
+
+[test speedup-negative]
+// Negative speedup is invalid.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --speedup -1
 
 [test speedup-too-high]
-// 251 doit etre refuse.
+// Maximum speedup is 250.
 expect: failure
-ft: ./ft_nmap --help --speedup 251 >/dev/null
+ft: ./ft_nmap --ip 172.28.0.10 --speedup 251
 
+[test timeout-zero]
+// Timeout must be positive.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --timeout 0
 
-[test port-min]
-// Premier port TCP/UDP valide.
+[test timeout-text]
+// Timeout must be numeric.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --timeout abc
+
+[test retries-too-high]
+// Maximum retries is 10.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --retries 11
+
+[test ttl-too-high]
+// TTL/Hop Limit maximum is 255.
+expect: failure
+ft: ./ft_nmap --ip 172.28.0.10 --ttl 256
+
+[test valid-boundaries]
+// Valid maximum CLI boundaries are accepted.
 expect: success
-ft: ./ft_nmap --help --ports 1 >/dev/null
-
-
-[test port-max]
-// Dernier numero de port valide.
-expect: success
-ft: ./ft_nmap --help --ports 65535 >/dev/null
-
-
-[test ports-1024]
-// Le sujet autorise au maximum 1024 ports selectionnes.
-expect: success
-ft: ./ft_nmap --help --ports 1-1024 >/dev/null
-
-
-[test ports-1025]
-// Une selection de 1025 ports doit etre refusee.
-expect: failure
-ft: ./ft_nmap --help --ports 1-1025 >/dev/null
-
-
-[test ports-empty-field]
-// strtok ne doit pas permettre de masquer un element vide.
-expect: failure
-ft: ./ft_nmap --help --ports 1,,2 >/dev/null
-
-
-[test ports-leading-comma]
-// Une liste ne peut pas commencer par une virgule.
-expect: failure
-ft: ./ft_nmap --help --ports ,1 >/dev/null
-
-
-[test ports-trailing-comma]
-// Une liste ne peut pas finir par une virgule.
-expect: failure
-ft: ./ft_nmap --help --ports 1, >/dev/null
-
-
-[test ports-reversed-range]
-// Le debut d'une plage doit etre inferieur ou egal a sa fin.
-expect: failure
-ft: ./ft_nmap --help --ports 100-1 >/dev/null
-
-
-[test ports-invalid-range]
-// Une plage ne peut contenir qu'un seul separateur '-'.
-expect: failure
-ft: ./ft_nmap --help --ports 1-2-3 >/dev/null
-
-
-[test scans-all]
-// Les six techniques de scan sont acceptees.
-expect: success
-ft: ./ft_nmap --help --scan SYN,NULL,FIN,XMAS,ACK,UDP >/dev/null
-
-
-[test scans-empty-field]
-// Une liste de scans ne peut contenir un element vide.
-expect: failure
-ft: ./ft_nmap --help --scan SYN,,UDP >/dev/null
-
-
-[test scans-unknown]
-// TCP n'est pas le nom d'une technique de scan acceptee.
-expect: failure
-ft: ./ft_nmap --help --scan TCP >/dev/null
-
-
-[test duplicate-ttl]
-// Une option a valeur ne doit pas etre definie deux fois.
-expect: failure
-ft: ./ft_nmap --help --ttl 64 --ttl 32 >/dev/null
-
-
-[test duplicate-ports]
-// Deux definitions de --ports sont ambiguës et doivent etre refusees.
-expect: failure
-ft: ./ft_nmap --help --ports 22 --ports 80 >/dev/null
-
-
-[test duplicate-scan]
-// Deux definitions de --scan doivent etre refusees.
-expect: failure
-ft: ./ft_nmap --help --scan SYN --scan UDP >/dev/null
-
-
-[test missing-ttl]
-// --ttl exige une valeur.
-expect: failure
-ft: ./ft_nmap --ttl >/dev/null
-
-
-[test ip-file-exclusive]
-// Une cible directe et un fichier de cibles sont mutuellement exclusifs.
-expect: failure
-ft: ./ft_nmap --ip 127.0.0.1 --file /tmp/whatever >/dev/null
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 65535 --scan SYN --speedup 250 --timeout 200 --retries 10 --ttl 255 --no-dns

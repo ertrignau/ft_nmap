@@ -29,6 +29,16 @@ LDLIBS := -lpcap -pthread
 OBJS_DIR := objs
 DEBUG_OBJS_DIR := objs_debug
 PROFILE_OBJS_DIR := objs_profile
+LAB_DIR := lab
+
+# **************************************************************************** #
+#                                  NETWORK                                     #
+# **************************************************************************** #
+
+NAT_IFACE ?= enp0s3
+NAT_GW ?= 10.0.2.2
+BRIDGE_IFACE ?= enp0s8
+ROUTE_TEST_IP ?= 1.1.1.1
 
 # **************************************************************************** #
 #                                  SOURCES                                     #
@@ -151,28 +161,78 @@ test: all
 	@python3 tools/test_runner.py
 
 # **************************************************************************** #
+#                                  NETWORK                                     #
+# **************************************************************************** #
+
+net-check:
+	@printf "\nInterfaces:\n"
+	@ip -br addr
+	@printf "\nRouting table:\n"
+	@ip route
+	@printf "\nInternet route ($(ROUTE_TEST_IP)):\n"
+	@ip route get $(ROUTE_TEST_IP) || true
+	@printf "\nNAT / SSH route ($(NAT_GW)):\n"
+	@ip route get $(NAT_GW) || true
+
+net-bridge:
+	@printf "Activating bridge interface: $(BRIDGE_IFACE)\n"
+	@sudo ip link set $(BRIDGE_IFACE) up
+	@sudo dhclient -r $(BRIDGE_IFACE) >/dev/null 2>&1 || true
+	@sudo dhclient -v $(BRIDGE_IFACE)
+	@GW=$$(ip route show default dev $(BRIDGE_IFACE) \
+		| awk 'NR == 1 {print $$3}'); \
+	if [ -z "$$GW" ]; then \
+		printf "Error: no gateway found for $(BRIDGE_IFACE)\n" >&2; \
+		exit 1; \
+	fi; \
+	printf "Bridge gateway: %s\n" "$$GW"; \
+	sudo ip route flush default dev $(NAT_IFACE); \
+	sudo ip route flush default dev $(BRIDGE_IFACE); \
+	sudo ip route add default via "$$GW" dev $(BRIDGE_IFACE)
+	@printf "\nInternet route:\n"
+	@ip route get $(ROUTE_TEST_IP)
+	@printf "\nSSH route:\n"
+	@ip route get $(NAT_GW)
+
+net-nat:
+	@printf "Restoring NAT as default route\n"
+	@sudo ip route flush default dev $(BRIDGE_IFACE)
+	@sudo ip route flush default dev $(NAT_IFACE)
+	@sudo ip route add default via $(NAT_GW) dev $(NAT_IFACE)
+	@printf "\nInternet route:\n"
+	@ip route get $(ROUTE_TEST_IP)
+	@printf "\nSSH route:\n"
+	@ip route get $(NAT_GW)
+
+# **************************************************************************** #
 #                                  DOCKER LAB                                  #
 # **************************************************************************** #
 
-LAB_DIR := lab
-
 lab: lab-up
+
 lab-up:
 	$(MAKE) -C $(LAB_DIR) up
-lab-down:
-	$(MAKE) -C $(LAB_DIR) down
-lab-re:
-	$(MAKE) -C $(LAB_DIR) re
-lab-clean:
-	$(MAKE) -C $(LAB_DIR) clean
-lab-logs:
-	$(MAKE) -C $(LAB_DIR) logs
-lab-ps:
-	$(MAKE) -C $(LAB_DIR) ps
+
 lab-full:
 	$(MAKE) -C $(LAB_DIR) full
+
 lab-ipv6:
 	$(MAKE) -C $(LAB_DIR) ipv6
+
+lab-down:
+	$(MAKE) -C $(LAB_DIR) down
+
+lab-re:
+	$(MAKE) -C $(LAB_DIR) re
+
+lab-clean:
+	$(MAKE) -C $(LAB_DIR) clean
+
+lab-ps:
+	$(MAKE) -C $(LAB_DIR) ps
+
+lab-logs:
+	$(MAKE) -C $(LAB_DIR) logs
 
 # **************************************************************************** #
 #                                DEPENDENCIES                                  #
@@ -182,5 +242,7 @@ lab-ipv6:
 -include $(DEBUG_DEPS)
 -include $(PROFILE_DEPS)
 
-.PHONY: all debug profile clean fclean re run debug-run profile-run test \
-	lab lab-up lab-down lab-re lab-clean lab-logs lab-ps lab-full lab-ipv6
+.PHONY: all debug profile clean fclean re \
+	run debug-run profile-run test \
+	net-check net-bridge net-nat \
+	lab lab-up lab-full lab-ipv6 lab-down lab-re lab-clean lab-ps lab-logs

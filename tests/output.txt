@@ -1,0 +1,16 @@
+[test reason-columns]
+// --reason adds per-scan evidence columns.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN,UDP --speedup 16 --timeout 600 --retries 0 --no-dns --reason
+
+[test short-mode]
+// --short hides repetitive/inconclusive rows and prints a Not shown summary.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan SYN --speedup 64 --timeout 400 --retries 0 --no-dns --short
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-200 --open 172.28.0.10
+
+[test combined-verdict]
+// Combined TCP/UDP results exercise the final verdict column.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN,UDP --speedup 16 --timeout 600 --retries 0 --no-dns
+
+[test service-column]
+// Well-known ports exercise service-name formatting while preserving scan states.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 53,80,110,123,143,443 --scan SYN,UDP --speedup 16 --timeout 600 --retries 0 --no-dns

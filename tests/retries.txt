@@ -1,0 +1,13 @@
+[test zero]
+// Explicitly disable retransmission.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32 --scan SYN --speedup 4 --timeout 250 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32 --max-retries 0 --reason 172.28.0.10
+
+[test two]
+// Allow two retransmissions on a silent port. The final state remains filtered.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32 --scan SYN --speedup 4 --timeout 250 --retries 2 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32 --max-retries 2 --reason 172.28.0.10
+
+[test speedup-default-zero]
+// When --speedup N is explicitly selected and --retries is omitted, ft_nmap defaults retries to zero.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 8 --timeout 300 --no-dns

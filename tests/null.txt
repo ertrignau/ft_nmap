@@ -1,0 +1,10 @@
+[test baseline]
+// NULL scan: RST means CLOSED, silence means OPEN|FILTERED.
+// The baseline also includes an explicit firewall reject.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan NULL --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sN -p 30-39 --reason 172.28.0.10
+
+[test mixed-wide]
+// Wider NULL scan across the full-default profile.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan NULL --speedup 64 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sN -p 30-79 --reason 172.28.0.10

@@ -1,0 +1,170 @@
+[test help]
+// Public CLI overview.
+ft: ./ft_nmap --help
+
+[test ip-basic]
+// Basic --ip target with a tiny deterministic SYN scan.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-32 --scan SYN --speedup 8 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-32 --reason 172.28.0.10
+
+[test file-ipv4]
+// --file with the complete 20-target IPv4 fleet.
+ft: sudo ./ft_nmap --file lab/targets-v4.txt --ports 30 --scan SYN --speedup 32 --timeout 500 --retries 0 --no-dns
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 -sS -p 30 -iL lab/targets-v4.txt
+
+[test file-mixed]
+// --file with IPv4/IPv6 and both Docker networks.
+ft: sudo ./ft_nmap --file lab/targets-mixed.txt --ports 30-31 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason
+
+[test ports-mixed]
+// --ports accepts list + range and deduplicates repeated ports.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30,34,38,31-33,30 --scan SYN --speedup 8 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-34,38 --reason 172.28.0.10
+
+[test ports-default]
+// Omitting --ports selects 1-1024; this is one of the deliberately long correction tests.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --scan SYN --speedup 128 --timeout 400 --retries 0 --no-dns --short
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-1024 172.28.0.10
+
+[test syn-baseline]
+// SYN semantics over OPEN/CLOSED/DROP/REJECT.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason 172.28.0.10
+
+[test syn-wide]
+// Wide SYN scan across the full-default matrix.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-1024 --scan SYN --speedup 128 --timeout 400 --retries 0 --no-dns --short --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-1024 --reason 172.28.0.10
+
+[test ack]
+// ACK semantics: RST -> UNFILTERED; silence/reject -> FILTERED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan ACK --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sA -p 30-39 --reason 172.28.0.10
+
+[test null]
+// NULL semantics.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan NULL --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sN -p 30-39 --reason 172.28.0.10
+
+[test fin]
+// FIN semantics.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan FIN --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sF -p 30-39 --reason 172.28.0.10
+
+[test xmas]
+// XMAS semantics.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan XMAS --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sX -p 30-39 --reason 172.28.0.10
+
+[test udp-baseline]
+// UDP direct reply / port-unreachable / silence / reject semantics.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan UDP --speedup 16 --timeout 700 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 30-39 --reason 172.28.0.10
+
+[test udp-wide]
+// Wider UDP workload with mixed states.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan UDP --speedup 64 --timeout 700 --retries 0 --no-dns --short --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 1-200 --reason 172.28.0.10
+
+[test ipv6-syn]
+// IPv6 SYN on the official target.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 30-39 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason fd42:28::10
+
+[test ipv6-udp]
+// IPv6 UDP representative ports.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 53-55,123-125 --scan UDP --speedup 16 --timeout 800 --retries 0 --no-dns --reason
+nmap: sudo nmap -6 -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 53-55,123-125 --reason fd42:28::10
+
+[test speedup-adaptive]
+// --speedup 0 selects the adaptive core.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 0 --timeout 500 --retries 1 --no-dns --reason
+
+[test speedup-workers]
+// Explicit worker mode with a larger pool.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan SYN --speedup 128 --timeout 500 --retries 0 --no-dns --short
+
+[test timeout]
+// Short timeout is exercised on a true DROP.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32 --scan SYN --speedup 1 --timeout 150 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32 --max-retries 0 --initial-rtt-timeout 150ms --min-rtt-timeout 150ms --max-rtt-timeout 150ms --reason 172.28.0.10
+
+[test retries]
+// Two retries on a true DROP; state stays FILTERED while timing/retry policy is exercised.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 32 --scan SYN --speedup 4 --timeout 250 --retries 2 --no-dns --reason
+nmap: sudo nmap -Pn -n -sS -p 32 --max-retries 2 --reason 172.28.0.10
+
+[test ttl]
+// Custom IPv4 TTL.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --ttl 42 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-31 --ttl 42 --reason 172.28.0.10
+
+[test no-dns]
+// --no-dns keeps the report numeric.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-31 172.28.0.10
+
+[test os-direct]
+// --os with a direct reply produces the lightweight TTL/Hop-Limit guess.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns --os --reason
+nmap: sudo nmap -Pn -n -O -sS -p 30-31 --reason 172.28.0.10
+
+[test os-unavailable]
+// --os with only silent evidence must report unavailable.
+ft: sudo ./ft_nmap --ip 172.28.0.14 --ports 32 --scan SYN --speedup 2 --timeout 250 --retries 0 --no-dns --os --reason
+
+[test reason]
+// --reason exposes evidence for both TCP and UDP.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN,UDP --speedup 16 --timeout 600 --retries 0 --no-dns --reason
+
+[test short]
+// --short collapses repetitive rows on a nontrivial range.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan SYN --speedup 64 --timeout 400 --retries 0 --no-dns --short
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-200 --open 172.28.0.10
+
+[test default-scans]
+// Omit --scan: all six implemented scan types must appear.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --speedup 24 --timeout 600 --retries 0 --no-dns --reason
+
+[test reject-ipv4]
+// IPv4 REJECT uses ICMP host-prohibited in this lab; ft_nmap should classify it as FILTERED.
+// Do not require the unrelated admin-prohibit wording here.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 36,37 --scan SYN,UDP --speedup 8 --timeout 500 --retries 0 --no-dns --reason
+
+[test reject-ipv6]
+// IPv6 REJECT uses ICMPv6 administratively-prohibited.
+ft: sudo ./ft_nmap --ip fd42:28::10 --ports 36,37,55,82 --scan SYN,UDP --speedup 12 --timeout 700 --retries 0 --no-dns --reason
+
+[test routing-two-networks]
+// Dynamic routing across both Docker bridges; interface names must come from the host, not from hardcoded values.
+ft: printf "172.28.0.10\n172.29.0.20\n" > /tmp/ft_nmap_correction_routes.txt; sudo ./ft_nmap --file /tmp/ft_nmap_correction_routes.txt --ports 30-31 --scan SYN --speedup 8 --timeout 500 --retries 0 --no-dns --reason; rc=$?; rm -f /tmp/ft_nmap_correction_routes.txt; exit $rc
+
+[test udp-rate-limit]
+// Deterministic UDP/ICMP rate-limit target with adaptive pacing and retries.
+ft: sudo ./ft_nmap --ip 172.29.0.28 --ports 40-79 --scan UDP --speedup 0 --timeout 700 --retries 2 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 2 --host-timeout 25s -sU -p 40-79 --reason 172.29.0.28
+
+[test rst-rate-limit]
+// Deterministic TCP RST rate-limit stress target.
+ft: sudo ./ft_nmap --ip 172.29.0.29 --ports 40-79 --scan SYN --speedup 64 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 15s -sS -p 40-79 --reason 172.29.0.29
+
+[test concurrent-processes]
+// Two simultaneous scanner processes must not cross-match replies.
+ft: rm -f /tmp/ft_nmap_corr_a.out /tmp/ft_nmap_corr_b.out; sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan SYN,ACK --speedup 24 --timeout 500 --retries 0 --no-dns --reason > /tmp/ft_nmap_corr_a.out 2>&1 & p1=$!; sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan SYN,ACK --speedup 24 --timeout 500 --retries 0 --no-dns --reason > /tmp/ft_nmap_corr_b.out 2>&1 & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; printf "\n===== process A =====\n"; cat /tmp/ft_nmap_corr_a.out; printf "\n===== process B =====\n"; cat /tmp/ft_nmap_corr_b.out; rm -f /tmp/ft_nmap_corr_a.out /tmp/ft_nmap_corr_b.out; [ $s1 -eq 0 ] && [ $s2 -eq 0 ]
+
+[test invalid-mutual-targets]
+// Representative parser rejection: --ip and --file together.
+ft: ./ft_nmap --ip 172.28.0.10 --file lab/targets-v4.txt --ports 30 --scan SYN
+
+[test invalid-ports]
+// Representative parser rejection: reversed port range.
+ft: ./ft_nmap --ip 172.28.0.10 --ports 40-30 --scan SYN
+
+[test invalid-scan]
+// Representative parser rejection: unsupported scan name.
+ft: ./ft_nmap --ip 172.28.0.10 --ports 30 --scan CONNECT
+
+[test invalid-too-many-ports]
+// Project maximum is 1024 selected ports.
+ft: ./ft_nmap --ip 172.28.0.10 --ports 1-1025 --scan SYN

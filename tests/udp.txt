@@ -1,0 +1,19 @@
+[test baseline]
+// UDP baseline: direct reply OPEN, target port-unreachable CLOSED, silence OPEN|FILTERED, explicit reject FILTERED.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan UDP --speedup 16 --timeout 700 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 30-39 --reason 172.28.0.10
+
+[test wide-default-profile]
+// Wider UDP scan over several OPEN/CLOSED/DROP/REJECT ranges.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan UDP --speedup 64 --timeout 700 --retries 0 --no-dns --short --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 1-200 --reason 172.28.0.10
+
+[test open-heavy]
+// UDP-open-heavy target. Useful for checking direct UDP replies under concurrency.
+ft: sudo ./ft_nmap --ip 172.28.0.15 --ports 30-79 --scan UDP --speedup 48 --timeout 700 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 30-79 --reason 172.28.0.15
+
+[test filtered-heavy]
+// UDP-filtered-heavy target. Silence and explicit rejects are both present.
+ft: sudo ./ft_nmap --ip 172.28.0.17 --ports 30-79 --scan UDP --speedup 48 --timeout 700 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sU -p 30-79 --reason 172.28.0.17

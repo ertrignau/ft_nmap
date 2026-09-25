@@ -1,0 +1,21 @@
+[test baseline]
+// Common 30-39 matrix: OPEN, CLOSED, DROP and REJECT are all represented.
+// Compare ft_nmap with Nmap SYN classification and reasons.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 16 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason 172.28.0.10
+
+[test wide-default-profile]
+// Wide scan over the rich full-default target.
+// The range intentionally crosses many OPEN/CLOSED/DROP/REJECT zones.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-1024 --scan SYN --speedup 128 --timeout 400 --retries 0 --no-dns --short --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-1024 --reason 172.28.0.10
+
+[test open-heavy]
+// TCP-open-heavy target. Useful to spot missed SYN+ACK replies under load.
+ft: sudo ./ft_nmap --ip 172.28.0.12 --ports 30-79 --scan SYN --speedup 64 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 -sS -p 30-79 --reason 172.28.0.12
+
+[test filtered-heavy]
+// TCP-filtered-heavy target. DROP and explicit REJECT coexist.
+ft: sudo ./ft_nmap --ip 172.28.0.14 --ports 30-79 --scan SYN --speedup 64 --timeout 400 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 -sS -p 30-79 --reason 172.28.0.14

@@ -1,0 +1,19 @@
+[test adaptive-zero]
+// --speedup 0 selects the adaptive core and creates no sender worker pool.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 0 --timeout 500 --retries 1 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason 172.28.0.10
+
+[test one-worker]
+// Smallest explicit worker mode.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 1 --timeout 500 --retries 0 --no-dns --reason
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 --reason 172.28.0.10
+
+[test many-workers]
+// High worker count over a wider range.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 1-200 --scan SYN --speedup 128 --timeout 500 --retries 0 --no-dns --short
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-200 172.28.0.10
+
+[test max-workers]
+// Maximum accepted --speedup value.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --scan SYN --speedup 250 --timeout 500 --retries 0 --no-dns
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-39 172.28.0.10

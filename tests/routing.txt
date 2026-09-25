@@ -1,0 +1,8 @@
+[test two-ipv4-networks]
+// Targets live on the two Docker bridge networks.
+// The scan banner should show the actual interfaces selected by the kernel; interface names are intentionally not hardcoded.
+ft: printf "172.28.0.10\n172.29.0.20\n" > /tmp/ft_nmap_two_networks.txt; sudo ./ft_nmap --file /tmp/ft_nmap_two_networks.txt --ports 30-31 --scan SYN --speedup 8 --timeout 500 --retries 0 --no-dns --reason; rc=$?; rm -f /tmp/ft_nmap_two_networks.txt; exit $rc
+
+[test mixed-address-families]
+// Four-target mixed routing test: IPv4/IPv6 across both lab networks.
+ft: sudo ./ft_nmap --file lab/targets-mixed.txt --ports 30,31,34 --scan SYN --speedup 16 --timeout 500 --retries 0 --no-dns --reason

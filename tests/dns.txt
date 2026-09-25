@@ -1,0 +1,9 @@
+[test disabled]
+// Disable reverse DNS explicitly. Report identity must remain numeric.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0 --no-dns
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 30-31 172.28.0.10
+
+[test enabled-default]
+// Reverse DNS is enabled by default. The Docker lab may have no PTR record, which is valid; this test mainly checks the normal resolution path.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-31 --scan SYN --speedup 4 --timeout 400 --retries 0
+nmap: sudo nmap -Pn -T4 --max-retries 0 -sS -p 30-31 172.28.0.10

@@ -1,0 +1,8 @@
+[test two-processes]
+// Run two independent ft_nmap processes concurrently against the same target.
+// Their randomized source-port/sequence identities must prevent reply cross-matching.
+ft: rm -f /tmp/ft_nmap_concurrent_a.out /tmp/ft_nmap_concurrent_b.out; sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan SYN,ACK --speedup 24 --timeout 500 --retries 0 --no-dns --reason > /tmp/ft_nmap_concurrent_a.out 2>&1 & p1=$!; sudo ./ft_nmap --ip 172.28.0.10 --ports 30-79 --scan SYN,ACK --speedup 24 --timeout 500 --retries 0 --no-dns --reason > /tmp/ft_nmap_concurrent_b.out 2>&1 & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; printf "\n===== process A =====\n"; cat /tmp/ft_nmap_concurrent_a.out; printf "\n===== process B =====\n"; cat /tmp/ft_nmap_concurrent_b.out; rm -f /tmp/ft_nmap_concurrent_a.out /tmp/ft_nmap_concurrent_b.out; [ $s1 -eq 0 ] && [ $s2 -eq 0 ]
+
+[test two-targets-same-interface]
+// Two targets on network A are active in one process; replies must stay attached to the correct target.
+ft: printf "172.28.0.12\n172.28.0.14\n" > /tmp/ft_nmap_concurrent_targets.txt; sudo ./ft_nmap --file /tmp/ft_nmap_concurrent_targets.txt --ports 40-55 --scan SYN --speedup 32 --timeout 500 --retries 0 --no-dns --reason; rc=$?; rm -f /tmp/ft_nmap_concurrent_targets.txt; exit $rc

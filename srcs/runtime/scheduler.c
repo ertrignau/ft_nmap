@@ -105,7 +105,7 @@ static int dispatch_one(t_nmap_engine *engine, t_nmap_target_ctx *ctx,
     }
     else if (nmap_runtime_begin_send(ctx, probe, id, &snapshot))
     {
-        DEBUG_PROBE_SEND(&snapshot);
+        DEBUG_PROBE_SEND(&snapshot);    
         if (nmap_send_probe(ctx, probe))
         {
             nmap_runtime_complete_send(ctx, probe, id, nmap_now_ms());

@@ -1,0 +1,14 @@
+[test default-scans]
+// Omit --scan: ft_nmap must select SYN,NULL,FIN,XMAS,ACK,UDP.
+// Ports are restricted here so all six columns remain readable.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30-39 --speedup 24 --timeout 600 --retries 0 --no-dns --reason
+
+[test default-ports]
+// Omit --ports: the mandatory default selection is 1-1024.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --scan SYN --speedup 128 --timeout 400 --retries 0 --no-dns --short
+nmap: sudo nmap -Pn -n -T4 --max-retries 0 --host-timeout 10s -sS -p 1-1024 172.28.0.10
+
+[test default-timing]
+// Omit timeout/retries/ttl/speedup to inspect the program defaults in the banner.
+// Only one responsive port is selected to keep the test fast.
+ft: sudo ./ft_nmap --ip 172.28.0.10 --ports 30 --scan SYN --no-dns
